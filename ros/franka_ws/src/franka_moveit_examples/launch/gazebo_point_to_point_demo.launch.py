@@ -2,8 +2,16 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    EmitEvent,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+    RegisterEventHandler,
+    TimerAction,
+)
 from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -67,6 +75,7 @@ def generate_launch_description():
     load_gripper = LaunchConfiguration("load_gripper")
     franka_hand = LaunchConfiguration("franka_hand")
     robot_type = LaunchConfiguration("robot_type")
+    execution_log_file = LaunchConfiguration("execution_log_file")
     use_sim_time = {"use_sim_time": True}
     controller_params = os.path.join(
         get_package_share_directory("franka_moveit_examples"),
@@ -229,6 +238,7 @@ def generate_launch_description():
             robot_description_semantic,
             robot_description_kinematics,
             use_sim_time,
+            {"execution_log_file": execution_log_file},
         ],
     )
 
@@ -259,6 +269,11 @@ def generate_launch_description():
                 default_value="fr3",
                 description="Robot model to spawn in Gazebo.",
             ),
+            DeclareLaunchArgument(
+                "execution_log_file",
+                default_value="point_to_point_execution_times.csv",
+                description="CSV file where point-to-point execution durations are appended.",
+            ),
             gazebo_sim,
             robot_state_publisher,
             spawn_entity,
@@ -273,5 +288,17 @@ def generate_launch_description():
             ),
             move_group_node,
             TimerAction(period=demo_delay, actions=[demo_node]),
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=demo_node,
+                    on_exit=[
+                        EmitEvent(
+                            event=Shutdown(
+                                reason="point-to-point demo process exited"
+                            )
+                        )
+                    ],
+                )
+            ),
         ]
     )

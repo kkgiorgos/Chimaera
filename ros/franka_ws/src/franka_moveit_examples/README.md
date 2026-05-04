@@ -18,6 +18,12 @@ ros2 launch franka_moveit_examples point_to_point_demo.launch.py
 ```
 
 The node reads the current end-effector pose, moves to a nearby point A, and then to point B.
+When the demo process exits, the launch shuts down the rest of the stack. Execution timings are
+appended to `point_to_point_execution_times.csv` by default:
+
+```bash
+ros2 launch franka_moveit_examples point_to_point_demo.launch.py execution_log_file:=/tmp/ptp_times.csv
+```
 
 ## Run With Gazebo
 
