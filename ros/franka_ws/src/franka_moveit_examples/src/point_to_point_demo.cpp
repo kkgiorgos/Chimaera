@@ -51,7 +51,7 @@ std::string current_timestamp()
 
 void write_execution_log(
   std::ofstream& log_file, const std::string& label, const std::string& status,
-  const double achieved_fraction, const double execution_duration_seconds, const int error_code)
+  const double achieved_fraction, const double task_duration_seconds, const int error_code)
 {
   if (!log_file.is_open())
   {
@@ -60,7 +60,7 @@ void write_execution_log(
 
   log_file << current_timestamp() << ',' << label << ',' << status << ','
            << std::fixed << std::setprecision(6) << achieved_fraction << ','
-           << execution_duration_seconds << ',' << error_code << '\n';
+           << task_duration_seconds << ',' << error_code << '\n';
   log_file.flush();
 }
 
@@ -71,6 +71,7 @@ bool compute_and_execute_cartesian_path(MoveGroupInterface& move_group,
                                         const double eef_step, const double jump_threshold,
                                         const double min_fraction)
 {
+  const auto task_start = std::chrono::steady_clock::now();
   move_group.setStartStateToCurrentState();
   moveit_msgs::msg::RobotTrajectory trajectory;
   const std::vector<geometry_msgs::msg::Pose> waypoints{ target };
@@ -83,33 +84,36 @@ bool compute_and_execute_cartesian_path(MoveGroupInterface& move_group,
       logger,
       "Cartesian path to %s only achieved %.3f of the requested path (minimum %.3f)",
       label.c_str(), achieved_fraction, min_fraction);
-    write_execution_log(execution_log_file, label, "planning_failed", achieved_fraction, 0.0, -1);
+    const auto task_end = std::chrono::steady_clock::now();
+    const std::chrono::duration<double> task_duration = task_end - task_start;
+    write_execution_log(
+      execution_log_file, label, "planning_failed", achieved_fraction,
+      task_duration.count(), -1);
     return false;
   }
 
-  const auto execution_start = std::chrono::steady_clock::now();
   const auto execute_result = move_group.execute(trajectory);
-  const auto execution_end = std::chrono::steady_clock::now();
-  const std::chrono::duration<double> execution_duration = execution_end - execution_start;
+  const auto task_end = std::chrono::steady_clock::now();
+  const std::chrono::duration<double> task_duration = task_end - task_start;
 
   if (execute_result != moveit::core::MoveItErrorCode::SUCCESS)
   {
     RCLCPP_ERROR(
       logger,
-      "Execution to %s failed after %.3f seconds with error code %d",
-      label.c_str(), execution_duration.count(), execute_result.val);
+      "Motion to %s failed after %.3f seconds with error code %d",
+      label.c_str(), task_duration.count(), execute_result.val);
     write_execution_log(
       execution_log_file, label, "execution_failed", achieved_fraction,
-      execution_duration.count(), execute_result.val);
+      task_duration.count(), execute_result.val);
     return false;
   }
 
   RCLCPP_INFO(
     logger,
-    "Reached %s with Cartesian fraction %.3f in %.3f seconds",
-    label.c_str(), achieved_fraction, execution_duration.count());
+    "Reached %s with Cartesian fraction %.3f in %.3f seconds including planning",
+    label.c_str(), achieved_fraction, task_duration.count());
   write_execution_log(
-    execution_log_file, label, "succeeded", achieved_fraction, execution_duration.count(),
+    execution_log_file, label, "succeeded", achieved_fraction, task_duration.count(),
     0);
   return true;
 }
@@ -145,9 +149,30 @@ int main(int argc, char* argv[])
     declare_or_get_parameter<double>(node, "max_velocity_scaling", 0.2);
   const auto max_acceleration_scaling =
     declare_or_get_parameter<double>(node, "max_acceleration_scaling", 0.2);
+  const auto point_to_point_repetitions =
+    declare_or_get_parameter<int>(node, "point_to_point_repetitions", 1);
+  const auto cycle_pause_seconds =
+    declare_or_get_parameter<double>(node, "cycle_pause_seconds", 0.5);
   const auto execution_log_file_path =
     declare_or_get_parameter<std::string>(
       node, "execution_log_file", "point_to_point_execution_times.csv");
+
+  if (point_to_point_repetitions < 1)
+  {
+    RCLCPP_ERROR(
+      node->get_logger(), "point_to_point_repetitions must be at least 1, got %d",
+      point_to_point_repetitions);
+    rclcpp::shutdown();
+    return 1;
+  }
+  if (cycle_pause_seconds < 0.0)
+  {
+    RCLCPP_ERROR(
+      node->get_logger(), "cycle_pause_seconds must be non-negative, got %.3f",
+      cycle_pause_seconds);
+    rclcpp::shutdown();
+    return 1;
+  }
 
   std::ofstream execution_log_file;
   if (!execution_log_file_path.empty())
@@ -162,7 +187,7 @@ int main(int argc, char* argv[])
       if (write_header)
       {
         execution_log_file
-          << "timestamp,segment,status,cartesian_fraction,execution_duration_seconds,error_code\n";
+          << "timestamp,segment,status,cartesian_fraction,task_duration_seconds,error_code\n";
       }
       RCLCPP_INFO(
         node->get_logger(), "Writing point-to-point execution times to %s",
@@ -214,8 +239,8 @@ int main(int argc, char* argv[])
     RCLCPP_INFO(node->get_logger(), "End effector link: %s", move_group.getEndEffectorLink().c_str());
     RCLCPP_INFO(
       node->get_logger(),
-      "Executing Cartesian point-to-point motion in group %s",
-      planning_group.c_str());
+      "Executing %d Cartesian point-to-point repetition(s) in group %s",
+      point_to_point_repetitions, planning_group.c_str());
 
     if (!compute_and_execute_cartesian_path(
           move_group, point_a, "start_to_point_a", node->get_logger(), execution_log_file,
@@ -226,13 +251,38 @@ int main(int argc, char* argv[])
     }
     else
     {
-      rclcpp::sleep_for(500ms);
-      if (!compute_and_execute_cartesian_path(
-            move_group, point_b, "point_a_to_point_b", node->get_logger(), execution_log_file,
-            cartesian_eef_step,
-            cartesian_jump_threshold, minimum_cartesian_fraction))
+      const auto cycle_pause =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::duration<double>(cycle_pause_seconds));
+
+      for (int repetition = 1; repetition <= point_to_point_repetitions; ++repetition)
       {
-        exit_code = 1;
+        rclcpp::sleep_for(cycle_pause);
+        const std::string point_b_label =
+          "point_a_to_point_b_" + std::to_string(repetition);
+        if (!compute_and_execute_cartesian_path(
+              move_group, point_b, point_b_label, node->get_logger(), execution_log_file,
+              cartesian_eef_step,
+              cartesian_jump_threshold, minimum_cartesian_fraction))
+        {
+          exit_code = 1;
+          break;
+        }
+
+        if (repetition < point_to_point_repetitions)
+        {
+          rclcpp::sleep_for(cycle_pause);
+          const std::string point_a_label =
+            "point_b_to_point_a_" + std::to_string(repetition);
+          if (!compute_and_execute_cartesian_path(
+                move_group, point_a, point_a_label, node->get_logger(), execution_log_file,
+                cartesian_eef_step,
+                cartesian_jump_threshold, minimum_cartesian_fraction))
+          {
+            exit_code = 1;
+            break;
+          }
+        }
       }
     }
   }

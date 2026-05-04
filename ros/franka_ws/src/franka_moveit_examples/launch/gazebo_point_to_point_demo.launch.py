@@ -76,6 +76,8 @@ def generate_launch_description():
     franka_hand = LaunchConfiguration("franka_hand")
     robot_type = LaunchConfiguration("robot_type")
     execution_log_file = LaunchConfiguration("execution_log_file")
+    point_to_point_repetitions = LaunchConfiguration("point_to_point_repetitions")
+    cycle_pause_seconds = LaunchConfiguration("cycle_pause_seconds")
     use_sim_time = {"use_sim_time": True}
     controller_params = os.path.join(
         get_package_share_directory("franka_moveit_examples"),
@@ -239,6 +241,14 @@ def generate_launch_description():
             robot_description_kinematics,
             use_sim_time,
             {"execution_log_file": execution_log_file},
+            {
+                "point_to_point_repetitions": ParameterValue(
+                    point_to_point_repetitions, value_type=int
+                ),
+                "cycle_pause_seconds": ParameterValue(
+                    cycle_pause_seconds, value_type=float
+                ),
+            },
         ],
     )
 
@@ -272,7 +282,19 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "execution_log_file",
                 default_value="point_to_point_execution_times.csv",
-                description="CSV file where point-to-point execution durations are appended.",
+                description="CSV file where point-to-point task durations are appended.",
+            ),
+            DeclareLaunchArgument(
+                "point_to_point_repetitions",
+                default_value="1",
+                description=(
+                    "Number of A-to-B runs. The demo returns to point A between repetitions."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "cycle_pause_seconds",
+                default_value="0.5",
+                description="Seconds to wait between point-to-point motions.",
             ),
             gazebo_sim,
             robot_state_publisher,
