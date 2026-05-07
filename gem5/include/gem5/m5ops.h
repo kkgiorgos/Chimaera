@@ -75,6 +75,9 @@ void m5_hypercall(uint64_t hypercall_id);
  */
 void m5_workload();
 
+// Custom m5ops for chimaera bridge
+void m5_chimaera_test(uint64_t channel, uint64_t value);
+
 /*
  * Create _addr and _semi versions all declarations, e.g. m5_exit_addr and
  * m5_exit_semi. These expose the the memory and semihosting variants of the

@@ -62,6 +62,7 @@
 #include "mem/se_translating_port_proxy.hh"
 #include "mem/translating_port_proxy.hh"
 #include "params/BaseCPU.hh"
+#include "pseudo_inst.hh"
 #include "sim/full_system.hh"
 #include "sim/process.hh"
 #include "sim/serialize.hh"
@@ -614,6 +615,26 @@ m5Hypercall(ThreadContext *tc, uint64_t hypercall_id)
     DPRINTF(PseudoInst, "pseudo_inst::m5Hypercall(%i)\n", hypercall_id);
     exitSimLoopWithHypercall("m5_hypercall instruction encountered", 0,
     curTick(),0, std::map<std::string, std::string>(), hypercall_id, true);
+}
+
+void
+chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value)
+{
+    DPRINTF(PseudoInst,
+            "pseudo_inst::bridgeNotify(channel=%llu, value=%llu)\n",
+            channel, value);
+
+    // Keep this host-side only.
+    // Do not call exitSimLoop().
+    // Do not schedule gem5 events.
+    // Do not mutate architectural state.
+    // Do not touch simulated memory unless this op is explicitly a data op.
+
+    inform("bridgeNotify: tick=%llu cpu=%d channel=%llu value=%llu\n",
+           curTick(),
+           tc->getCpuPtr()->cpuId(),
+           channel,
+           value);
 }
 
 } // namespace pseudo_inst

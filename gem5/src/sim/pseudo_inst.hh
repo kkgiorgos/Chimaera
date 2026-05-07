@@ -115,6 +115,8 @@ void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
 void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
 
+void chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value);
+
 /**
  * Execute a decoded M5 pseudo instruction
  *
@@ -233,7 +235,7 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         invokeSimcall<ABI>(tc, workend);
         return true;
 
-      case M5OP_RESERVED1:
+      // case M5OP_RESERVED1:
       case M5OP_RESERVED2:
       case M5OP_RESERVED3:
       case M5OP_RESERVED4:
@@ -253,6 +255,12 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       case M5OP_HYPERCALL:
         invokeSimcall<ABI>(tc, m5Hypercall);
         return true;
+
+      case M5OP_CHIMAERA_TEST:
+        invokeSimcall<ABI>(tc, chimaeraTest);
+        return true;
+
+
       default:
         warn("Unhandled m5 op: %#x\n", func);
         return false;

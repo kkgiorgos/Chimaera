@@ -73,6 +73,8 @@
 #define M5OP_RESERVED4          0x58 // Reserved for user
 #define M5OP_RESERVED5          0x59 // Reserved for user
 
+#define M5OP_CHIMAERA_TEST      M5OP_RESERVED1
+
 #define M5OP_WORK_BEGIN         0x5a
 #define M5OP_WORK_END           0x5b
 
@@ -110,6 +112,7 @@
     M5OP(m5_dist_toggle_sync, M5OP_DIST_TOGGLE_SYNC)            \
     M5OP(m5_workload, M5OP_WORKLOAD)                            \
     M5OP(m5_hypercall, M5OP_HYPERCALL)                          \
+    M5OP(m5_chimaera_test, M5OP_CHIMAERA_TEST)                  \
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b
 #define M5OP_MERGE_TOKENS(a, b) M5OP_MERGE_TOKENS_I(a, b)
