@@ -42,6 +42,7 @@
 
 #include "sim/pseudo_inst.hh"
 
+#include <cstdint>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -636,6 +637,49 @@ chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value)
            channel,
            value);
 }
+
+uint64_t
+chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
+{
+    DPRINTF(PseudoInst,
+            "pseudo_inst::chimaeraSend(vaddr=0x%x, len=0x%x)\n",
+            vaddr.addr, len);
+
+    TranslatingPortProxy fs_proxy(tc);
+    SETranslatingPortProxy se_proxy(tc);
+    PortProxy &virt_proxy = FullSystem ? fs_proxy : se_proxy;
+
+    char *buf = new char[len];
+
+    virt_proxy.readBlob(vaddr.addr, buf, len);
+
+
+    inform("chimaeraSend: tick=%llu cpu=%d len=%llu first_byte=0x%x\n",
+            curTick(),
+            tc->getCpuPtr()->cpuId(),
+            len,
+            buf[0]);
+
+    delete [] buf;
+
+    return len;
+}
+
+void
+chimaeraRecv(ThreadContext *tc, uint64_t channel, uint64_t value)
+{
+    DPRINTF(PseudoInst,
+            "pseudo_inst::chimaeraRecv(channel=%llu, value=%llu)\n",
+            channel, value);
+
+    inform("chimaeraRecv: tick=%llu cpu=%d channel=%llu value=%llu\n",
+           curTick(),
+           tc->getCpuPtr()->cpuId(),
+           channel,
+           value);
+}
+
+
 
 } // namespace pseudo_inst
 } // namespace gem5

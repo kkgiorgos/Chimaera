@@ -116,6 +116,8 @@ void triggerWorkloadEvent(ThreadContext *tc);
 void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
 
 void chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value);
+uint64_t chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len);
+void chimaeraRecv(ThreadContext *tc, uint64_t channel, uint64_t value);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -236,8 +238,8 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         return true;
 
       // case M5OP_RESERVED1:
-      case M5OP_RESERVED2:
-      case M5OP_RESERVED3:
+      // case M5OP_RESERVED2:
+      // case M5OP_RESERVED3:
       case M5OP_RESERVED4:
       case M5OP_RESERVED5:
         warn("Unimplemented m5 op (%#x)\n", func);
@@ -260,6 +262,13 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         invokeSimcall<ABI>(tc, chimaeraTest);
         return true;
 
+      case M5OP_CHIMAERA_SEND:
+        result = invokeSimcall<ABI, store_ret>(tc, chimaeraSend);
+        return true;
+
+      case M5OP_CHIMAERA_RECV:
+        invokeSimcall<ABI>(tc, chimaeraRecv);
+        return true;
 
       default:
         warn("Unhandled m5 op: %#x\n", func);

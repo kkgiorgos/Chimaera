@@ -3,7 +3,7 @@ GEM5 = /home/kkgiorgos/University/Diploma/Chimaera/gem5
 all: test_bridge
 
 test_bridge:
-	g++ main.c \
+	g++ main.cpp \
 		-no-pie \
 		-I"$(GEM5)/include" \
 		-I"$(GEM5)/util/m5/src" \
