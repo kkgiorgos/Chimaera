@@ -72,6 +72,7 @@
 #include "sim/stat_control.hh"
 #include "sim/stats.hh"
 #include "sim/system.hh"
+#include "chimaera/util.hh"
 
 namespace gem5
 {
@@ -649,16 +650,40 @@ chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
     SETranslatingPortProxy se_proxy(tc);
     PortProxy &virt_proxy = FullSystem ? fs_proxy : se_proxy;
 
+    // Get the data out of the sim
     char *buf = new char[len];
 
     virt_proxy.readBlob(vaddr.addr, buf, len);
 
+    // Send the data through the socket
+    chimaera::size_msg_t size;
+    size.l = 0;
+    size.l = len;
 
-    inform("chimaeraSend: tick=%llu cpu=%d len=%llu first_byte=0x%x\n",
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd == -1) {
+        chimaera::handle_error("socket");
+    }
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, chimaera::SOCKET_PATH, sizeof(addr.sun_path) - 1);
+
+    if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
+        chimaera::handle_error("connect");
+    }
+
+    chimaera::write_plus(fd, size.c, 8);
+    chimaera::write_plus(fd, buf, size.l);
+
+    close(fd);
+
+    inform("chimaeraSend: tick=%llu cpu=%d len=%llu first_byte=0x%x last_byte=0x%x\n",
             curTick(),
             tc->getCpuPtr()->cpuId(),
             len,
-            buf[0]);
+            buf[0],
+            buf[len-1]);
 
     delete [] buf;
 

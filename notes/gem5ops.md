@@ -170,5 +170,14 @@ After a very basic implementation we have verified transfer happens correctly
 and the tick count inside gem5 isn't affected. Basically there's no
 transfer time from the perspective of the sim.
 
-Note: This has been tested only on KVM for now. 
-    Also the transferred data is not used (it doesn't go anywhere useful).
+Note: The transferred data is not used (it doesn't go anywhere useful).
+
+In order to use the data we need to get it out of the handler and into
+another process on the host (preferably a ROS node).
+
+For this we use UNIX sockets to transfer the raw bytes.
+We first send 8 bytes saying how much data we'll send and then we dump
+the data.
+
+For this we need some util functions which were added to the gem5 src
+in our own chimaera directory.

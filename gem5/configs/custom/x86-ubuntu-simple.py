@@ -137,13 +137,14 @@ def on_workbegin():
     # You can reset stats here to isolate ROI stats.
     m5.stats.reset()
     is_started = True
-    yield True
+    yield False
 
 def on_workend():
     global is_finished
     print("[host] ROI end reached")
     print("[host] Dumping ROI stats")
     m5.stats.dump()
+
     is_finished = True
     yield True
 
