@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -16,6 +17,7 @@ target_include_directories(chimaera_host_bridge PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_compile_features(chimaera_host_bridge PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
+ament_target_dependencies(chimaera_host_bridge rclcpp)
 
 install(TARGETS chimaera_host_bridge
   DESTINATION lib/${PROJECT_NAME})

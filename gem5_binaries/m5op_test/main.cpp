@@ -28,6 +28,7 @@ int main(int argc, char* argv[])
     read(fd, buf, len);
 
     printf("First byte: 0x%x\n", buf[0]);
+    printf("Last byte: 0x%x\n", buf[len-1]);
 
     printf("before custom m5op\n");
     m5_chimaera_test_addr(1, 1);

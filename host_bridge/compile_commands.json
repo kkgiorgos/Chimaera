@@ -1,0 +1,115 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-c",
+      "CMakeCCompilerId.c"
+    ],
+    "directory": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/3.22.1/CompilerIdC",
+    "file": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/3.22.1/CompilerIdC/CMakeCCompilerId.c"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-c",
+      "CMakeCXXCompilerId.cpp"
+    ],
+    "directory": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/3.22.1/CompilerIdCXX",
+    "file": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/3.22.1/CompilerIdCXX/CMakeCXXCompilerId.cpp"
+  },
+  {
+    "arguments": [
+      "/usr/bin/cc",
+      "-v",
+      "-c",
+      "-o",
+      "CMakeFiles/cmTC_5dc52.dir/CMakeCCompilerABI.c.o",
+      "/usr/share/cmake-3.22/Modules/CMakeCCompilerABI.c"
+    ],
+    "directory": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/CMakeTmp",
+    "file": "/usr/share/cmake-3.22/Modules/CMakeCCompilerABI.c",
+    "output": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/CMakeTmp/CMakeFiles/cmTC_5dc52.dir/CMakeCCompilerABI.c.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-v",
+      "-c",
+      "-o",
+      "CMakeFiles/cmTC_00639.dir/CMakeCXXCompilerABI.cpp.o",
+      "/usr/share/cmake-3.22/Modules/CMakeCXXCompilerABI.cpp"
+    ],
+    "directory": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/CMakeTmp",
+    "file": "/usr/share/cmake-3.22/Modules/CMakeCXXCompilerABI.cpp",
+    "output": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/CMakeTmp/CMakeFiles/cmTC_00639.dir/CMakeCXXCompilerABI.cpp.o"
+  },
+  {
+    "arguments": [
+      "/usr/bin/c++",
+      "-DDEFAULT_RMW_IMPLEMENTATION=rmw_fastrtps_cpp",
+      "-DFASTCDR_DYN_LINK",
+      "-DRCUTILS_ENABLE_FAULT_INJECTION",
+      "-I/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/src/chimaera_bridge/include",
+      "-isystem",
+      "/opt/ros/humble/include/rclcpp",
+      "-isystem",
+      "/opt/ros/humble/include/ament_index_cpp",
+      "-isystem",
+      "/opt/ros/humble/include/libstatistics_collector",
+      "-isystem",
+      "/opt/ros/humble/include/builtin_interfaces",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_runtime_c",
+      "-isystem",
+      "/opt/ros/humble/include/rcutils",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_interface",
+      "-isystem",
+      "/opt/ros/humble/include/fastcdr",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_runtime_cpp",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_fastrtps_cpp",
+      "-isystem",
+      "/opt/ros/humble/include/rmw",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_fastrtps_c",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_introspection_c",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_introspection_cpp",
+      "-isystem",
+      "/opt/ros/humble/include/rcl",
+      "-isystem",
+      "/opt/ros/humble/include/rcl_interfaces",
+      "-isystem",
+      "/opt/ros/humble/include/rcl_logging_interface",
+      "-isystem",
+      "/opt/ros/humble/include/rcl_yaml_param_parser",
+      "-isystem",
+      "/opt/ros/humble/include/libyaml_vendor",
+      "-isystem",
+      "/opt/ros/humble/include/tracetools",
+      "-isystem",
+      "/opt/ros/humble/include/rcpputils",
+      "-isystem",
+      "/opt/ros/humble/include/statistics_msgs",
+      "-isystem",
+      "/opt/ros/humble/include/rosgraph_msgs",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_cpp",
+      "-isystem",
+      "/opt/ros/humble/include/rosidl_typesupport_c",
+      "-Wall",
+      "-Wextra",
+      "-Wpedantic",
+      "-c",
+      "-o",
+      "CMakeFiles/chimaera_host_bridge.dir/src/chimaera_host_bridge.cpp.o",
+      "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/src/chimaera_bridge/src/chimaera_host_bridge.cpp"
+    ],
+    "directory": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge",
+    "file": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/src/chimaera_bridge/src/chimaera_host_bridge.cpp",
+    "output": "/home/kkgiorgos/University/Diploma/Chimaera/host_bridge/build/chimaera_bridge/CMakeFiles/chimaera_host_bridge.dir/src/chimaera_host_bridge.cpp.o"
+  }
+]
