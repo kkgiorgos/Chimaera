@@ -79,7 +79,7 @@ void m5_workload();
 // Custom m5ops for chimaera bridge
 void m5_chimaera_test(uint64_t channel, uint64_t value);
 uint64_t m5_chimaera_send(void *buffer, uint64_t len);
-void m5_chimaera_recv(uint64_t channel, uint64_t value);
+uint64_t m5_chimaera_recv(void *buffer, uint64_t len);
 
 /*
  * Create _addr and _semi versions all declarations, e.g. m5_exit_addr and

@@ -41,6 +41,7 @@
 #ifndef __SIM_PSEUDO_INST_HH__
 #define __SIM_PSEUDO_INST_HH__
 
+#include <cstdint>
 #include <gem5/asm/generic/m5ops.h>
 
 #include "base/bitfield.hh"
@@ -117,7 +118,7 @@ void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
 
 void chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value);
 uint64_t chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len);
-void chimaeraRecv(ThreadContext *tc, uint64_t channel, uint64_t value);
+uint64_t chimaeraRecv(ThreadContext *tc, GuestAddr vaddr, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -267,7 +268,7 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         return true;
 
       case M5OP_CHIMAERA_RECV:
-        invokeSimcall<ABI>(tc, chimaeraRecv);
+        result = invokeSimcall<ABI, store_ret>(tc, chimaeraRecv);
         return true;
 
       default:

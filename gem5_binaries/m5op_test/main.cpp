@@ -11,8 +11,6 @@
 
 int main(int argc, char* argv[])
 {
-    printf("before custom m5op\n");
-
     m5op_addr = 0xFFFF0000;   // x86 magic address
     map_m5_mem();
 
@@ -24,21 +22,20 @@ int main(int argc, char* argv[])
 
     char *buf = new char[len];
 
-    int fd = open("/dev/random", O_RDONLY);
-    read(fd, buf, len);
+    uint64_t res = m5_chimaera_recv_addr(buf, len);
+    printf("Received %lu bytes\n", res);
+
+    // int fd = open("/dev/random", O_RDONLY);
+    // read(fd, buf, len);
 
     printf("First byte: 0x%x\n", buf[0]);
     printf("Last byte: 0x%x\n", buf[len-1]);
 
-    printf("before custom m5op\n");
-    m5_chimaera_test_addr(1, 1);
-    m5_work_begin_addr(0, 0);
-    uint64_t res = m5_chimaera_send_addr(buf, len);
+    // m5_work_begin_addr(0, 0);
+    // uint64_t res = m5_chimaera_send_addr(buf, len);
     // m5_work_end_addr(0, 0);
-    m5_chimaera_test_addr(1, 2);
-    printf("after custom m5op\n");
 
-    printf("Sent %lu bytes\n", res);
+    // printf("Sent %lu bytes\n", res);
 
     delete [] buf;
 

@@ -48,9 +48,9 @@ handle_error(const char *msg)
 }
 
 void
-write_plus(int fd, char *buff, std::size_t len)
+write_exact(int fd, char *buff, size_t len)
 {
-    std::size_t idx;
+    size_t idx;
     ssize_t wcnt;
 
     for (idx = 0; idx < len; idx += wcnt) {
@@ -59,6 +59,28 @@ write_plus(int fd, char *buff, std::size_t len)
         }
     }
 }
+
+void
+read_exact(int fd, char *buff, size_t len)
+{
+    size_t total = 0;
+    while (total != len) {
+        ssize_t rcnt;
+        if ((rcnt = read(fd, buff + total, len - total)) == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            handle_error("read");
+        }
+        if (rcnt == 0) {
+            panic("Couldn't read the full message: read %ld out of %ld bytes.",
+                    total,
+                    len);
+        }
+        total += rcnt;
+    }
+}
+
 
 } // namespace chimaera
 } // namespace gem5

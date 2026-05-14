@@ -38,7 +38,8 @@ namespace gem5
 namespace chimaera
 {
 
-static constexpr const char* SOCKET_PATH = "/tmp/chimaera_g2h.sock";
+static constexpr const char* G2H_SOCKET_PATH = "/tmp/chimaera_g2h.sock";
+static constexpr const char* H2G_SOCKET_PATH = "/tmp/chimaera_h2g.sock";
 
 union size_msg_t {
     char c[8];
@@ -46,7 +47,8 @@ union size_msg_t {
 };
 
 void handle_error(const char *msg);
-void write_plus(int fd, char *buff, std::size_t len);
+void write_exact(int fd, char *buff, size_t len);
+void read_exact(int fd, char *buff, size_t len);
 
 } // namespace chimaera
 } // namespace gem5

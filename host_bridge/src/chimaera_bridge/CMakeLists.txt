@@ -5,21 +5,24 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
 
-add_executable(chimaera_host_bridge src/chimaera_host_bridge.cpp)
-target_include_directories(chimaera_host_bridge PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-target_compile_features(chimaera_host_bridge PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
-ament_target_dependencies(chimaera_host_bridge rclcpp)
+function(add_chimaera_bridge_node target source)
+  add_executable(${target} ${source})
+  target_include_directories(${target} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
+  target_compile_features(${target} PUBLIC c_std_99 cxx_std_17)
+  ament_target_dependencies(${target} rclcpp)
+endfunction()
 
-install(TARGETS chimaera_host_bridge
+add_chimaera_bridge_node(g2h_bridge src/g2h_bridge.cpp)
+add_chimaera_bridge_node(h2g_bridge src/h2g_bridge.cpp)
+
+install(TARGETS
+  g2h_bridge
+  h2g_bridge
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)

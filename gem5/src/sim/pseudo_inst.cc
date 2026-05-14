@@ -667,14 +667,14 @@ chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
 
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, chimaera::SOCKET_PATH, sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, chimaera::G2H_SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
     if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
         chimaera::handle_error("connect");
     }
 
-    chimaera::write_plus(fd, size.c, 8);
-    chimaera::write_plus(fd, buf, size.l);
+    chimaera::write_exact(fd, size.c, 8);
+    chimaera::write_exact(fd, buf, size.l);
 
     close(fd);
 
@@ -690,18 +690,50 @@ chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
     return len;
 }
 
-void
-chimaeraRecv(ThreadContext *tc, uint64_t channel, uint64_t value)
+uint64_t
+chimaeraRecv(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
 {
     DPRINTF(PseudoInst,
-            "pseudo_inst::chimaeraRecv(channel=%llu, value=%llu)\n",
-            channel, value);
+            "pseudo_inst::chimaeraRecv(vaddr=0x%x, len=0x%x)\n",
+            vaddr.addr, len);
 
-    inform("chimaeraRecv: tick=%llu cpu=%d channel=%llu value=%llu\n",
+    char *buf = new char[len];
+
+    // Get a packet of data through the socket
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd == -1) {
+        chimaera::handle_error("socket");
+    }
+
+    sockaddr_un addr{};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, chimaera::H2G_SOCKET_PATH, sizeof(addr.sun_path) - 1);
+
+    if (connect(fd, (struct sockaddr *) &addr, sizeof(addr)) == -1) {
+        chimaera::handle_error("connect");
+    }
+
+    chimaera::read_exact(fd, buf, len);
+
+    close(fd);
+
+    // Copy data over to the sim
+    TranslatingPortProxy fs_proxy(tc);
+    SETranslatingPortProxy se_proxy(tc);
+    PortProxy &virt_proxy = FullSystem ? fs_proxy : se_proxy;
+
+    virt_proxy.writeBlob(vaddr.addr, buf, len);
+
+    inform("chimaeraRecv: tick=%llu cpu=%d len=%llu first_byte=0x%x last_byte=0x%x\n",
            curTick(),
            tc->getCpuPtr()->cpuId(),
-           channel,
-           value);
+           len,
+           buf[0],
+           buf[len-1]);
+
+    delete [] buf;
+
+    return len;
 }
 
 

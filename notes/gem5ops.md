@@ -181,3 +181,8 @@ the data.
 
 For this we need some util functions which were added to the gem5 src
 in our own chimaera directory.
+
+Data transfer from the host to the guest has the caveat regarding the size.
+The guest doesn't know how much data to expect. For now this can be fixed
+by exchanging data in fixed size packets. In the packet we can encode
+the total message size to control how many packets to request.
