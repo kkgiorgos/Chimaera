@@ -110,13 +110,16 @@ board = X86Board(
 )
 
 board.set_kernel_disk_workload(
-    kernel=KernelResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/vmlinux-x86-ubuntu-6.8.0-52-generic"),
-    disk_image=DiskImageResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/ubuntu-24.04-test.img"),
+    # kernel=KernelResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/vmlinux-x86-ubuntu-6.8.0-52-generic"),
+    # disk_image=DiskImageResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/ubuntu-24.04-test.img"),
+    kernel=KernelResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/x86-linux-kernel-5.15.180"),
+    disk_image=DiskImageResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/x86-ubuntu-22.04-ros-humble.img"),
     kernel_args=[
         "earlyprintk=ttyS0",
         "console=ttyS0",
         "lpj=7999923",
-        "root=/dev/sda2"
+        "root=/dev/sda2",
+        "mce=off",
     ],
     readfile_contents="""#!/bin/bash
 #!/bin/sh
