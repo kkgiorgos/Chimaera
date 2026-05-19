@@ -4,7 +4,7 @@ qemu-img resize ${IMG} 16G
 
 sudo losetup -d "$LOOP"
 
-LOOPDEV="$(sudo losetup -Pf --show ./x86-ubuntu-22.04-ros-humble.img)"
+LOOPDEV="$(sudo losetup -Pf --show ${IMG})"
 
 lsblk "$LOOPDEV"
 
