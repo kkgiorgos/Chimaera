@@ -19,10 +19,12 @@ endfunction()
 
 add_chimaera_bridge_node(g2h_bridge src/g2h_bridge.cpp)
 add_chimaera_bridge_node(h2g_bridge src/h2g_bridge.cpp)
+add_chimaera_bridge_node(time_bridge src/time_bridge.cpp)
 
 install(TARGETS
   g2h_bridge
   h2g_bridge
+  time_bridge
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
