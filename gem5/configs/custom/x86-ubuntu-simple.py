@@ -24,21 +24,18 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+"""Boot the Ubuntu 22.04/ROS Humble image for interactive guest testing.
+
+Run from the repository root:
+    gem5/build/X86/gem5.opt gem5/configs/custom/x86-ubuntu-simple.py
+
+Connect to the serial terminal on the port printed by gem5 (normally 3456).
+KVM boots the guest without perf counters. A guest m5 workbegin switches to
+Timing CPUs and resets statistics; m5 workend dumps statistics and stops.
+Ordinary m5 exit events are logged and ignored to keep the guest interactive.
 """
 
-This script shows an example of running a full system Ubuntu boot simulation
-using the gem5 library. This simulation boots Ubuntu 24.04 using 2 KVM CPU
-cores. The simulation then switches to 2 Timing CPU cores for the rest of the
-simulation.
-
-Usage
------
-
-```
-scons build/ALL/gem5.opt
-./build/ALL/gem5.opt configs/example/gem5_library/x86-ubuntu-run-with-kvm.py
-```
-"""
+from pathlib import Path
 
 from gem5.coherence_protocol import CoherenceProtocol
 from gem5.components.boards.x86_board import X86Board
@@ -48,13 +45,10 @@ from gem5.components.processors.simple_switchable_processor import (
     SimpleSwitchableProcessor,
 )
 from gem5.isas import ISA
-from gem5.resources.resource import obtain_resource
 from gem5.resources.resource import KernelResource
 from gem5.resources.resource import DiskImageResource
-from gem5.simulate.exit_handler import ExitHandler
 from gem5.simulate.exit_event import ExitEvent
 from gem5.simulate.simulator import Simulator
-from gem5.utils.override import overrides
 from gem5.utils.requires import requires
 
 # This checks if the host system supports KVM. It also checks if the gem5
@@ -99,6 +93,11 @@ processor = SimpleSwitchableProcessor(
     num_cores=2,
 )
 
+# KVM is used for booting, not for collecting hardware performance counters.
+# Avoid perf_event_open permission failures on hosts with restrictive perf policy.
+for core in processor.get_cores():
+    core.get_simobject().usePerf = False
+
 # Here we set up the board. The X86Board allows for FS mode (full system) or
 # SE mode (syscall emulation) X86 simulations.
 
@@ -109,11 +108,16 @@ board = X86Board(
     cache_hierarchy=cache_hierarchy,
 )
 
+resources = Path(__file__).resolve().parents[2] / "resources"
+kernel_path = resources / "x86-linux-kernel-5.15.180"
+disk_path = resources / "x86-ubuntu-22.04-ros-humble.img"
+for resource_path in (kernel_path, disk_path):
+    if not resource_path.is_file():
+        raise FileNotFoundError(f"Missing guest resource: {resource_path}")
+
 board.set_kernel_disk_workload(
-    # kernel=KernelResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/vmlinux-x86-ubuntu-6.8.0-52-generic"),
-    # disk_image=DiskImageResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/ubuntu-24.04-test.img"),
-    kernel=KernelResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/x86-linux-kernel-5.15.180"),
-    disk_image=DiskImageResource(local_path="/home/kkgiorgos/University/Diploma/Chimaera/gem5/resources/x86-ubuntu-22.04-ros-humble.img"),
+    kernel=KernelResource(local_path=str(kernel_path)),
+    disk_image=DiskImageResource(local_path=str(disk_path)),
     kernel_args=[
         "earlyprintk=ttyS0",
         "console=ttyS0",
@@ -122,41 +126,38 @@ board.set_kernel_disk_workload(
         "mce=off",
     ],
     readfile_contents="""#!/bin/bash
-#!/bin/sh
 echo "Hello from inside the simulated system!"
 /bin/bash
 """
 )
 
-is_started = False
-is_finished = False
-
 def on_workbegin():
-    global is_started
-    print("[host] ROI begin reached")
-    print("[host] Switching processor to detailed model")
-    processor.switch()
+    switched = False
+    while True:
+        print("[host] ROI begin reached")
+        if not switched:
+            print("[host] Switching processor to Timing CPUs")
+            processor.switch()
+            switched = True
+        m5.stats.reset()
+        yield False
 
-    # You can reset stats here to isolate ROI stats.
-    m5.stats.reset()
-    is_started = True
-    yield False
 
 def on_workend():
-    global is_finished
-    print("[host] ROI end reached")
-    print("[host] Dumping ROI stats")
-    m5.stats.dump()
+    while True:
+        print("[host] ROI end reached; dumping statistics")
+        m5.stats.dump()
+        yield True
 
-    is_finished = True
-    yield True
 
 def on_exit():
-    # Ubuntu/systemd/full boot may generate multiple EXIT events depending on workload path.
-    cause = simulator.get_last_exit_event_cause()
-    tick = simulator.get_current_tick()
-    print(f"[host] EXIT event at tick {tick}: {cause}")
-    yield False
+    # Keep handling every exit; an exhausted generator falls back to gem5's
+    # default EXIT handler, which would stop the interactive simulation.
+    while True:
+        cause = simulator.get_last_exit_event_cause()
+        tick = simulator.get_current_tick()
+        print(f"[host] EXIT event at tick {tick}: {cause}")
+        yield False
 
 
 simulator = Simulator(
@@ -165,31 +166,13 @@ simulator = Simulator(
         ExitEvent.WORKBEGIN: on_workbegin(),
         ExitEvent.WORKEND: on_workend(),
         ExitEvent.EXIT: on_exit(),
-        # ExitEvent.MAX_TICK: on_max_tick(),
     },
 )
 
-# Run until workbegin
+# Continue through boot and workbegin; workend (or another stopping event)
+# returns control to Python. WORKBEGIN itself does not stop simulator.run().
 simulator.run()
 
-# STEP_TICKS = 1_000_000_000_000
-# step_count = 0
-#
-# while not is_started:
-#     simulator.run(max_ticks=STEP_TICKS)
-#     step_count += 1
-#     print(f"Step {step_count} done")
-#
-# print("Started")
-#
-# while not is_finished:
-#     simulator.run(max_ticks=STEP_TICKS)
-#     step_count += 1
-#     print(f"Step {step_count} done")
-#
-# print("Finished")
-
-# We acknowlwdge the user that the simulation has ended.
 print(
     "Exiting @ tick {} because {}.".format(
         simulator.get_current_tick(),
