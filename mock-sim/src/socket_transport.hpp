@@ -36,6 +36,14 @@ public:
     SocketTransport(const SocketTransport&) = delete;
     SocketTransport& operator=(const SocketTransport&) = delete;
 
+    int peer_process_id() const {
+        ucred credentials{};
+        socklen_t size = sizeof(credentials);
+        if (connection_ < 0 || ::getsockopt(connection_, SOL_SOCKET, SO_PEERCRED,
+                                           &credentials, &size) < 0) return -1;
+        return credentials.pid;
+    }
+
     SendResult send(std::span<const std::byte> data) {
         if (data.size() > max_message_size) {
             return {TransportError::invalid_argument, "message exceeds 64 MiB limit"};

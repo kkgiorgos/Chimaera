@@ -17,4 +17,8 @@ ReceiveResult MockHostTransport::receive() {
     return implementation_->receive();
 }
 
+int MockHostTransport::peer_process_id() const {
+    return implementation_->peer_process_id();
+}
+
 } // namespace mock_sim

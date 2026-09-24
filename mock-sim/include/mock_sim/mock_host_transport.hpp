@@ -19,6 +19,10 @@ public:
     [[nodiscard]] SendResult send(std::span<const std::byte> data) override;
     [[nodiscard]] ReceiveResult receive() override;
 
+    // Linux peer credentials, for the mock controller's process-level run gate.
+    // Returns -1 until connected or if credentials cannot be read.
+    [[nodiscard]] int peer_process_id() const;
+
 private:
     std::unique_ptr<detail::SocketTransport> implementation_;
 };
