@@ -5,6 +5,8 @@
 #include <cstring>
 #include <new>
 #include <utility>
+#include <poll.h>
+#include <sys/eventfd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -36,7 +38,13 @@ class HostTransport::Implementation {
 public:
     Implementation(std::string g2h, std::string h2g)
         : incoming_(std::move(g2h)), outgoing_(std::move(h2g)) {
+        if (cancel_fd_.fd < 0) { system_failure("eventfd"); return; }
         if (open(incoming_)) open(outgoing_);
+    }
+
+    void cancel() noexcept {
+        const std::uint64_t value = 1;
+        while (::write(cancel_fd_.fd, &value, sizeof(value)) < 0 && errno == EINTR) {}
     }
 
     SendResult send(std::span<const std::byte> data) {
@@ -73,6 +81,17 @@ private:
     Listener incoming_;
     Listener outgoing_;
     SendResult failure_;
+    Connection cancel_fd_{::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)};
+
+    bool ready(int fd, short events) {
+        pollfd descriptors[]{{fd, events, 0}, {cancel_fd_.fd, POLLIN, 0}};
+        int result;
+        do { result = ::poll(descriptors, 2, -1); } while (result < 0 && errno == EINTR);
+        if (result < 0) return system_failure("poll");
+        if (descriptors[1].revents)
+            return fail(TransportError::disconnected, "transport cancelled");
+        return true; // EOF/socket errors are reported by the following I/O call.
+    }
 
     bool fail(TransportError error, std::string message) {
         failure_ = {error, std::move(message)};
@@ -91,7 +110,7 @@ private:
             listener.path.find('\0') != std::string::npos)
             return fail(TransportError::invalid_argument, "invalid Unix socket path");
         std::memcpy(address.sun_path, listener.path.c_str(), listener.path.size() + 1);
-        listener.fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+        listener.fd = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
         if (listener.fd < 0) return system_failure("socket");
         if (::bind(listener.fd, reinterpret_cast<sockaddr*>(&address), sizeof(address)) < 0) {
             const int code = errno;
@@ -111,16 +130,18 @@ private:
     int accept(Listener& listener) {
         int fd;
         do {
-            fd = ::accept4(listener.fd, nullptr, nullptr, SOCK_CLOEXEC);
-        } while (fd < 0 && errno == EINTR);
+            if (!ready(listener.fd, POLLIN)) return -1;
+            fd = ::accept4(listener.fd, nullptr, nullptr, SOCK_CLOEXEC | SOCK_NONBLOCK);
+        } while (fd < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK));
         if (fd < 0) system_failure("accept");
         return fd;
     }
     bool read_all(int fd, std::span<std::byte> data) {
         while (!data.empty()) {
+            if (!ready(fd, POLLIN)) return false;
             const auto count = ::recv(fd, data.data(), data.size(), 0);
             if (count < 0) {
-                if (errno == EINTR) continue;
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
                 return system_failure("receive");
             }
             if (count == 0) return fail(TransportError::disconnected, "incomplete gem5 packet");
@@ -133,9 +154,10 @@ private:
         if (connection.fd < 0) return false;
         // chimaeraRecv reads exactly the length requested by the guest.
         while (!data.empty()) {
+            if (!ready(connection.fd, POLLOUT)) return false;
             const auto count = ::send(connection.fd, data.data(), data.size(), MSG_NOSIGNAL);
             if (count < 0) {
-                if (errno == EINTR) continue;
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
                 return system_failure("send");
             }
             if (count == 0) return fail(TransportError::disconnected, "peer disconnected during send");
@@ -164,4 +186,5 @@ SendResult HostTransport::send(std::span<const std::byte> data) {
     return implementation_->send(data);
 }
 ReceiveResult HostTransport::receive() { return implementation_->receive(); }
+void HostTransport::cancel() noexcept { implementation_->cancel(); }
 } // namespace chimaera

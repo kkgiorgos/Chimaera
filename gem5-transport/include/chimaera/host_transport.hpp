@@ -19,6 +19,10 @@ public:
     [[nodiscard]] SendResult send(std::span<const std::byte> data) override;
     [[nodiscard]] ReceiveResult receive() override;
 
+    // The only operation permitted from another thread. Permanently wakes
+    // blocked socket I/O; join that thread before destroying this instance.
+    void cancel() noexcept;
+
 private:
     class Implementation;
     std::unique_ptr<Implementation> implementation_;

@@ -8,6 +8,9 @@ uses Unix sockets; the guest library calls the existing
 `m5_chimaera_send_addr` and `m5_chimaera_recv_addr` operations from the custom
 `libm5`.
 
+For buffered exchange at synchronization intervals and socket-driven gem5
+stepping, see [the controller guide](CONTROLLERS.md).
+
 ## Build
 
 From the repository root:
