@@ -39,13 +39,26 @@ add_library(MockSim::mock_guest_controller ALIAS mock_guest_controller)
 target_link_libraries(mock_guest_controller PUBLIC MockSim::controller PRIVATE MockSim::mock_guest)
 
 if(MOCK_SIM_BUILD_EXAMPLES)
+    if(NOT TARGET chimaera::queue_manager)
+        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../queue-manager
+                         ${CMAKE_CURRENT_BINARY_DIR}/queue-manager)
+    endif()
     add_executable(mock_controller_host examples/controller_host.cpp)
-    target_link_libraries(mock_controller_host PRIVATE MockSim::mock_host_controller MockSim::mock_timing)
+    target_link_libraries(mock_controller_host PRIVATE MockSim::mock_host_controller MockSim::mock_timing chimaera::queue_manager)
     add_executable(mock_controller_guest examples/controller_guest.cpp)
-    target_link_libraries(mock_controller_guest PRIVATE MockSim::mock_guest_controller)
+    target_link_libraries(mock_controller_guest PRIVATE MockSim::mock_guest_controller chimaera::queue_manager)
     add_executable(mock_sim_host examples/host.cpp)
     target_link_libraries(mock_sim_host PRIVATE MockSim::mock_host)
     add_executable(mock_sim_guest examples/guest.cpp)
     target_link_libraries(mock_sim_guest PRIVATE MockSim::mock_guest)
 endif()
 
+
+include(CTest)
+if(BUILD_TESTING AND MOCK_SIM_BUILD_EXAMPLES)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME queue_controller_integration
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/queue_controller_integration.py
+                $<TARGET_FILE:mock_controller_host> $<TARGET_FILE:mock_controller_guest>)
+    set_tests_properties(queue_controller_integration PROPERTIES TIMEOUT 30)
+endif()

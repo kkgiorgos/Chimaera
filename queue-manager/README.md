@@ -98,3 +98,11 @@ records. Receivers reject unsupported versions, unknown IDs, truncated fields
 or payloads, inconsistent counts, and trailing bytes. Repeated channel IDs are
 normal; their records are delivered in wire order. Framing is independent of
 native integer layout and endianness.
+
+## Mock simulator demo
+
+The [mock controller demo](../mock-sim/README.md#interactive-controller-demo)
+connects this library to the low-level mock controllers and their Unix socket
+transport. Both host and guest expose channels 1 and 2 through
+`send CHANNEL [TEXT]`. Its CTest integration test exercises actual separate
+processes, bidirectional delivery, FIFO order, empty messages, and queue capacity.

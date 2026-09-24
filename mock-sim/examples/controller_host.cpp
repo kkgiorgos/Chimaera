@@ -14,14 +14,14 @@ int main(int argc, char* argv[]) {
     try {
         const std::string endpoint = argc == 2 ? argv[1] : default_endpoint;
         std::size_t step = 0; // The startup interval is step zero on both sides.
-        Queue outgoing(step);
+        Queue outgoing("guest", step);
         Display incoming("guest", step);
         MockTimingController timing;
         MockHostController controller(endpoint, timing, outgoing, incoming);
         std::cout << "Waiting for controller guest at " << endpoint << "...\n" << std::flush;
         require(controller.step(std::chrono::milliseconds(10), std::chrono::milliseconds(1)));
         std::cout << "Controller host connected. Startup step 0 complete.\n"
-                     "send TEXT  queue a message (send alone queues an empty message)\n"
+                     "send CHANNEL [TEXT]  queue on channel 1 or 2 (omit TEXT for empty data)\n"
                      "step [interval_ms poll_ms]  advance time (default: 100 10)\n"
                      "quit       stop the guest\n"
                      "Guest is stopped at this prompt. Queued host messages reach it during the next step.\n";
@@ -29,9 +29,13 @@ int main(int argc, char* argv[]) {
         while (std::cout << "host> " << std::flush, std::getline(std::cin, line)) {
             if (line == "quit" || line == "q") break;
             if (auto message = parse_send(line)) {
-                std::cout << "[step " << step << "] Queued " << message->size()
-                          << " bytes for step " << step + 1 << ".\n";
-                outgoing.messages.push_back(std::move(*message));
+                if (outgoing.enqueue(*message)) {
+                    std::cout << "[step " << step << "][channel " << message->channel
+                              << "] Queued " << message->data.size()
+                              << " bytes for step " << step + 1 << ".\n";
+                } else {
+                    std::cout << "Channel " << message->channel << " full (64 messages); advance a step and retry.\n";
+                }
             } else if (line == "step" || line.starts_with("step ")) {
                 long long interval = 100, poll = 10;
                 std::istringstream arguments(line.substr(4));
@@ -56,7 +60,7 @@ int main(int argc, char* argv[]) {
                 require(controller.step(std::chrono::milliseconds(interval), std::chrono::milliseconds(poll)));
                 std::cout << "Interval " << step << " complete (" << interval << " ms).\n";
             } else {
-                std::cout << "Commands: send TEXT, step [interval_ms poll_ms], quit.\n";
+                std::cout << "Commands: send CHANNEL [TEXT], step [interval_ms poll_ms], quit.\n";
             }
         }
         require(controller.stop());

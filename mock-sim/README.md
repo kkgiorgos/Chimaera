@@ -221,22 +221,33 @@ Or, after `make`, launch `./build/mock_controller_host [ENDPOINT]` and
 path argument to both binaries). Start only one pair per endpoint. The host waits
 for the guest and performs a short initial interval before displaying its prompt.
 
-Both sides accept `send TEXT`, or `send` alone for an empty message. Received
+Both sides accept `send CHANNEL [TEXT]`, with channel IDs `1` and `2`.
+For example, `send 1 hello` queues text on channel 1 and `send 2` queues an
+empty message on channel 2. Invalid channel IDs are rejected.
+
+The demo links the sibling `queue-manager` library. Each side uses a
+`QueueSerializer` to bundle outgoing messages and a `QueueDeserializer` to
+route received bundles back to their channels. Both channels have a depth of
+64 messages. A full host channel rejects new input with a retry diagnostic;
+advance a step to drain it. The guest collects bounded batches of console input
+at polling points. FIFO order is preserved within each channel; bundles group
+channels by ID. The display drains each received bundle before accepting the
+next one, so its receive queues always have room for a complete snapshot. Received
 messages are displayed in the receiving terminal; there is no automatic echo.
-Send and receive lines include a `[step N]` timestamp and the message text.
+Send and receive lines include a `[step N][channel C]` timestamp and the message text.
 Step 0 is the automatic startup interval; the first manual `step` is step 1.
 Both sides count intervals independently, so matching send/receive numbers let
-you check synchronization. For example, sending `hello` from the host shows
-`[step 1] Sending to guest (5 bytes): hello` on the host and
-`[step 1] Received from host (5 bytes): hello` on the guest. Queue confirmation
+you check synchronization. For example, sending `send 1 hello` from the host shows
+`[step 1][channel 1] Sending to guest (5 bytes): hello` on the host and
+`[step 1][channel 1] Received from host (5 bytes): hello` on the guest. Queue confirmation
 shows the current completed step and the intended next step; sending is logged
 when the producer hands data to the controller (before transport success).
 
 Only the host accepts `step [interval_ms poll_ms]` (defaults: 100 ms and 10 ms)
 and `quit`. For example:
 
-1. On the host, enter `send hello guest`.
-2. On the guest, type `send hello host` and press Enter.
+1. On the host, enter `send 1 hello guest`.
+2. On the guest, type `send 2 hello host` and press Enter.
 3. On the host, enter `step`. The guest displays `hello guest` and reads its own
    typed line during that interval; the host displays `hello host` at the boundary.
 4. Enter `quit` on the host to shut down both sides.
@@ -254,3 +265,20 @@ guest worker. This keeps the shell from reclaiming its terminal each time the
 worker stops. The supervisor does not read input or run any controller callbacks.
 Closing that launcher also kills its worker, even if the worker is paused. Normal
 host shutdown removes the socket endpoint. After an abnormal exit, stop both sides and use `make clean-sockets`.
+
+### Queue manager integration tests
+
+Build and run the real host/guest controller integration test plus queue manager
+unit tests with:
+
+```sh
+cmake -S . -B build -DQUEUE_MANAGER_BUILD_TESTS=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+```
+
+The integration test requires Python 3 and permission to create Unix sockets and
+signal the guest process. It checks bidirectional channel routing, FIFO ordering,
+empty payloads, invalid channel input, queue capacity, independent channel
+capacity, subsequent snapshots, empty intervals, and clean shutdown. Set
+`-DBUILD_TESTING=OFF` to build the demos without the Python test dependency.

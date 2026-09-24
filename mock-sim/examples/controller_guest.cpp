@@ -17,7 +17,7 @@ using namespace controller_example;
 // callback can run while the guest is stopped. poll() never waits for input.
 class ConsoleProducer final : public DataProducer {
 public:
-    explicit ConsoleProducer(const std::size_t& step) : step_(step) {}
+    explicit ConsoleProducer(const std::size_t& step) : outgoing_("host", step) {}
     std::optional<Message> take() override {
         // Bound work per poll even when input is continuously arriving.
         for (int attempt = 0; attempt < 32; ++attempt) {
@@ -28,19 +28,20 @@ public:
                 buffered_.erase(0, count + (newline != std::string::npos));
                 if (!line.empty() && line.back() == '\r') line.pop_back();
                 if (auto message = parse_send(line)) {
-                    print_message(step_, "Sending to", "host", *message);
-                    return message;
+                    if (!outgoing_.enqueue(*message))
+                        throw std::runtime_error("guest outgoing queue full");
+                    continue;
                 }
-                std::cout << "Use send TEXT (or send for empty data). Quit from the host.\n" << std::flush;
+                else std::cout << "Use send CHANNEL [TEXT], channel 1 or 2. Quit from the host.\n" << std::flush;
             } else {
-                if (eof_) return std::nullopt;
+                if (eof_) return outgoing_.take();
                 pollfd input{STDIN_FILENO, POLLIN, 0};
                 const auto ready = ::poll(&input, 1, 0);
                 if (ready < 0) {
                     if (errno == EINTR) continue;
                     throw std::runtime_error("cannot poll terminal input");
                 }
-                if (ready == 0) return std::nullopt;
+                if (ready == 0) return outgoing_.take();
                 if (input.revents & (POLLERR | POLLNVAL))
                     throw std::runtime_error("terminal input is unavailable");
                 // This worker is the only stdin reader. Read only ready input;
@@ -49,7 +50,7 @@ public:
                 const auto count = ::read(STDIN_FILENO, bytes, sizeof(bytes));
                 if (count < 0) {
                     if (errno == EINTR) continue;
-                    if (errno == EAGAIN) return std::nullopt;
+                    if (errno == EAGAIN) return outgoing_.take();
                     throw std::runtime_error("cannot read terminal input");
                 }
                 if (count == 0) eof_ = true;
@@ -58,10 +59,10 @@ public:
                     throw std::runtime_error("console input exceeds 1 MiB");
             }
         }
-        return std::nullopt;
+        return outgoing_.take();
     }
 private:
-    const std::size_t& step_;
+    Queue outgoing_;
     std::string buffered_;
     bool eof_{false};
 };
@@ -92,7 +93,7 @@ int main(int argc, char* argv[]) {
     }
     const std::string endpoint = argc == 2 ? argv[1] : default_endpoint;
     std::cout << "Controller guest connecting to " << endpoint << "...\n"
-                 "Type send TEXT, or send for an empty message.\n"
+                 "Type send CHANNEL [TEXT], channel 1 or 2; omit TEXT for empty data.\n"
                  "Input is read only during host intervals; while paused, typed lines wait in the terminal.\n"
                  "The host controls step and quit. EOF closes input but keeps receiving.\n" << std::flush;
 
