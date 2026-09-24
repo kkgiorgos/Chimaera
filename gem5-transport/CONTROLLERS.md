@@ -48,22 +48,52 @@ time, `0.5` targets half speed, and `2` targets twice real time. `--interval-us`
 is the nominal simulated sync interval in microseconds and `--poll-us` is the guest polling
 interval, also in microseconds. Both retain the tick-drift compensation described below.
 
-While running, use these host console commands:
+The controller console handles `status` and `quit`; timing advances automatically.
+Application messages use separate client processes. Start as many client terminals
+as needed on the host, selecting channel 1 or 2:
 
-```text
-send hello from the host
-status
-quit
+```sh
+./gem5-transport/build/gem5_controller_host --channel 1 /tmp/chimaera_host_channels.sock
+./gem5-transport/build/gem5_controller_host --channel 2 /tmp/chimaera_host_channels.sock
 ```
 
-`send` alone queues an empty message. `status` refreshes the achieved rate now.
-Send/receive logs show the peer, byte count, and message content.
-Connect to gem5's serial console (normally port 3456) and type `send TEXT` to
-queue guest data. Input is handled between intervals and during pacing waits;
-it never blocks simulation advancement waiting for a line of text. EOF disables
-console input but lets automatic execution continue, so redirected/headless
-runs work. Use `--steps N` for a bounded run, or `quit` / Ctrl+C to stop.
-A stop signal is handled after the current simulation interval completes.
+The guest uses a **single controller process and console** for both channels.
+`--boot-to-controller` launches it as before; no additional guest shells or client
+processes are needed. At its serial console, use:
+
+```text
+send 1 hello from the guest
+send 2 another message
+send 1
+```
+
+`send CHANNEL` sends an empty message. Incoming data on both channels appears
+automatically with a `[channel 1]` or `[channel 2]` prefix, including while a send
+command is partially typed. Console reads never wait for a complete line, so guest
+polling continues. EOF disables guest input but receiving and polling continue.
+Shut down the simulation with `quit` on the host controller console.
+The guest no longer opens a local channel socket or supports the `--channel` /
+`--channels` modes; redeploy with `make -C gem5-transport deploy-controller`.
+
+On the host, each `--channel` command starts an independent client process.
+A host channel-1 send appears on guest channel 1, and a guest channel-1 send is
+received by a host channel-1 client. Host client commands are `send TEXT`, `send`
+(empty message), and `quit`. Incoming messages appear automatically; clients
+check every 20 ms while idle. EOF exits a host client. Multiple host consumers
+on one channel compete for messages rather than receiving broadcast copies.
+
+Outgoing demo queues hold 128 messages per channel and messages are capped at
+4096 bytes. A full outgoing queue reports `Queue full; retry`. The guest drains
+each received bundle directly to its console. Host incoming queues still apply
+backpressure when clients do not drain them, which can delay timing. Host sockets
+are same-user (mode 0600); override the host service path with `--channels PATH`
+and pass that path to its clients. Existing socket paths are never removed at
+startup. After a forced shutdown, check that the owner has stopped before removing
+its stale channel socket.
+
+EOF disables the host controller console without stopping automatic execution.
+Use `--steps N` for a bounded run, or `quit` / Ctrl+C to stop. A stop signal is
+handled after the current simulation interval and callbacks complete.
 
 `quit` shuts down gem5 through its timing socket without executing another
 guest instruction. It then cancels and joins the host I/O worker. Exit normally
@@ -244,3 +274,36 @@ nanoseconds and gem5 requests remain integer ticks to preserve drift correction
 precision. Console pacing uses microsecond waits rather than rounding up to
 milliseconds. OS scheduling and KVM exits can still overshoot these intervals.
 Wall-clock startup timeouts and reporting cadence remain in seconds.
+
+## Queue-manager integration
+
+Link `chimaera::channels` and include `chimaera/channel_service.hpp`. Construct a
+`ChannelService(socket_path, channels)` and pass it as both producer and consumer
+to either gem5 controller. It serializes queue-manager snapshots as controller
+messages and demultiplexes received bundles. Both peers must configure matching
+channel IDs. Queue depths may differ; the service limits total configured depth
+to 4096. The host demo uses this service; the guest demo uses `GuestChannels` to serialize
+console input and deserialize/display both channels directly in its controller
+callbacks, with no local IPC. The channel service owns an IPC worker so clients can drain incoming
+queues while controller callbacks apply backpressure. Call `close()` from another
+thread to interrupt blocked delivery before joining a controller thread; destruction
+requires all controller calls to have finished. Controllers must outlive neither
+their service nor their timing controller.
+
+`ChannelClient(socket_path, channel_id)` exposes `send(bytes)` and `receive()` for
+application processes. `send` returns false on capacity exhaustion; `receive`
+returns nullopt when empty. Invalid channels, oversized messages, and IPC failures
+throw. A successful send means local enqueue, not peer delivery. Do not blindly
+retry after an IPC failure because acceptance may be unknown.
+
+Build and run the local IPC integration test without launching gem5:
+
+```sh
+cmake -S gem5-transport -B gem5-transport/build
+cmake --build gem5-transport/build -j4
+ctest --test-dir gem5-transport/build --output-on-failure
+```
+
+The test starts a separate client process and checks channel isolation, FIFO,
+empty messages, reverse delivery, capacity, reconnection, invalid IDs, socket
+ownership, and cancellation of blocked publication.

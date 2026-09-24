@@ -9,7 +9,9 @@ uses Unix sockets; the guest library calls the existing
 `libm5`.
 
 For buffered exchange at synchronization intervals and socket-driven gem5
-stepping, see [the controller guide](CONTROLLERS.md).
+stepping and separate application processes attached to message channels, see
+[the controller guide](CONTROLLERS.md). Controller builds also embed the sibling
+`queue-manager` library; the raw transport API remains unchanged.
 
 ## Build
 

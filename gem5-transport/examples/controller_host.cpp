@@ -1,6 +1,8 @@
 #include <chimaera/gem5_controller.hpp>
 #include <chimaera/wall_clock_pacer.hpp>
 #include "controller_console.hpp"
+#include "channel_console.hpp"
+#include <array>
 #include "status_bar.hpp"
 
 #include <algorithm>
@@ -25,6 +27,7 @@ volatile std::sig_atomic_t interrupted = 0;
 void interrupt(int) { interrupted = 1; }
 
 struct Options {
+    std::string channels = "/tmp/chimaera_host_channels.sock";
     std::string endpoint = "/tmp/chimaera_time.sock";
     double ratio = 1.0; // Simulated seconds per wall-clock second.
     long long interval_us = 100000;
@@ -35,6 +38,7 @@ struct Options {
 };
 void usage(const char* name) {
     std::cout << "Usage: " << name << " [TIMING_SOCKET] [options]\n"
+                 "  --channels PATH        local channel service socket\n"
                  "  --socket PATH          gem5 timing socket\n"
                  "  --ratio R              simulated seconds / wall second (default: 1)\n"
                  "  --interval-us N        sync interval in us (default: 100000)\n"
@@ -42,7 +46,8 @@ void usage(const char* name) {
                  "  --report-seconds S     rate report period (default: 1)\n"
                  "  --startup-timeout N    seconds to wait for gem5 (default: 300)\n"
                  "  --steps N              stop after N intervals (default: unlimited)\n"
-                 "  --help                 show this help\n";
+                 "  --help                 show this help\n"
+                 "Client process: " << name << " --channel ID SOCKET\n";
 }
 long long integer(std::string_view text) {
     long long value{};
@@ -71,7 +76,8 @@ Options parse(int argc, char** argv) {
         }
         if (i + 1 == argc) throw std::invalid_argument("missing value for " + arg);
         const std::string value = argv[++i];
-        if (arg == "--socket") options.endpoint = value;
+        if (arg == "--channels") options.channels = value;
+        else if (arg == "--socket") options.endpoint = value;
         else if (arg == "--ratio") options.ratio = positive_real(value);
         else if (arg == "--interval-us") options.interval_us = integer(value);
         else if (arg == "--poll-us") options.poll_us = integer(value);
@@ -133,6 +139,7 @@ private:
 } // namespace
 
 int main(int argc, char* argv[]) {
+    if (argc > 1 && std::string_view(argv[1]) == "--channel") return channel_console(argc, argv);
     for (int i = 1; i < argc; ++i) {
         if (std::string_view(argv[i]) == "--help") { usage(argv[0]); return 0; }
     }
@@ -141,10 +148,11 @@ int main(int argc, char* argv[]) {
     try {
         const auto options = parse(argc, argv);
         std::size_t step = 0;
-        Queue outgoing;
-        Display incoming("guest");
+        const std::array channels{QueueChannel{1, 128}, QueueChannel{2, 128}};
+        ChannelService service(options.channels, channels);
         Gem5TimingController timing(options.endpoint);
-        Gem5HostController controller(timing, outgoing, incoming);
+        Gem5HostController controller(timing, service, service);
+        std::cout << "Channel clients: " << argv[0] << " --channel ID " << options.channels << "\n";
         std::cout << "Host data listeners ready. Waiting for gem5 at " << options.endpoint
                   << "...\n" << std::flush;
         try {
@@ -178,11 +186,10 @@ int main(int argc, char* argv[]) {
         auto command = [&](const std::string& line) {
             if (line == "quit" || line == "q") quit = true;
             else if (line == "status") report(false, true);
-            else if (auto message = parse_send(line)) outgoing.messages.push_back(std::move(*message));
-            else if (!line.empty()) std::cout << "Commands: send TEXT, status, quit. Timing runs automatically.\n";
+            else if (!line.empty()) std::cout << "Commands: status, quit. Timing runs automatically.\n";
         };
         std::cout << "Automatic pacing: target " << options.ratio << " simulated seconds / wall second.\n"
-                     "Commands: send TEXT, status, quit. Ctrl+C stops after the current interval.\n" << std::flush;
+                     "Commands: status, quit. Ctrl+C stops after the current interval.\n" << std::flush;
         report();
         while (!quit && !interrupted && (options.steps == 0 || step < static_cast<std::size_t>(options.steps))) {
             input.read(0, command);
