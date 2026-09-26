@@ -1,0 +1,5 @@
+{
+  "repetitions": 3,
+  "fixed": {"duration": 120.0, "gui": false, "control_hz": 20.0},
+  "sweep": {"arena_width": [8.0, 12.0, 16.0], "arena_height": [6.0, 8.0]}
+}

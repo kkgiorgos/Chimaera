@@ -1,0 +1,18 @@
+{
+  "repetitions": 1,
+  "fixed": {
+    "speed": 0.7,
+    "duration": 15.0,
+    "wall_timeout": 600.0,
+    "gui": false,
+    "lidar_samples": 720,
+    "noise_std": 0.05,
+    "physics_step": 0.001,
+    "arena_width": 4.0,
+    "arena_height": 4.0
+  },
+  "sweep": {
+    "control_hz": [2.0, 5.0, 10.0, 20.0],
+    "lidar_hz": [5.0, 10.0]
+  }
+}
