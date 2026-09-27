@@ -1,0 +1,6 @@
+# Formatting is configured separately in .clang-format.
+# Discover compile_commands.json in the enclosing workspace (or its build/).
+CompileFlags:
+  CompilationDatabase: Ancestors
+Index:
+  Background: Build
