@@ -1,0 +1,29 @@
+{
+  "repetitions": 3,
+  "fixed": {
+    "target_distance": 0.8,
+    "speed": 0.7,
+    "kp": 1.8,
+    "heading_gain": 2.0,
+    "max_yaw_rate": 1.2,
+    "front_stop": 0.65,
+    "scan_timeout": 0.3,
+    "beam_stride": 1,
+    "sector_start": -110.0,
+    "sector_end": -40.0,
+    "min_points": 6,
+    "fit_threshold": 0.04,
+    "duration": 15.0,
+    "gui": false,
+    "lidar_samples": 720,
+    "noise_std": 0.05,
+    "physics_step": 0.001,
+    "wall_timeout": 600.0,
+    "arena_width": 4.0,
+    "arena_height": 4.0
+  },
+  "sweep": {
+    "control_hz": [5.0, 10.0],
+    "lidar_hz": [5.0, 10.0]
+  }
+}

@@ -42,7 +42,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output/'included_runs.json').write_text(json.dumps([str(r) for r in runs], indent=2))
     # Source-local plotting also works on copied results without a sourced ROS installation.
-    sys.path.insert(0, str(WORKSPACE/'src/wall_follow_benchmark'))
+    sys.path.insert(0, str(WORKSPACE/'benchmarking'))
     from wall_follow_benchmark.plot import main as plot
     sys.argv = ['plot', *map(str, runs), '--output', str(args.output), '--warmup', str(args.warmup)]
     plot()

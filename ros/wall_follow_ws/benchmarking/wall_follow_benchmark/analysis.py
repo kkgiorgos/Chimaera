@@ -13,9 +13,9 @@ def summarize(rows, warmup=5.):
     covered = float(dt[valid].sum())
     weighted = lambda values: float(np.sum(values[valid]*dt[valid])/covered) if covered else None
     timing = col('compute_ms')[keep]
-    intervals = col('dt_sim')[keep] if 'dt_sim' in rows[0] else np.array([])
+    intervals = col('dt_sim')[keep]
     intervals = intervals[np.isfinite(intervals)]
-    wall_intervals = col('dt_wall')[keep] if 'dt_wall' in rows[0] else np.array([])
+    wall_intervals = col('dt_wall')[keep]
     wall_intervals = wall_intervals[np.isfinite(wall_intervals)]
     wall = col('wall_elapsed')
     cpu = col('cpu_seconds')
@@ -41,3 +41,23 @@ def run_label(run):
     if run.name.startswith('attempt_') and run.parent.parent.name == 'runs':
         return f'{run.parents[2].name}/{run.parent.name}'
     return run.name
+
+
+def derive_metrics(rows, poses, arena):
+    """Derive arena-specific metrics from schema-v2 raw samples and odometry."""
+    import math
+    from .world import wall_distance
+    index, path, previous = 0, 0., None
+    for row in rows:
+        now = float(row['sim_time'])
+        while index < len(poses) and float(poses[index]['sim_time']) <= now:
+            pose = poses[index]
+            xy = float(pose['x']), float(pose['y'])
+            if previous is not None:
+                path += math.hypot(xy[0]-previous[0], xy[1]-previous[1])
+            previous = xy
+            index += 1
+        age = now-float(row['pose_stamp'])
+        distance = wall_distance(float(row['x']), float(row['y']), **arena) if 0 <= age <= .2 else float('nan')
+        row.update(gt_age=age, gt_distance=distance,
+                   gt_error=distance-float(row['target_distance']), path_m=path)

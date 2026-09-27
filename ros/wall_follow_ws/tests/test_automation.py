@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-WORKSPACE = Path(__file__).resolve().parents[3]
+WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE/'scripts'))
 from run_experiments import make_plan
 from compare_experiments import discover
@@ -35,8 +35,9 @@ p = dict(arg.split(':=', 1) for arg in sys.argv if ':=' in arg)
 d = pathlib.Path(p['output_dir'])
 if os.environ.get('FAKE_FAIL'):
     sys.exit(0)  # ros2 launch can exit zero even when its controller failed.
-(d/'metadata.json').write_text(json.dumps(dict(completed=True, parameters=p)))
-(d/'samples.csv').write_text('elapsed,gt_error\\n0,0\\n1,0\\n')
+(d/'metadata.json').write_text(json.dumps(dict(schema_version=2, completed=True, parameters=p)))
+(d/'poses.csv').write_text('sim_time,stamp,x,y\\n')
+(d/'samples.csv').write_text('elapsed,sim_time\\n0,0\\n1,0\\n')
 ''')
     executable.chmod(0o755)
     env = dict(os.environ, PATH=str(tmp_path)+os.pathsep+os.environ['PATH'])

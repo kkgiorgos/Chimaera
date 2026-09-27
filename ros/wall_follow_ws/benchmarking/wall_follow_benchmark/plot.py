@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from .analysis import summarize, run_label  # Retain existing imports used by callers/tests.
 from .comparison import load_comparison, write_summaries, configuration_rows
 
 

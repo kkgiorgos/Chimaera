@@ -13,8 +13,8 @@ import sys
 import time
 
 WORKSPACE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(WORKSPACE / 'src/wall_follow_benchmark'))
-from wall_follow_benchmark.core import DEFAULTS, validate
+sys.path.insert(0, str(WORKSPACE / 'benchmarking'))
+from wall_follow_benchmark.configuration import DEFAULTS, validate
 from wall_follow_benchmark.world import make_world
 
 LAUNCH_DEFAULTS = dict(DEFAULTS, duration=120., gui=False, lidar_hz=20.,
@@ -64,7 +64,9 @@ def make_plan(config, architecture):
 
 def completed(path):
     try:
-        return (json.loads((path/'metadata.json').read_text()).get('completed') is True
+        metadata = json.loads((path/'metadata.json').read_text())
+        return (metadata.get('schema_version') == 2 and metadata.get('completed') is True
+                and (path/'poses.csv').is_file()
                 and (path/'samples.csv').is_file()
                 and len((path/'samples.csv').read_text().splitlines()) >= 3)
     except (OSError, ValueError):
@@ -75,7 +77,7 @@ def eligible(path):
     if not completed(path):
         return False
     if not (path/'attempt.json').exists():
-        return True  # Manual runs predate the suite runner.
+        return True  # Direct runtime runs have no suite attempt record.
     try:
         return json.loads((path/'attempt.json').read_text()).get('status') == 'completed'
     except (OSError, ValueError):
@@ -98,7 +100,7 @@ def stop_process(process):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, default=WORKSPACE/'experiments/control_frequency.json')
+    parser.add_argument('--config', type=Path, default=WORKSPACE/'experiments/demo.json')
     parser.add_argument('--output', type=Path, required=True, help='New suite directory (or matching suite with --resume)')
     parser.add_argument('--architecture', required=True)
     parser.add_argument('--resume', action='store_true', help='Skip completed runs; retry failed runs in new attempt directories')
@@ -142,9 +144,19 @@ def main():
             attempt += 1
         directory = parent/f'attempt_{attempt:03d}'
         directory.mkdir(parents=True)
-        params = dict(run['parameters'], architecture=args.architecture, output_dir=str(directory))
+        params = run['parameters']
+        sensor = {k: params[k] for k in ('lidar_hz', 'lidar_samples', 'noise_std', 'physics_step')}
+        arena = {k: params[k] for k in ('arena_width', 'arena_height')}
+        (directory/'world.sdf').write_text(make_world(**sensor, **arena))
+        (directory/'experiment.json').write_text(json.dumps(dict(sensor=sensor, arena=arena,
+            architecture=args.architecture, gui=params['gui']), indent=2))
+        controller = {k: params[k] for k in DEFAULTS}
+        controller['duration'] = params['duration']
+        (directory/'controller.yaml').write_text(json.dumps({'wall_follower': {'ros__parameters': controller}}, indent=2))
+        launch_args = dict(world=str(directory/'world.sdf'), parameters_file=str(directory/'controller.yaml'),
+                           output_dir=str(directory), gui=params['gui'], wall_timeout=params['wall_timeout'])
         command = ['ros2','launch','wall_follow_benchmark','benchmark.launch.py'] + [
-            f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in params.items()]
+            f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in launch_args.items()]
         record = dict(command=command, started_unix=time.time(), status='running')
         status_file = directory/'attempt.json'
         status_file.write_text(json.dumps(record, indent=2))

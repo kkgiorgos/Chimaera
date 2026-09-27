@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timezone
 from compare_experiments import discover
 from run_experiments import WORKSPACE
-sys.path.insert(0,str(WORKSPACE/'src/wall_follow_benchmark'))
+sys.path.insert(0,str(WORKSPACE/'benchmarking'))
 from wall_follow_benchmark.comparison import load_comparison
 
 

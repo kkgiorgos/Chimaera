@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 import numpy as np
-from .analysis import summarize, run_label
+from .analysis import summarize, run_label, derive_metrics
 
 SERIES = ('elapsed', 'gt_error', 'x', 'y', 'compute_ms', 'scan_age', 'dt_wall', 'path_m')
 
@@ -36,6 +36,8 @@ def flatten(value, prefix=''):
 def load_run(path, warmup):
     path = Path(path)
     metadata = json.loads((path/'metadata.json').read_text())
+    if metadata.get('schema_version') != 2:
+        raise ValueError('Unsupported results schema: expected version 2 raw C++ data')
     experiment_file = path/'experiment.json'
     experiment = json.loads(experiment_file.read_text()) if experiment_file.exists() else {}
     with (path/'samples.csv').open(newline='') as f:
@@ -45,15 +47,15 @@ def load_run(path, warmup):
     times = [float(row['elapsed']) for row in rows]
     if any(not math.isfinite(t) for t in times) or any(b<=a for a,b in zip(times,times[1:])):
         raise ValueError('elapsed times must be finite and strictly increasing')
-    arena = metadata.get('arena', experiment.get('arena', dict(arena_width=12., arena_height=8.)))
+    arena = experiment.get('arena', dict(arena_width=12., arena_height=8.))
+    with (path/'poses.csv').open(newline='') as f:
+        derive_metrics(rows, list(csv.DictReader(f)), arena)
     config = {**experiment, 'controller':metadata.get('parameters', {}), 'arena':arena,
               'duration':metadata.get('duration')}
-    if config.get('gui') in ('true', 'false'):
-        config['gui'] = config['gui']=='true'
     # Presentation-only source changes do not split otherwise identical experiments.
-    provenance = {k:metadata[k] for k in ('platform','machine','processor','python','ros_distro') if k in metadata}
+    provenance = {k:metadata[k] for k in ('platform','machine','ros_distro','implementation','compiler') if k in metadata}
     provenance['source_sha256'] = {k:v for k,v in metadata.get('source_sha256', {}).items()
-                                  if k in ('core.py','node.py','world.py')}
+                                  if k in ('core.hpp','controller.cpp')}
     events = metadata.get('parameter_events', [])
     attempt_file = path/'attempt.json'
     attempt = json.loads(attempt_file.read_text()) if attempt_file.exists() else None

@@ -1,9 +1,41 @@
+import subprocess
+from pathlib import Path
 import math
 import numpy as np
 import pytest
-from wall_follow_benchmark.core import DEFAULTS, command, validate
+from wall_follow_benchmark.configuration import DEFAULTS, validate
 from wall_follow_benchmark.world import make_world
 import xml.etree.ElementTree as ET
+
+
+@pytest.fixture(scope='module', autouse=True)
+def build_driver(tmp_path_factory):
+    global driver
+    root = Path(__file__).resolve().parents[1]
+    driver = tmp_path_factory.mktemp('cpp')/'core_driver'
+    subprocess.run(['g++', '-std=c++17', '-O2', '-I'+str(root/'src/wall_follow_benchmark/include'),
+                    str(root/'tests/core_driver.cpp'), '-o', str(driver)], check=True)
+
+
+def command(ranges, a, da, lo, hi, p):
+    text = ' '.join(map(str, [len(ranges), a, da, lo, hi, *p.values(), *ranges]))
+    values = subprocess.run([str(driver)], input=text, text=True, capture_output=True, check=True).stdout.split()
+    return (*map(float, values[:4]), values[4], float(values[5]))
+
+
+def test_noisy_wall_across_distances_headings_and_strides():
+    for seed in range(20):
+        r,a,da = scan_wall(.5+seed*.03, (seed-10)*.015)
+        rng = np.random.default_rng(seed)
+        valid = np.isfinite(r)
+        r[valid] += rng.normal(0,.005,valid.sum())
+        p = dict(DEFAULTS, beam_stride=1+seed%3)
+        actual = command(r,a,da,.05,20,p)
+        assert actual[4] == 'tracking'
+        assert actual[2] == pytest.approx(.5+seed*.03, abs=.015)
+        assert actual[3] == pytest.approx((seed-10)*.015, abs=.015)
+        assert 0 < actual[0] <= p['speed']
+        assert abs(actual[1]) <= p['max_yaw_rate']
 
 
 def scan_wall(distance, heading=0.):
@@ -22,8 +54,8 @@ def test_parallel_wall_and_feedback_sign():
         v,w,d,h,state,_=command(r,a,da,.05,20,DEFAULTS)
         assert state=='tracking'
         assert d==pytest.approx(distance)
-        assert h==pytest.approx(0,abs=1e-10)
-        assert w==pytest.approx(-DEFAULTS['kp']*(distance-.8))
+        assert h==pytest.approx(0,abs=1e-7)
+        assert w==pytest.approx(-DEFAULTS['kp']*(distance-.8), abs=1e-7)
         assert v>0
 
 
