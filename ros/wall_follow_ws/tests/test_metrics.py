@@ -5,7 +5,7 @@ from wall_follow_benchmark.analysis import summarize
 
 def row(t,error):
     return dict(elapsed=t,gt_error=error,wall_elapsed=t,compute_ms=1.,scan_age=.02,
-                dt_sim=1.,dt_wall=1.,cpu_seconds=t*.1,state='tracking',linear_cmd=.3,path_m=t*.3,rss_kib=10240)
+                dt_sim=1.,dt_wall=1.,state='tracking',linear_cmd=.3,path_m=t*.3)
 
 
 def test_time_weighting():
@@ -13,7 +13,6 @@ def test_time_weighting():
     assert result['mae_m']==pytest.approx(2.5)
     assert result['rmse_m']==pytest.approx(7**.5)
     assert result['real_time_factor']==pytest.approx(1)
-    assert result['controller_cpu_core_fraction']==pytest.approx(.1)
 
 
 def test_missing_ground_truth_counts_against_coverage():

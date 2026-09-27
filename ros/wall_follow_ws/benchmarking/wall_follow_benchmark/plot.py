@@ -39,22 +39,22 @@ def main():
         signal(axes[0,0],group,'gt_error')
         if group['series']['elapsed']:
             axes[0,1].plot(group['series']['x'],group['series']['y'],label=f"{group['name']} (n={group['count']})")
-        signal(axes[1,0],group,'compute_ms')
-        signal(axes[1,1],group,'scan_age',1000.)
+        signal(axes[1,0],group,'dt_wall',1000.)
+        signal(axes[1,1],group,'host_scan_age',1000.)
     for width,height in sorted({(g['arena']['arena_width'],g['arena']['arena_height']) for g in groups}):
         hx,hy=width/2,height/2
         axes[0,1].plot([-hx,hx,hx,-hx,-hx],[-hy,-hy,hy,hy,-hy],'--',linewidth=1,label=f'Arena {width:g} × {height:g} m')
     axes[0,0].set(xlabel='Elapsed simulation time (s)',ylabel='Wall error mean ± SD (m)')
     axes[0,1].set(xlabel='World x (m)',ylabel='World y (m)',title='Mean trajectory, aligned by elapsed time',aspect='equal')
-    axes[1,0].set(xlabel='Elapsed simulation time (s)',ylabel='Computation mean ± SD (ms)')
-    axes[1,1].set(xlabel='Elapsed simulation time (s)',ylabel='Scan age mean ± SD (simulation ms)')
+    axes[1,0].set(xlabel='Elapsed simulation time (s)',ylabel='Observation interval mean ± SD (host ms)')
+    axes[1,1].set(xlabel='Elapsed simulation time (s)',ylabel='Latest host-observed scan age mean ± SD (simulation ms)')
     for ax in axes.flat:
         ax.grid(True,alpha=.3);ax.legend(fontsize=6)
     fig.suptitle('Repetition means; bands = sample standard deviation (not confidence intervals)',fontsize=11)
     fig.tight_layout();fig.savefig(args.output/'comparison.png',dpi=160);plt.close(fig)
     fig,axes=plt.subplots(1,3,figsize=(13,5))
-    for ax,key,title in zip(axes,['rmse_m','path_m','compute_p95_ms'],
-                           ['Tracking RMSE (m)','Distance travelled (m)','Per-run computation p95 (ms)']):
+    for ax,key,title in zip(axes,['rmse_m','path_m','real_time_factor'],
+                           ['Tracking RMSE (m)','Distance travelled (m)','Real-time factor']):
         means=[g['metric_stats'][key]['mean'] for g in groups]
         ax.bar(range(len(groups)),[v if v is not None else np.nan for v in means],color='#197e89')
         for i,g in enumerate(groups):

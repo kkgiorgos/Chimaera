@@ -23,8 +23,8 @@ def create_run(path, error=1., rate=20., times=(0.,1.,2.,3.), events=None, missi
     for t in times:
         rows.append(dict(elapsed=t,sim_time=t,pose_stamp=float('nan') if missing else t,
                          target_distance=.8,wall_elapsed=t,
-                         compute_ms=1.+error,scan_age=.01,dt_sim=1.,dt_wall=1.,cpu_seconds=.1*t,
-                         state='tracking',linear_cmd=.3,rss_kib=10240,x=0.,y=4.-(.8+error)))
+                         compute_ms=1.+error,scan_age=.01,dt_sim=1.,dt_wall=1.,
+                         state='tracking',linear_cmd=.3,x=0.,y=4.-(.8+error)))
     with (path/'samples.csv').open('w') as f:
         writer=csv.DictWriter(f,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
     with (path/'poses.csv').open('w') as f:

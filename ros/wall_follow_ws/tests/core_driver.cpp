@@ -1,7 +1,7 @@
 #include <iomanip>
 #include <iostream>
 
-#include "wall_follow_benchmark/core.hpp"
+#include "wall_follow_robot/core.hpp"
 int main()
 {
   size_t n;

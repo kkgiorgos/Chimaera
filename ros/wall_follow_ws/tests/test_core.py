@@ -13,7 +13,7 @@ def build_driver(tmp_path_factory):
     global driver
     root = Path(__file__).resolve().parents[1]
     driver = tmp_path_factory.mktemp('cpp')/'core_driver'
-    subprocess.run(['g++', '-std=c++17', '-O2', '-I'+str(root/'src/wall_follow_benchmark/include'),
+    subprocess.run(['g++', '-std=c++17', '-O2', '-I'+str(root/'src/wall_follow_robot/include'),
                     str(root/'tests/core_driver.cpp'), '-o', str(driver)], check=True)
 
 

@@ -9,10 +9,13 @@ const metrics = [
  ['stale_fraction','Stale-scan fraction'],['compute_p95_ms','Computation p95 (ms)'],['compute_max_ms','Computation max (ms)'],
  ['actual_control_hz_sim','Actual control rate (Hz, sim)'],['timer_interval_p95_wall_ms','Timer interval p95 (ms, wall)'],
  ['scan_age_p95_s','Scan age p95 (s, sim)'],['real_time_factor','Real-time factor'],
- ['controller_cpu_core_fraction','Controller CPU (core fraction)'],['rss_peak_mib','Peak controller RSS (MiB)'],
+ ['command_rate_observed_hz_sim','Observed command rate (Hz, sim)'],
+ ['command_interval_p95_host_ms','Command receipt interval p95 (ms, host)'],
+ ['host_scan_age_p95_s','Latest host-observed scan age p95 (s, sim)'],
  ['sim_duration_s','Recorded duration (s)']];
-const signals = [['gt_error','Wall-distance error (m)'],['compute_ms','Control computation (ms)'],
- ['scan_age','Scan age (s, sim)'],['dt_wall','Timer interval (s, wall)'],['path_m','Cumulative distance (m)']];
+const signals = [['gt_error','Wall-distance error (m)'],['compute_ms','Control computation (ms, legacy)'],
+ ['scan_age','Robot scan age (s, sim, legacy)'],['dt_wall','Observation interval (s, wall)'],
+ ['host_scan_age','Latest host-observed scan age (s, sim)'],['path_m','Cumulative distance (m)']];
 const hash = new URLSearchParams(location.hash.slice(1));
 let selected = new Set(hash.has('runs') ? hash.get('runs').split(',') : data.runs.slice(0,3).map(r=>r.id));
 selected = new Set([...selected].filter(id=>data.runs.some(r=>r.id===id)));
@@ -25,7 +28,7 @@ function setOptions(id, options) { for(const [value,label] of options) { const o
 setOptions('bar-metric',metrics); setOptions('signal',signals);
 $('total').textContent=`(${data.runs.length})`;
 $('context').textContent=`Summary warmup: ${data.warmup} simulation seconds · Built ${new Date(data.generated).toLocaleString()}`;
-$('footer').textContent='Each configuration combines independent repetitions with equal weight per run. Scalar metrics are computed from all original samples in each run before averaging; p95 means the mean of per-run p95s, not a pooled percentile. Bands/error bars show sample standard deviation, not confidence intervals; n=1 has no SD estimate. No outliers are removed. Signal plots interpolate within the common recorded time interval onto a bounded grid; pointwise n may fall when data is missing. Mean trajectories are time-aligned averages, not actual robot paths. Time filters affect charts only. CPU/RSS cover the controller process. Scan age uses simulation time. Missing data stays unavailable. Regenerate this offline snapshot to add results or change warmup.';
+$('footer').textContent='Each configuration combines independent repetitions with equal weight per run. Scalar metrics are computed from all original samples in each run before averaging; p95 means the mean of per-run p95s, not a pooled percentile. Bands/error bars show sample standard deviation, not confidence intervals; n=1 has no SD estimate. No outliers are removed. Signal plots interpolate within the common recorded time interval onto a bounded grid; pointwise n may fall when data is missing. Mean trajectories are time-aligned averages, not actual robot paths. Time filters affect charts only. Command timing is host receipt timing; equal clock timestamps remain in raw statistics. Guest internal metrics are unavailable in v3. Host scan age measures the latest scan received by the host, not the scan consumed by the robot. Missing data stays unavailable. Regenerate this offline snapshot to add results or change warmup.';
 if(data.errors.length) { $('errors').hidden=false; $('errors').textContent='Some runs could not be loaded:\n'+data.errors.join('\n'); }
 function visible() { const query=$('search').value.toLowerCase();return data.runs.filter(r=>JSON.stringify([r.name,r.path,r.config]).toLowerCase().includes(query)); }
 function renderLibrary() {

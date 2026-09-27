@@ -51,6 +51,11 @@ def test_run_resume_and_mismatch(suite):
     command, env, output = suite
     subprocess.run(command, env=env, check=True, capture_output=True)
     assert len(discover([output])) == 4
+    prepared = json.loads(next(output.rglob('controller.yaml')).read_text())
+    assert 'duration' not in prepared['wall_follower']['ros__parameters']
+    assert set(prepared) == {'wall_follower'}
+    attempt = json.loads(next(output.rglob('attempt.json')).read_text())
+    assert 'duration:=1.0' in attempt['command']
     subprocess.run(command+['--resume'], env=env, check=True, capture_output=True)
     assert len(list(output.rglob('attempt.json'))) == 4
     assert subprocess.run(command, env=env, capture_output=True).returncode != 0
@@ -73,3 +78,11 @@ def test_dry_run_does_not_create_output(suite):
     command, env, output = suite
     subprocess.run(command+['--dry-run'], env=env, check=True, capture_output=True)
     assert not output.exists()
+
+
+def test_host_only_selects_independent_launch(suite):
+    command, env, output = suite
+    subprocess.run(command + ['--host-only'], env=env, check=True, capture_output=True)
+    record = json.loads(next(output.rglob('attempt.json')).read_text())
+    assert record['command'][3] == 'host.launch.py'
+    assert json.loads((output/'suite.json').read_text())['deployment'] == 'host_only'

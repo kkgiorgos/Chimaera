@@ -2,6 +2,7 @@
 """Run a sequential Cartesian parameter sweep, retaining every attempt."""
 import argparse
 import itertools
+import hashlib
 import json
 import math
 import os
@@ -65,7 +66,7 @@ def make_plan(config, architecture):
 def completed(path):
     try:
         metadata = json.loads((path/'metadata.json').read_text())
-        return (metadata.get('schema_version') == 2 and metadata.get('completed') is True
+        return (metadata.get('schema_version') in (2, 3) and metadata.get('completed') is True
                 and (path/'poses.csv').is_file()
                 and (path/'samples.csv').is_file()
                 and len((path/'samples.csv').read_text().splitlines()) >= 3)
@@ -103,6 +104,7 @@ def main():
     parser.add_argument('--config', type=Path, default=WORKSPACE/'experiments/demo.json')
     parser.add_argument('--output', type=Path, required=True, help='New suite directory (or matching suite with --resume)')
     parser.add_argument('--architecture', required=True)
+    parser.add_argument('--host-only', action='store_true', help='Launch host.launch.py; start the robot separately with controller.yaml')
     parser.add_argument('--resume', action='store_true', help='Skip completed runs; retry failed runs in new attempt directories')
     parser.add_argument('--dry-run', action='store_true', help='Print the validated plan without running or writing anything')
     parser.add_argument('--keep-going', action='store_true', help='Continue after a failed run; still return failure')
@@ -115,6 +117,7 @@ def main():
         parser.error('warmup must be finite and nonnegative')
     try:
         plan = make_plan(json.loads(args.config.read_text()), args.architecture)
+        plan['deployment'] = 'host_only' if args.host_only else 'local'
     except (OSError, ValueError, TypeError) as exc:
         parser.error(str(exc))
     if args.dry_run:
@@ -149,13 +152,16 @@ def main():
         arena = {k: params[k] for k in ('arena_width', 'arena_height')}
         (directory/'world.sdf').write_text(make_world(**sensor, **arena))
         (directory/'experiment.json').write_text(json.dumps(dict(sensor=sensor, arena=arena,
-            architecture=args.architecture, gui=params['gui']), indent=2))
+            architecture=args.architecture, gui=params['gui'],
+            source_sha256={str(p.relative_to(WORKSPACE/'src/wall_follow_robot')):
+                hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in sorted((WORKSPACE/'src/wall_follow_robot').rglob('*')) if p.suffix in ('.hpp', '.cpp')}), indent=2))
         controller = {k: params[k] for k in DEFAULTS}
-        controller['duration'] = params['duration']
         (directory/'controller.yaml').write_text(json.dumps({'wall_follower': {'ros__parameters': controller}}, indent=2))
         launch_args = dict(world=str(directory/'world.sdf'), parameters_file=str(directory/'controller.yaml'),
-                           output_dir=str(directory), gui=params['gui'], wall_timeout=params['wall_timeout'])
-        command = ['ros2','launch','wall_follow_benchmark','benchmark.launch.py'] + [
+                           output_dir=str(directory), duration=params['duration'], gui=params['gui'], wall_timeout=params['wall_timeout'])
+        command = ['ros2','launch','wall_follow_benchmark',
+                   'host.launch.py' if args.host_only else 'benchmark.launch.py'] + [
             f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in launch_args.items()]
         record = dict(command=command, started_unix=time.time(), status='running')
         status_file = directory/'attempt.json'
