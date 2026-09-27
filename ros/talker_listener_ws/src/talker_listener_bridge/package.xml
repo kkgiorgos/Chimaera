@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>talker_listener_bridge</name>
+  <version>0.1.0</version>
+  <description>Bidirectional ROS demo traffic across the Chimaera gem5 barrier.</description>
+  <maintainer email="maintainers@example.com">Chimaera maintainers</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>demo_nodes_cpp</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

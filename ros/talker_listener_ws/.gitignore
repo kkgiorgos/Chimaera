@@ -1,0 +1,6 @@
+build/
+install/
+log/
+m5out*/
+__pycache__/
+compile_commands.json
