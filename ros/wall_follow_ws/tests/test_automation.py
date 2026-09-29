@@ -86,3 +86,64 @@ def test_host_only_selects_independent_launch(suite):
     record = json.loads(next(output.rglob('attempt.json')).read_text())
     assert record['command'][3] == 'host.launch.py'
     assert json.loads((output/'suite.json').read_text())['deployment'] == 'host_only'
+
+
+def gem5_args(tmp_path):
+    root = tmp_path/'gem5'
+    for name in ('build/X86/gem5.opt', 'resources/x86-ubuntu-22.04-ros-humble.img',
+                 'resources/x86-linux-kernel-5.15.180'):
+        path = root/name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    return ['--gem5', '--gem5-root', str(root)]
+
+
+def test_gem5_launch_and_resume(suite, tmp_path):
+    command, env, output = suite
+    fake = tmp_path/'ros2'
+    fake.write_text(fake.read_text() + '''
+if sys.argv[2] == 'wall_follow_bridge':
+    (d/'timing.csv').write_text('step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,pacing_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\\n1,1,1,.2,.3,.1,.4,1,1,2\\n')
+''')
+    command += gem5_args(tmp_path)
+    subprocess.run(command, env=env, check=True, capture_output=True)
+    records = [json.loads(p.read_text()) for p in output.rglob('attempt.json')]
+    assert len(records) == 4
+    for record in records:
+        assert record['command'][2:4] == ['wall_follow_bridge', 'bringup.launch.py']
+        assert 'physics_step_ns:=1000000' in record['command']
+        assert record['timing']['cosim_realtime_factor'] == 1
+        assert record['timing']['gem5_phase_realtime_factor'] == 5
+    assert len({next(a for a in r['command'] if a.startswith('outdir:=')) for r in records}) == 4
+    subprocess.run(command+['--resume'], env=env, check=True, capture_output=True)
+    assert len(list(output.rglob('attempt.json'))) == 4
+    assert subprocess.run(command+['--resume', '--ratio', '2'], env=env, capture_output=True).returncode != 0
+
+
+def test_gem5_requires_timing(suite, tmp_path):
+    command, env, output = suite
+    result = subprocess.run(command + gem5_args(tmp_path), env=env, capture_output=True)
+    assert result.returncode == 1
+    record = json.loads(next(output.rglob('attempt.json')).read_text())
+    assert record['status'] == 'failed'
+    assert 'timing_error' in record
+
+
+def test_gem5_invalid_interval_and_dry_run(suite):
+    command, env, output = suite
+    result = subprocess.run(command+['--gem5', '--dry-run'], env=env, check=True, capture_output=True, text=True)
+    assert json.loads(result.stdout)['deployment'] == 'gem5'
+    assert not output.exists()
+    assert subprocess.run(command+['--gem5', '--dry-run', '--interval-us', '50100'], env=env, capture_output=True).returncode != 0
+    assert subprocess.run(command+['--gem5', '--host-only', '--dry-run'], env=env, capture_output=True).returncode != 0
+
+
+def test_gem5_refuses_concurrent_suite(suite, tmp_path):
+    import fcntl
+    command, env, output = suite
+    with open('/tmp/chimaera-wall-follow-suite.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = subprocess.run(command + gem5_args(tmp_path), env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'Another gem5 suite is running' in result.stderr
+    assert not output.exists()
