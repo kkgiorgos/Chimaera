@@ -9,6 +9,8 @@ file output, resource sampling, ground-truth subscription, or experiment lifetim
   robot parameters, and `robot.launch.py`. Its runtime dependencies are ROS control
   interfaces; it does not depend on Gazebo, Python analysis, or the host package.
 - `src/wall_follow_benchmark`: host launch files, Python collector and command gateway.
+- `src/wall_follow_bridge`: host/guest transport nodes, gem5 boot configuration,
+  and a timing controller coordinating gem5 with paused Gazebo Fortress.
 - `benchmarking/wall_follow_benchmark`: standalone configuration, world generation,
   metrics, aggregation, and plotting. Analysis needs no ROS installation.
 - `scripts`: experiment preparation, suite execution, comparisons, and dashboard.
@@ -30,9 +32,10 @@ flowchart LR
   C -->|/robot/cmd_vel| H
 ```
 
-There is no custom cosimulation bridge implementation or assumed synchronization
-protocol here. The launch and package boundaries let that connection be added
-later without moving instrumentation out of the robot application again.
+For cosimulation, the host and robot links in this diagram cross Chimaera's
+serialized-message bridges. The robot runs inside gem5 in ROS domain 42; Gazebo,
+the adapter, collector and host bridge run in domain 41. Both domains are
+localhost-only. The local benchmark remains available without gem5.
 
 ## Build
 
@@ -63,6 +66,138 @@ The robot CMake build generates `build/wall_follow_robot/compile_commands.json`.
 The workspace `.clangd` points to this database. Build once before editing C++
 sources, rebuild after adding sources or compiler flags, and restart clangd if
 it was running before the first build.
+
+## Run with gem5 and Gazebo
+
+The structure follows `talker_listener_ws`: `host_bridge`, `guest_bridge`, a
+shared JSON route file, guest startup script, offline deployment helper, and
+`bringup.launch.py`. Build additionally requires the sibling `gem5-transport`,
+`queue-manager`, custom x86 gem5/libm5, JSON-C development files, and Fortress
+Ignition Transport 11 / Messages 8 development files. Override
+`GEM5_TRANSPORT_ROOT`, `GEM5_ROOT`, or `GEM5_M5_LIBRARY` through CMake as in the
+talker/listener example. `-DBUILD_GUEST_BRIDGE=OFF` supports host-only builds.
+
+Prepare a world and controller file (from this workspace):
+
+```bash
+PYTHONPATH=benchmarking python3 -c 'from wall_follow_benchmark.world import make_world; from pathlib import Path; Path("/tmp/wall-world.sdf").write_text(make_world())'
+cp src/wall_follow_bridge/config/controller.yaml /tmp/wall-controller.yaml
+```
+
+With the guest image **offline**, deploy both guest executables, the startup
+script, route JSON and controller settings:
+
+```bash
+./deploy_guest.sh /absolute/path/to/disk.img 2 /tmp/wall-controller.yaml
+```
+
+An optional fourth argument selects a different bridge JSON. The installer uses
+the transport's guarded image-editing helper and requires sudo. The image must
+already contain ROS Humble, `sensor_msgs`, `geometry_msgs`, `rosgraph_msgs`,
+`rcl_interfaces`, the JSON-C runtime, and the gem5 readfile boot mechanism with
+passwordless root startup, as in `talker_listener_ws`. Run the guest script only
+inside gem5. Rebuild and redeploy both bridges together after protocol changes.
+Guest files live under `/usr/local/bin/chimaera_wall_follow_*` and
+`/usr/local/share/chimaera/{wall_follow_bridge.json,controller.yaml}`.
+`CHIMAERA_BRIDGE_CONFIG` and `CHIMAERA_ROBOT_CONFIG` override the guest paths.
+
+```bash
+ros2 launch wall_follow_bridge bringup.launch.py \
+  gem5_root:="$(realpath ../../gem5)" image:=/absolute/path/to/disk.img \
+  world:=/tmp/wall-world.sdf parameters_file:=/tmp/wall-controller.yaml \
+  output_dir:=/tmp/wall-cosim-run duration:=120 wall_timeout:=900
+```
+
+Use a new output directory for each run. Host and guest controller files must
+match; the launch does not copy host files into a running guest. The launch
+starts paused Gazebo, its ROS adapter, the collector, the host bridge and gem5.
+It does not start a local robot controller. Any component exiting shuts down
+the launch.
+
+To start gem5 yourself, use two host terminals. Both commands run from
+`wall_follow_ws`; source ROS and `install/setup.bash` in the first terminal
+(use `.zsh` with zsh). Start the complete host first:
+
+```bash
+ros2 launch wall_follow_bridge host.launch.py \
+  world:=/tmp/wall-world.sdf parameters_file:=/tmp/wall-controller.yaml \
+  output_dir:=/tmp/wall-cosim-manual gui:=true \
+  startup_timeout_s:=600 wall_timeout:=1800
+```
+
+This launches paused Gazebo with its GUI, the ROS adapter, collector/gateway,
+and transport/timing node in domain 41. Wait for
+`Data transport ready; waiting for gem5 guest`, then start gem5 in terminal 2:
+
+```bash
+../../gem5/build/X86/gem5.opt --outdir=m5out-wall-follow-manual \
+  src/wall_follow_bridge/config/gem5_wall_follow.py \
+  --gem5-root "$(realpath ../../gem5)" \
+  --socket-path /tmp/chimaera_time.sock
+```
+
+The config uses the default ROS Humble image and kernel under the gem5 resources
+directory. Add `--image /absolute/path/to/disk.img` and/or `--kernel PATH` if
+needed. The image must already be deployed as above. Guest boot automatically
+starts the controller and guest bridge; no separate guest ROS command is needed.
+The host must start first because gem5's data transport connects to its listeners.
+Both processes must run on the same machine with access to the same Unix sockets.
+If you override host `timing_socket`, pass the same path as gem5 `--socket-path`.
+
+Leave Gazebo's Play/Step/Reset controls alone. The host waits for guest startup,
+then advances both simulators. Startup and wall timeouts include the time spent
+waiting for you to start gem5. Host shutdown still sends gem5 the timing protocol's
+`QUIT` command, including when collection finishes; a separately launched gem5
+is not left running intentionally. The host launch does not own its OS process,
+so if gem5 is stuck during boot or cannot accept `QUIT`, stop it in terminal 2.
+
+`wall_follow_bridge bridge.launch.py` retains the transport-node-only launch
+for independently managed Gazebo and recording. `bringup.launch.py` composes
+the complete `host.launch.py` and gem5 for automatic startup.
+
+The bridge JSON carries `/robot/scan` (`LaserScan`, best effort) and `/clock`
+(`Clock`, best effort) host-to-guest, and `/robot/cmd_vel` (`Twist`, reliable)
+guest-to-host. All routes use volatile keep-last depth 10. The collector remains
+the only gateway to Gazebo `/cmd_vel`; ground truth and recording stay local.
+Parameter services/events are not bridged, so cosimulation records the supplied
+fixed controller settings rather than guest live parameter updates.
+
+The wall-follow bridge retains the example's route validation and framing,
+with a 128 KiB serialized-payload limit to accommodate scans with up to 8192
+ranges and intensities. Its outgoing queue is bounded at 128 messages; exceeding
+either limit fails the run. Message definitions must match on both sides.
+
+`TimingController` implements Chimaera's timing interface by composing the
+existing `Gem5TimingController` and `Gem5HostController` with Gazebo world
+control. Each interval runs the guest against the preceding physics boundary,
+delivers returned commands, requests Gazebo `multi_step` while paused, then
+waits for world statistics confirming both the exact iteration count and
+simulation time. A control-service acknowledgement alone is not completion.
+The next interval carries the resulting scans and clock to the guest. This is
+sequential, explicit coupling with boundary latency, not continuous execution.
+The existing gem5 tick-drift compensation and wall-clock pacing are retained.
+
+Defaults are `interval_us:=50000`, `poll_us:=10000`, `ratio:=1.0`,
+`physics_step_ns:=1000000`, and `gazebo_world:=wall_arena`.
+The interval must be an exact multiple of the world's physics step; set
+`physics_step_ns` to match the SDF. Mismatched step sizes, unpaused startup,
+failed requests, and missing completion statistics fail the run.
+`startup_timeout_s` (300) also bounds simulator operations; `steps:=0` runs
+until collection completes or shutdown. `timing_socket`, `outdir`, `kernel`,
+`status_bar`, and `report_seconds` match the talker/listener example.
+
+DDS, the collector gateway, and Gazebo's ROS adapter are asynchronous. The
+controller pumps callbacks during a 20 ms wall-time settling period before
+and after physics stepping; this is not a per-message delivery acknowledgement
+or a guarantee that every sensor sample is rendered and delivered at the same
+barrier. Best-effort scans/clock can be dropped. Timing-sensitive experiments
+must account for this boundary and host delivery latency. Only one Chimaera
+session can run at a time because its data socket paths are fixed; do not run
+the talker/listener example alongside it or control Gazebo from another client.
+
+The suite runner below still manages local or independently started robot runs.
+For cosimulation, prepare/deploy each controller configuration and invoke the
+cosimulation launch explicitly.
 
 ## Run a suite locally
 
@@ -234,3 +369,15 @@ command-loss failure, clock-reset failure, and absence of robot file output:
 ```bash
 ROS_DOMAIN_ID=87 python3 tests/ros_smoke.py
 ```
+
+The bridge package adds generic routing/queue tests (including a full 8192-beam
+LaserScan) and a real paused Fortress timing test using a gem5 socket stub:
+
+```bash
+colcon test --packages-select wall_follow_bridge --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+These require local DDS, Ignition and Unix socket access. The timing test checks
+successful stepping, physics-step mismatch rejection, and nonintegral interval
+rejection; it does not boot a guest image or validate guest computation.
