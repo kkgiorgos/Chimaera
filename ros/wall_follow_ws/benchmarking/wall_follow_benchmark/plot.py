@@ -21,6 +21,54 @@ def signal(ax, group, key, scale=1.):
     ax.fill_between(t,y-sd,y+sd,color=line.get_color(),alpha=.18)
 
 
+def timing_plot(groups, output):
+    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
+    labels = [f"{g['name']}\nn={g['count']} total repetitions" for g in groups]
+    positions = np.arange(len(groups))
+
+    def bars(ax, keys, ylabel):
+        width = .8 / len(keys)
+        any_data = False
+        for j, (key, label) in enumerate(keys):
+            stats = [g['metric_stats']['timing_' + key] for g in groups]
+            x = positions - .4 + width * (j + .5)
+            ax.bar(x, [st['mean'] if st['n'] else np.nan for st in stats], width, label=label)
+            for i, st in enumerate(stats):
+                if st['n']:
+                    any_data = True
+                    if st['std'] is not None:
+                        ax.errorbar(x[i], st['mean'], yerr=st['std'], fmt='none', ecolor='#172b40', capsize=3)
+                    ax.annotate(f"n={st['n']}", (x[i], st['mean'] + (st['std'] or 0)),
+                                xytext=(0, 4), textcoords='offset points', ha='center', fontsize=7)
+        if not any_data:
+            ax.text(.5, .5, 'Timing not recorded', transform=ax.transAxes, ha='center')
+        ax.set_ylabel(ylabel)
+        ax.legend(fontsize=8)
+
+    bars(axes[0, 0], [('cosim_realtime_factor', 'Overall'),
+                      ('unpaced_realtime_factor', 'Excluding pacing')], 'Simulated seconds / wall second')
+    axes[0, 0].set_title('Co-simulation throughput (higher is faster)')
+    bars(axes[0, 1], [('gem5_phase_realtime_factor', 'gem5'),
+                      ('gazebo_phase_realtime_factor', 'Gazebo')], 'Simulated seconds / phase wall second')
+    axes[0, 1].set_title('Host-observed simulator phase rates')
+    bars(axes[1, 0], [('gem5_wall_seconds', 'gem5'), ('gazebo_wall_seconds', 'Gazebo'),
+                      ('other_wall_seconds', 'Settling / other'), ('pacing_wall_seconds', 'Pacing')], 'Phase wall time (s)')
+    axes[1, 0].set_title('Wall-time breakdown over completed intervals')
+    bars(axes[1, 1], [('startup_wall_seconds', 'Startup'),
+                      ('elapsed_wall_seconds', 'Co-simulation, excluding startup')], 'Wall time (s)')
+    axes[1, 1].set_title('Startup and co-simulation elapsed time')
+    for ax in axes.flat:
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels, rotation=25, ha='right', fontsize=7)
+        ax.grid(axis='y', alpha=.25)
+        ax.margins(y=.2)
+    fig.suptitle('Co-simulation timing · equal-weight run means ± sample SD\n'
+                 'All completed intervals; benchmark warmup does not apply. Phases include communication and waiting.', fontsize=11)
+    fig.tight_layout()
+    fig.savefig(output/'timing.png', dpi=160)
+    plt.close(fig)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('runs',nargs='+',type=Path)
@@ -66,6 +114,7 @@ def main():
         ax.set_title(title);ax.grid(axis='y',alpha=.3)
     fig.suptitle('Equal weight per run · mean ± sample SD · no SD estimate for n=1',fontsize=11)
     fig.tight_layout();fig.savefig(args.output/'metrics.png',dpi=160);plt.close(fig)
+    timing_plot(groups, args.output)
     write_summaries(groups,args.output)
     config_rows=configuration_rows(groups)
     (args.output/'configuration.json').write_text(json.dumps(config_rows,indent=2,allow_nan=False))

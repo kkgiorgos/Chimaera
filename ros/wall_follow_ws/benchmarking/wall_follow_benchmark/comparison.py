@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import numpy as np
 from .analysis import summarize, run_label, derive_metrics
+from .timing import load_metrics, METRICS as TIMING_METRICS, SCOPE as TIMING_SCOPE
 
 SERIES = ('elapsed', 'gt_error', 'x', 'y', 'compute_ms', 'scan_age', 'dt_wall', 'path_m',
           'host_scan_age')
@@ -69,6 +70,17 @@ def load_run(path, warmup):
     events = metadata.get('parameter_events', [])
     attempt_file = path/'attempt.json'
     attempt = json.loads(attempt_file.read_text()) if attempt_file.exists() else None
+    if attempt and 'wall_follow_bridge' in attempt.get('command', []):
+        arguments = dict(arg.split(':=', 1) for arg in attempt['command'] if ':=' in arg)
+        config['cosimulation'] = {key: arguments[key] for key in
+            ('interval_us', 'poll_us', 'ratio', 'physics_step_ns', 'image', 'kernel', 'gem5_root')
+            if key in arguments}
+    timing_error = None
+    try:
+        timing_metrics = load_metrics(path)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        timing_metrics = {f'timing_{key}': None for key in TIMING_METRICS}
+        timing_error = f'{path}: timing unavailable: {exc}'
     completed = metadata.get('completed') is True and (attempt is None or attempt.get('status') == 'completed')
     if metadata.get('final_parameters', config['controller']) != config['controller']:
         config['final_controller'] = metadata['final_parameters']
@@ -77,7 +89,8 @@ def load_run(path, warmup):
     series_rows = list({float(row['elapsed']): row for row in rows}.values())
     return dict(name=run_label(path), path=str(path.resolve()), completed=completed,
                 config=flatten(config), provenance=flatten(provenance), events=events, arena=arena,
-                final_parameters=metadata.get('final_parameters', {}), metrics=summarize(rows,warmup,metadata.get('observation')),
+                final_parameters=metadata.get('final_parameters', {}),
+                metrics={**summarize(rows,warmup,metadata.get('observation')), **timing_metrics}, timing_error=timing_error,
                 sample_count=len(rows), series={key:np.array([float(r.get(key,'nan')) for r in series_rows]) for key in SERIES})
 
 
@@ -146,7 +159,10 @@ def load_comparison(paths, warmup=5., max_points=1500):
     runs, errors = [], []
     for path in sorted({Path(p).resolve() for p in paths}):
         try:
-            runs.append(load_run(path,warmup))
+            run = load_run(path,warmup)
+            runs.append(run)
+            if run["timing_error"]:
+                errors.append(run["timing_error"])
         except (OSError,ValueError,KeyError,TypeError) as exc:
             errors.append(f'{path}: {exc}')
     if not runs:
@@ -160,7 +176,7 @@ def write_summaries(groups, output):
     records = []
     for g in groups:
         row = dict(group_id=g['id'],label=g['name'],repetitions=g['count'],completed=g['completed'],
-                   configuration=json.dumps(g['config'],sort_keys=True), provenance=json.dumps(g['provenance'],sort_keys=True),
+                   timing_scope=TIMING_SCOPE, configuration=json.dumps(g['config'],sort_keys=True), provenance=json.dumps(g['provenance'],sort_keys=True),
                    parameter_events=json.dumps(g['events']),
                    members=json.dumps([r['path'] for r in g['members']]))
         for metric,stats in g['metric_stats'].items():
@@ -170,7 +186,7 @@ def write_summaries(groups, output):
     with (output/'summary.csv').open('w',newline='') as f:
         writer=csv.DictWriter(f,fieldnames=list(records[0]));writer.writeheader();writer.writerows(records)
     (output/'per_run_summary.json').write_text(json.dumps(
-        [dict(group_id=g['id'],**member) for g in groups for member in g['members']],indent=2,allow_nan=False))
+        [dict(group_id=g['id'],timing_scope=TIMING_SCOPE,**member) for g in groups for member in g['members']],indent=2,allow_nan=False))
     return records
 
 

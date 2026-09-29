@@ -9,18 +9,21 @@ from compare_experiments import discover
 from run_experiments import WORKSPACE
 sys.path.insert(0,str(WORKSPACE/'benchmarking'))
 from wall_follow_benchmark.comparison import load_comparison
+from wall_follow_benchmark.timing import METRICS as TIMING_METRICS, SCOPE as TIMING_SCOPE
 
 
 def build_dashboard(runs, output, warmup=5., max_points=1500):
     groups,errors=load_comparison(runs,warmup,max_points)
-    payload=dict(runs=groups,errors=errors,warmup=warmup,generated=datetime.now(timezone.utc).isoformat())
+    payload=dict(runs=groups,errors=errors,warmup=warmup,
+                 timing_metrics=[["timing_"+key, label] for key,label in TIMING_METRICS.items()],
+                 timing_scope=TIMING_SCOPE,generated=datetime.now(timezone.utc).isoformat())
     encoded=json.dumps(payload,allow_nan=False,separators=(',',':')).replace('<','\\u003c').replace('>','\\u003e').replace('&','\\u0026')
     assets=Path(__file__).parent/'web'
     html=(assets/'dashboard.html').read_text().replace('__STYLE__',(assets/'dashboard.css').read_text())
     html=html.replace('__SCRIPT__',(assets/'dashboard.js').read_text()).replace('__DATA__',encoded)
     output=Path(output);output.parent.mkdir(parents=True,exist_ok=True);output.write_text(html)
     for error in errors:
-        print(f'Skipped malformed run: {error}',file=sys.stderr)
+        print(f'Comparison warning: {error}',file=sys.stderr)
     print(f'Interactive comparison: {output.resolve()} ({len(groups)} configurations)')
     return payload
 

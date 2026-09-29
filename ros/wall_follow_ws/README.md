@@ -108,8 +108,9 @@ ros2 launch wall_follow_bridge bringup.launch.py \
   output_dir:=/tmp/wall-cosim-run duration:=120 wall_timeout:=900
 ```
 
-Use a new output directory for each run. Host and guest controller files must
-match; the launch does not copy host files into a running guest. The launch
+Use a new output directory for each run. The launch injects `parameters_file` through gem5 readfile at boot, so each
+guest starts with the same controller settings as the host. The image still
+requires the deployed executables, startup script, and bridge JSON. The launch
 starts paused Gazebo, its ROS adapter, the collector, the host bridge and gem5.
 It does not start a local robot controller. Any component exiting shuts down
 the launch.
@@ -127,7 +128,7 @@ ros2 launch wall_follow_bridge host.launch.py \
 
 This launches paused Gazebo with its GUI, the ROS adapter, collector/gateway,
 and transport/timing node in domain 41. Wait for
-`Data transport ready; waiting for gem5 guest`, then start gem5 in terminal 2:
+`Host bridge initialized; waiting for gem5 guest`, then start gem5 in terminal 2:
 
 ```bash
 ../../gem5/build/X86/gem5.opt --outdir=m5out-wall-follow-manual \
@@ -195,9 +196,71 @@ must account for this boundary and host delivery latency. Only one Chimaera
 session can run at a time because its data socket paths are fixed; do not run
 the talker/listener example alongside it or control Gazebo from another client.
 
-The suite runner below still manages local or independently started robot runs.
-For cosimulation, prepare/deploy each controller configuration and invoke the
-cosimulation launch explicitly.
+### Automated gem5 suites
+
+Deploy the guest executables once using `deploy_guest.sh`, then build and source
+this workspace. Run a sequential sweep with:
+
+```bash
+python3 scripts/run_gem5_experiments.py \
+  --config experiments/demo.json --architecture gem5-kvm \
+  --gem5-root ../../gem5 --output results/gem5-kvm --no-plot
+```
+
+`run_experiments.py --gem5` is equivalent. `--image` and `--kernel` override the
+resources under gem5. The runner supports `--dry-run`, `--resume`, `--keep-going`,
+repetitions, sweeps, and the existing plots. Each attempt boots a fresh guest,
+injects its generated controller YAML through readfile, and retains `launch.log`,
+`gem5/` (including gem5 statistics), `timing.csv`, `timing_summary.json`, and the
+normal benchmark data. The image is used through gem5's copy-on-write disk;
+controller sweeps do not edit the base image. The deployed guest startup script
+must support `CHIMAERA_ROBOT_CONFIG` (as the supplied script does).
+
+`--interval-us` (50000), `--poll-us` (10000), `--ratio` (1), and
+`--startup-timeout` (300 seconds) control synchronization. The interval must be
+an exact multiple of every swept `physics_step`. Set `wall_timeout` in the suite
+configuration high enough to cover guest boot plus the entire run. Runs remain
+sequential because Chimaera has fixed data sockets. A lock excludes other suite
+runners; manually started Chimaera sessions must be stopped separately. Before
+each attempt, the runner checks Linux socket ownership without connecting to the
+data protocol. It removes only inactive socket files owned by the current user,
+and rejects active sessions, foreign-owned files, and non-socket paths. This
+allows retries after forced termination leaves stale sockets behind.
+
+### Co-simulation timing
+
+The complete host launch records `timing.csv`; the standalone bridge accepts
+`timing_file:=PATH`. Each flushed row describes one successfully completed
+synchronization interval, using a monotonic host clock:
+
+| Field | Meaning |
+| --- | --- |
+| `sim_seconds` | Gazebo's verified simulation advance |
+| `gem5_sim_seconds` | Actual gem5 tick advance, including drift compensation |
+| `gem5_wall_seconds` | Host gem5 step call, including transport and callback polling |
+| `gazebo_wall_seconds` | World-control request through confirmed physics completion statistics |
+| `other_wall_seconds` | Remaining active step time, including both callback settling periods |
+| `pacing_wall_seconds` | Pacer, status updates and callback work after stepping |
+| `wall_seconds` | Entire interval including pacing |
+| `elapsed_wall_seconds` | Wall time since both simulators became ready |
+| `startup_wall_seconds` | Waiting for guest readiness and initial Gazebo statistics |
+
+The suite aggregates these into `timing_summary.json` and `attempt.json`.
+`cosim_realtime_factor` is total Gazebo simulated seconds / elapsed wall seconds;
+0.1 means ten wall seconds per simulated second. The corresponding
+`*_wall_seconds_per_sim_second` fields report the slowdown directly. `gem5_phase_realtime_factor`
+and `gazebo_phase_realtime_factor` divide each simulator's progress by its phase
+wall time. `unpaced_realtime_factor` excludes the pacing phase. These are ratios
+of totals, not averages of per-step rates. For throughput experiments increase
+`--ratio` above expected throughput to avoid the default 1x pacing cap.
+
+Startup is reported separately. Completed timing intervals include pre-collection
+warmup and may extend beyond the collector's measurement window. Failed/incomplete
+steps have no row, so failed-run summaries describe only retained complete steps.
+The phases include communication and completion-observation latency, not just
+internal simulator execution. The current CPU remains KVM; these measurements do
+not provide detailed simulated CPU/cache performance. Live bridge status also
+shows recent gem5 and Gazebo phase rates.
 
 ## Run a suite locally
 
@@ -253,8 +316,7 @@ required between the two processes.
 locally. `run_experiments.py --host-only` uses `host.launch.py` instead; starting,
 configuring, and stopping the independently deployed robot remains the caller's
 responsibility. Each attempt prints its directory, containing `controller.yaml`.
-The existing suite is still a sequential local runner, not an architectural
-simulator orchestrator.
+Use `--gem5` or `run_gem5_experiments.py` for automated co-simulation suites.
 
 ## Robot interface
 
@@ -349,7 +411,23 @@ python3 scripts/build_dashboard.py --help
 ```
 
 Comparisons report time-weighted tracking errors, coverage, distance, observed
-command timing and host-observed scan age. Runs with different measurement provenance are not pooled.
+command timing and host-observed scan age.
+They also generate `timing.png` and a dedicated **Co-simulation timing** dashboard
+section: overall and unpaced throughput, gem5/Gazebo phase rates and slowdown,
+phase wall-time breakdown, and startup time. `summary.csv`, `summary.json`,
+`per_run_summary.json`, and dashboard CSV exports include `timing_*` metrics and
+the timing measurement scope. Raw `timing.csv` is preferred; copied runs with only
+`timing_summary.json` are supported. Older/local runs show missing timings as
+unavailable, never zero. Malformed timing data produces a warning while retaining
+that run's robot metrics.
+
+Timing statistics cover all recorded complete synchronization intervals; the
+comparison's `--warmup` and signal time filters do not crop them. Startup remains
+separate. Rates are computed from totals within each run, then aggregated with
+equal weight across repetitions; `n` counts only runs recording that metric.
+Recorded co-simulation pacing and interval settings are included in configuration
+grouping so different timing setups are not pooled.
+Runs with different measurement provenance are not pooled.
 Repetitions have equal weight; bands are sample standard deviations, not
 confidence intervals.
 

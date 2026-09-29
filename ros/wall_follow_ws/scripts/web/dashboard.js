@@ -13,6 +13,7 @@ const metrics = [
  ['command_interval_p95_host_ms','Command receipt interval p95 (ms, host)'],
  ['host_scan_age_p95_s','Latest host-observed scan age p95 (s, sim)'],
  ['sim_duration_s','Recorded duration (s)']];
+const timingMetrics = data.timing_metrics;
 const signals = [['gt_error','Wall-distance error (m)'],['compute_ms','Control computation (ms, legacy)'],
  ['scan_age','Robot scan age (s, sim, legacy)'],['dt_wall','Observation interval (s, wall)'],
  ['host_scan_age','Latest host-observed scan age (s, sim)'],['path_m','Cumulative distance (m)']];
@@ -25,11 +26,13 @@ function fmt(v) { if(v===undefined||v===null)return 'Not recorded'; if(typeof v=
 function active() { return data.runs.filter(r=>selected.has(r.id)); }
 function dot(r) { const e=elem('span',undefined,'dot'); e.style.background=r.color; return e; }
 function setOptions(id, options) { for(const [value,label] of options) { const o=elem('option',label);o.value=value;$(id).append(o); } }
+setOptions('timing-metric',timingMetrics);
+$('timing-scope').textContent=data.timing_scope;
 setOptions('bar-metric',metrics); setOptions('signal',signals);
 $('total').textContent=`(${data.runs.length})`;
 $('context').textContent=`Summary warmup: ${data.warmup} simulation seconds · Built ${new Date(data.generated).toLocaleString()}`;
 $('footer').textContent='Each configuration combines independent repetitions with equal weight per run. Scalar metrics are computed from all original samples in each run before averaging; p95 means the mean of per-run p95s, not a pooled percentile. Bands/error bars show sample standard deviation, not confidence intervals; n=1 has no SD estimate. No outliers are removed. Signal plots interpolate within the common recorded time interval onto a bounded grid; pointwise n may fall when data is missing. Mean trajectories are time-aligned averages, not actual robot paths. Time filters affect charts only. Command timing is host receipt timing; equal clock timestamps remain in raw statistics. Guest internal metrics are unavailable in v3. Host scan age measures the latest scan received by the host, not the scan consumed by the robot. Missing data stays unavailable. Regenerate this offline snapshot to add results or change warmup.';
-if(data.errors.length) { $('errors').hidden=false; $('errors').textContent='Some runs could not be loaded:\n'+data.errors.join('\n'); }
+if(data.errors.length) { $('errors').hidden=false; $('errors').textContent='Comparison warnings:\n'+data.errors.join('\n'); }
 function visible() { const query=$('search').value.toLowerCase();return data.runs.filter(r=>JSON.stringify([r.name,r.path,r.config]).toLowerCase().includes(query)); }
 function renderLibrary() {
  $('run-list').replaceChildren();
@@ -95,8 +98,8 @@ function attachHover(svg, points, w=720,h=320) {
   $('tooltip').style.top=Math.max(8,Math.min(event.clientY+12,window.innerHeight-120))+'px';
  });svg.addEventListener('pointerleave',()=>{$('tooltip').hidden=true;});
 }
-function renderBars(runs) {
- const key=$('bar-metric').value,label=metrics.find(m=>m[0]===key)[1],svg=chart($('bar-chart'),label,900,270);
+function renderMetricBars(runs, key, label, container) {
+ const svg=chart(container,label,900,270);
  const yd=domain(runs.flatMap(r=>{const st=r.metric_stats[key];return [st.mean,finite(st.mean)?st.mean+(st.std??0):null,finite(st.mean)?st.mean-(st.std??0):null];}),true),left=66,right=880,top=15,bottom=220;
  const y=v=>bottom-(v-yd[0])/(yd[1]-yd[0])*(bottom-top),width=(right-left)/runs.length;
  for(let i=0;i<=4;i++){const val=yd[0]+i*(yd[1]-yd[0])/4;svg.append(svgElem('line',{x1:left,x2:right,y1:y(val),y2:y(val),class:'grid'}),svgElem('text',{x:left-8,y:y(val)+4,'text-anchor':'end'},Number(val.toPrecision(3))));}
@@ -105,9 +108,22 @@ function renderBars(runs) {
    const sd=run.metric_stats[key].std;if(finite(sd)){const cx=left+width*(i+.5);svg.append(svgElem('line',{x1:cx,x2:cx,y1:y(val-sd),y2:y(val+sd),stroke:'#172b40','stroke-width':2}),svgElem('line',{x1:cx-5,x2:cx+5,y1:y(val+sd),y2:y(val+sd),stroke:'#172b40'}),svgElem('line',{x1:cx-5,x2:cx+5,y1:y(val-sd),y2:y(val-sd),stroke:'#172b40'}));}}
   svg.append(svgElem('text',{x:left+width*(i+.5),y:finite(val)?Math.max(12,y(val+(run.metric_stats[key].std??0))-6):top+16,'text-anchor':'middle'},finite(val)?fmt(val):'Unavailable'),svgElem('text',{x:left+width*(i+.5),y:bottom+23,'text-anchor':'middle'},`Group ${i+1} (n=${run.metric_stats[key].n})`));
  });
+}
+function renderBars(runs) {
+ const key=$('bar-metric').value;
+ renderMetricBars(runs,key,metrics.find(m=>m[0]===key)[1],$('bar-chart'));
  comparisonTable($('metrics-table'),runs,runs.map(r=>({completed:r.completed,repetitions:r.count,...Object.fromEntries(metrics.map(([k])=>{
   const st=r.metric_stats[k];return [k,st.n?`${fmt(st.mean)} ± ${st.std===null?'SD unavailable':fmt(st.std)} (n=${st.n})`:'Unavailable (n=0)'];
  }))})),[['completed','Runs completed'],['repetitions','Repetitions'],...metrics]);
+}
+function renderTiming(runs) {
+ const key=$('timing-metric').value;
+ renderMetricBars(runs,key,timingMetrics.find(m=>m[0]===key)[1],$('timing-chart'));
+ const count=runs.reduce((n,r)=>n+r.metric_stats[key].n,0);
+ $('timing-note').textContent=count?`${count} repetition(s) with this metric. Rates are ratios of totals within each run, then averaged across repetitions. Error bars show sample SD.`:'No recorded timing data for the selected configurations. Older and local runs remain available in the performance charts.';
+ comparisonTable($('timing-table'),runs,runs.map(r=>Object.fromEntries(timingMetrics.map(([k])=>{
+  const st=r.metric_stats[k];return [k,st.n?`${fmt(st.mean)} ± ${st.std===null?'SD unavailable':fmt(st.std)} (n=${st.n})`:'Not recorded (n=0)'];
+ }))),timingMetrics);
 }
 function timeRange(runs) {
  const a=Number($('from').value),b=$('to').value===''?Math.max(1,...runs.map(r=>r.series.elapsed.at(-1)).filter(finite)):Number($('to').value);
@@ -145,17 +161,18 @@ function render() {
  const runs=active();renderLibrary();$('headline').textContent=`${runs.length} configuration${runs.length===1?'':'s'} · ${runs.reduce((n,r)=>n+r.count,0)} repetitions`;
  $('empty').hidden=!!runs.length;$('content').hidden=!runs.length;$('export').disabled=!runs.length;
  try{history.replaceState(null,'','#runs='+runs.map(r=>r.id).join(','));}catch(_){}
- $('tooltip').hidden=true;if(!runs.length)return;renderConfig(runs);renderBars(runs);renderTraces(runs);
+ $('tooltip').hidden=true;if(!runs.length)return;renderConfig(runs);renderBars(runs);renderTiming(runs);renderTraces(runs);
 }
 $('search').addEventListener('input',renderLibrary);
 $('select-visible').addEventListener('click',()=>{visible().forEach(r=>selected.add(r.id));render();});
 $('clear').addEventListener('click',()=>{selected.clear();render();});
 for(const id of ['differences-only','provenance'])$(id).addEventListener('change',()=>renderConfig(active()));
+$('timing-metric').addEventListener('change',()=>renderTiming(active()));
 $('bar-metric').addEventListener('change',()=>renderBars(active()));
 for(const id of ['signal','from','to'])$(id).addEventListener('change',()=>renderTraces(active()));
 $('reset-time').addEventListener('click',()=>{$('from').value=0;$('to').value='';renderTraces(active());});
 $('export').addEventListener('click',()=>{
- const rows=active().map(r=>({group_id:r.id,configuration:r.name,repetitions:r.count,members:r.path,completed:r.completed,
+ const rows=active().map(r=>({group_id:r.id,configuration:r.name,repetitions:r.count,members:r.path,completed:r.completed,timing_scope:data.timing_scope,
   ...Object.fromEntries(Object.entries(r.metric_stats).flatMap(([k,stats])=>Object.entries(stats).map(([stat,v])=>[k+'_'+stat,v]))),
   ...r.config,...r.provenance,parameter_events:JSON.stringify(r.events)}));
  const keys=[...new Set(rows.flatMap(r=>Object.keys(r)))];
