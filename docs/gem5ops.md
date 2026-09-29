@@ -186,3 +186,18 @@ Data transfer from the host to the guest has the caveat regarding the size.
 The guest doesn't know how much data to expect. For now this can be fixed
 by exchanging data in fixed size packets. In the packet we can encode
 the total message size to control how many packets to request.
+
+## Image
+To use these with a custom image without sudo access we would first
+have to figure out how to get /dev/gem5_bridge to work.
+Until then we need sudo access when running programs that use these
+m5ops. In order to do that non interactively we allow the gem5 user
+to have passwordless sudo by altering the image (through QEMU) like so:
+```
+sudo visudo
+```
+and then append:
+```
+<username> ALL=(ALL:ALL) NOPASSWD: ALL
+```
+where `<username>` would be `gem5`
