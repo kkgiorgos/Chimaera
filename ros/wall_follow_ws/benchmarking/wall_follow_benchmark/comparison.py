@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 import numpy as np
 from .analysis import summarize, run_label, derive_metrics
+from .gem5_stats import load_metrics as load_gem5_metrics, METRICS as GEM5_METRICS
 from .timing import load_metrics, METRICS as TIMING_METRICS, SCOPE as TIMING_SCOPE
 
 SERIES = ('elapsed', 'gt_error', 'x', 'y', 'compute_ms', 'scan_age', 'dt_wall', 'path_m',
@@ -81,6 +82,12 @@ def load_run(path, warmup):
     except (OSError, ValueError, KeyError, TypeError) as exc:
         timing_metrics = {f'timing_{key}': None for key in TIMING_METRICS}
         timing_error = f'{path}: timing unavailable: {exc}'
+    gem5_error = None
+    try:
+        gem5_metrics = load_gem5_metrics(path)
+    except (OSError, ValueError) as exc:
+        gem5_metrics = {f'gem5_{key}': None for key in GEM5_METRICS}
+        gem5_error = f'{path}: gem5 statistics unavailable: {exc}'
     completed = metadata.get('completed') is True and (attempt is None or attempt.get('status') == 'completed')
     if metadata.get('final_parameters', config['controller']) != config['controller']:
         config['final_controller'] = metadata['final_parameters']
@@ -90,7 +97,8 @@ def load_run(path, warmup):
     return dict(name=run_label(path), path=str(path.resolve()), completed=completed,
                 config=flatten(config), provenance=flatten(provenance), events=events, arena=arena,
                 final_parameters=metadata.get('final_parameters', {}),
-                metrics={**summarize(rows,warmup,metadata.get('observation')), **timing_metrics}, timing_error=timing_error,
+                metrics={**summarize(rows,warmup,metadata.get('observation')), **timing_metrics, **gem5_metrics},
+                timing_error=timing_error, gem5_error=gem5_error,
                 sample_count=len(rows), series={key:np.array([float(r.get(key,'nan')) for r in series_rows]) for key in SERIES})
 
 
@@ -163,6 +171,8 @@ def load_comparison(paths, warmup=5., max_points=1500):
             runs.append(run)
             if run["timing_error"]:
                 errors.append(run["timing_error"])
+            if run["gem5_error"]:
+                errors.append(run["gem5_error"])
         except (OSError,ValueError,KeyError,TypeError) as exc:
             errors.append(f'{path}: {exc}')
     if not runs:

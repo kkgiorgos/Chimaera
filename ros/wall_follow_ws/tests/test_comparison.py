@@ -100,6 +100,18 @@ def test_failed_attempt_never_pooled_with_success(tmp_path):
     assert {g['completed'] for g in groups}=={True,False}
 
 
+def test_incomplete_gem5_stats_keeps_failed_robot_data(tmp_path):
+    run = create_run(tmp_path/'failed')
+    (run/'attempt.json').write_text(json.dumps(dict(status='failed', returncode=1)))
+    (run/'gem5').mkdir()
+    (run/'gem5/stats.txt').write_text('---------- Begin Simulation Statistics ----------\nsimInsts 120\n')
+    groups, errors = load_comparison([run], 0)
+    assert len(errors) == 1 and 'gem5 statistics unavailable' in errors[0]
+    assert groups[0]['completed'] is False
+    assert groups[0]['metric_stats']['rmse_m']['n'] == 1
+    assert groups[0]['metric_stats']['gem5_instructions']['n'] == 0
+
+
 def test_unsupported_schema_is_rejected(tmp_path):
     run=create_run(tmp_path/'unsupported')
     metadata=json.loads((run/'metadata.json').read_text())

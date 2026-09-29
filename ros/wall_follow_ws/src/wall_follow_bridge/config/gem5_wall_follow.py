@@ -38,7 +38,8 @@ The tick frequency is fixed at 1 THz: one nanosecond is 1000 ticks.
 The simulator boots the deployed chimaera_wall_follow_guest
 and pauses at its workbegin marker
 before opening the timing socket. Host data listeners must be started first.
-The guest stays on KVM throughout; workbegin does not switch CPU models.
+KVM boots to the address-based workbegin marker, then switches to a simulated
+CPU (TimingSimpleCPU by default). The ROI uses instruction transport m5ops.
 """
 
 import argparse
@@ -54,7 +55,7 @@ from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import MESITwoLevelCacheHierarchy
 from gem5.components.memory.single_channel import SingleChannelDDR3_1600
 from gem5.components.processors.cpu_types import CPUTypes
-from gem5.components.processors.simple_processor import SimpleProcessor
+from gem5.components.processors.simple_switchable_processor import SimpleSwitchableProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import DiskImageResource, KernelResource
 from gem5.simulate.exit_event import ExitEvent
@@ -65,11 +66,21 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--socket-path", default="/tmp/chimaera_time.sock")
 parser.add_argument("--boot-to-controller", action="store_true", default=True)
 parser.add_argument("--gem5-root", required=True)
+parser.add_argument("--cpu-type", choices=("timing", "o3"), default="timing")
+parser.add_argument("--cpu-clock", default="3GHz")
+parser.add_argument("--num-cores", type=int, default=2)
+parser.add_argument("--l1d-size", default="16KiB")
+parser.add_argument("--l1i-size", default="16KiB")
+parser.add_argument("--l2-size", default="256KiB")
+parser.add_argument("--l1-assoc", type=int, default=8)
+parser.add_argument("--l2-assoc", type=int, default=16)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
 parser.add_argument("--managed-shutdown", action="store_true", help="Let the host send QUIT on launch shutdown")
 parser.add_argument("--controller-file", help="Inject controller YAML into the guest at boot")
 args = parser.parse_args()
+if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
+    parser.error("core count and cache associativity must be positive")
 boot_script = "#!/bin/bash\nset -e\n"
 if args.controller_file:
     encoded = base64.b64encode(Path(args.controller_file).read_bytes()).decode("ascii")
@@ -88,28 +99,29 @@ requires(
 
 
 cache_hierarchy = MESITwoLevelCacheHierarchy(
-    l1d_size="16KiB",
-    l1d_assoc=8,
-    l1i_size="16KiB",
-    l1i_assoc=8,
-    l2_size="256KiB",
-    l2_assoc=16,
+    l1d_size=args.l1d_size,
+    l1d_assoc=args.l1_assoc,
+    l1i_size=args.l1i_size,
+    l1i_assoc=args.l1_assoc,
+    l2_size=args.l2_size,
+    l2_assoc=args.l2_assoc,
     num_l2_banks=1,
 )
 
 memory = SingleChannelDDR3_1600(size="3GiB")
 
-processor = SimpleProcessor(
-    cpu_type=CPUTypes.KVM,
+processor = SimpleSwitchableProcessor(
+    starting_core_type=CPUTypes.KVM,
+    switch_core_type={"timing": CPUTypes.TIMING, "o3": CPUTypes.O3}[args.cpu_type],
     isa=ISA.X86,
-    num_cores=2,
+    num_cores=args.num_cores,
 )
 
 for core in processor.get_cores():
     core.get_simobject().usePerf = False
 
 board = X86Board(
-    clk_freq="3GHz",
+    clk_freq=args.cpu_clock,
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
@@ -140,8 +152,10 @@ exit_requested = False
 def on_workbegin():
     global roi_started
     while True:
-        roi_started = True
-        m5.stats.reset()
+        if not roi_started:
+            processor.switch()
+            roi_started = True
+            m5.stats.reset()
         yield True  # Return to Python to recompute the remaining step budget.
 
 
@@ -215,6 +229,8 @@ def handle_command(line):
     if parts == ["STATUS"]:
         return f"{'DONE' if finished else 'PAUSED'} {m5.curTick()}"
     if parts == ["QUIT"]:
+        if roi_started:
+            m5.stats.dump()
         exit_requested = True
         return "BYE"
     raise ValueError("expected STEP_US n, STEP_NS n, STEP_TICKS n, STATUS, or QUIT")

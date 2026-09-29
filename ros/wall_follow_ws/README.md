@@ -203,13 +203,22 @@ this workspace. Run a sequential sweep with:
 
 ```bash
 python3 scripts/run_gem5_experiments.py \
-  --config experiments/demo.json --architecture gem5-kvm \
-  --gem5-root ../../gem5 --output results/gem5-kvm --no-plot
+  --config experiments/demo.json --architecture gem5-timing \
+  --gem5-root ../../gem5 --output results/gem5-timing --no-plot
 ```
 
 `run_experiments.py --gem5` is equivalent. `--image` and `--kernel` override the
 resources under gem5. The runner supports `--dry-run`, `--resume`, `--keep-going`,
-repetitions, sweeps, and the existing plots. Each attempt boots a fresh guest,
+repetitions, sweeps, and the existing plots. The default prints only suite/run
+summaries. Add `--progress` for the live status alone, or `--verbose` for live
+status plus the current attempt's launch output. These options are mutually
+exclusive. Status shows completed simulation time, step count, recent gem5 phase
+speed, wall time, and time since the last completed step. A terminal
+shows an updating status line; redirected output receives a progress line each
+second. Boot and the first unfinished interval show `BOOT / FIRST STEP`; tick
+progress is reported only after a complete co-simulation interval. Every attempt
+still keeps its full `launch.log`. Verbosity can change when resuming a suite.
+Each attempt boots a fresh guest,
 injects its generated controller YAML through readfile, and retains `launch.log`,
 `gem5/` (including gem5 statistics), `timing.csv`, `timing_summary.json`, and the
 normal benchmark data. The image is used through gem5's copy-on-write disk;
@@ -226,6 +235,59 @@ each attempt, the runner checks Linux socket ownership without connecting to the
 data protocol. It removes only inactive socket files owned by the current user,
 and rejects active sessions, foreign-owned files, and non-socket paths. This
 allows retries after forced termination leaves stale sockets behind.
+
+### Simulated CPU proof of concept
+
+Rebuild and **redeploy the guest bridge** before running the updated config.
+The bridge uses an address-based workbegin marker during KVM boot. Bootstrap
+polls also use address ops until the first nonzero host epoch confirms the CPU
+switch; subsequent transport calls use instruction m5ops. KVM remains required
+for boot. The existing transport's default address backend remains available
+for other examples.
+
+Hardware parameters can appear in the same `fixed` and `sweep` objects as
+controller and sensor parameters when using `--gem5`: `cpu_type` (`timing`, the
+default, or `o3`), `cpu_clock`, `num_cores`, `l1d_size`, `l1i_size`, `l2_size`,
+`l1_assoc`, and `l2_assoc`. Cache sizes accept positive `KiB`/`MiB` strings and
+must yield a power-of-two number of 64-byte sets. Defaults are 3GHz, two cores,
+16KiB L1I/L1D with associativity 8, and 256KiB L2 with associativity 16. These
+settings also work as ROS launch arguments or hyphenated gem5 config flags.
+Each run records hardware settings in `suite.json` and `experiment.json`, so
+comparisons keep different hardware configurations in separate groups.
+
+Start with these short suites (one repetition each):
+
+- `experiments/timing_clock.json`: 1GHz versus 3GHz with identical scans and
+  controller settings. Check simulated computation time and scan age; wall
+  throughput need not increase with simulated frequency.
+- `experiments/timing_cache.json`: 8KiB versus 32KiB L1D. Compare demand misses
+  and cycles; a small wall follower may show little difference.
+- `experiments/timing_load.json`: 180 versus 720 lidar beams and stride 1 versus
+  4. Check how scan density and subsampling affect instruction count, misses,
+  controller computation time, and tracking error.
+
+```bash
+python3 scripts/run_gem5_experiments.py \
+  --config experiments/timing_clock.json --architecture timing-poc \
+  --gem5-root ../../gem5 --output results/timing-clock --warmup 1
+```
+
+Use `--dry-run` first to inspect the Cartesian plan. The presets allow a one-hour
+wall timeout because detailed simulation can be much slower than KVM. Increase
+`--startup-timeout` if necessary. After an initial smoke run, use longer runs
+and at least three repetitions; the five-second presets are functional checks,
+not steady-state performance claims. For a core-count check, sweep `num_cores`
+over `[1, 2]` while holding scan/controller load fixed.
+
+On managed `QUIT`, gem5 dumps cumulative statistics since workbegin. Each suite
+attempt retains `gem5/stats.txt` and `gem5_summary.json` with simulated seconds,
+instructions, summed ROI-core cycles, aggregate instructions per summed cycle,
+and Ruby L1I/L1D/L2 demand misses. Missing counters remain null. A missing or
+incomplete statistics dump makes a suite attempt fail. Comparison JSON/CSV
+includes these metrics under `gem5_*`; raw statistics remain available for more
+detailed analysis. The summaries use the last complete dump and exclude KVM
+core cycle counters. Keep synchronization settings fixed when comparing hardware,
+since polling overhead and cold-cache startup are part of this ROI.
 
 ### Co-simulation timing
 
@@ -258,9 +320,12 @@ Startup is reported separately. Completed timing intervals include pre-collectio
 warmup and may extend beyond the collector's measurement window. Failed/incomplete
 steps have no row, so failed-run summaries describe only retained complete steps.
 The phases include communication and completion-observation latency, not just
-internal simulator execution. The current CPU remains KVM; these measurements do
-not provide detailed simulated CPU/cache performance. Live bridge status also
-shows recent gem5 and Gazebo phase rates.
+internal simulator execution. KVM boots the guest; the first workbegin switches
+all cores to TimingSimpleCPU (or the selected ROI model), then resets gem5
+statistics before exposing the timing socket. Live bridge status shows recent
+gem5 and Gazebo phase rates. CPU/cache statistics describe the whole ROI,
+including guest OS activity, transport polling, and collection warmup; they are
+not controller-only costs. The CPU switch starts with cold caches.
 
 ## Run a suite locally
 

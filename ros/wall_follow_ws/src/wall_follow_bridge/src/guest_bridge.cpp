@@ -9,11 +9,7 @@ namespace
 {
 struct Mapping
 {
-  Mapping()
-  {
-    m5op_addr = 0xFFFF0000;
-    map_m5_mem();
-  }
+  Mapping() { m5op_addr = 0xFFFF0000; map_m5_mem(); }
   ~Mapping() { unmap_m5_mem(); }
 };
 }  // namespace
@@ -28,8 +24,11 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
     Mapping mapping;
-    chimaera::Gem5GuestController controller(*node, *node);
+    chimaera::Gem5GuestController controller(
+      *node, *node, chimaera::GuestM5Ops::instruction, true);
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
+    // KVM boots to this address op. gem5 switches CPUs before resuming us;
+    // transport switches to instruction ops once the host confirms epoch 1.
     m5_work_begin_addr(0, 0);
     while (rclcpp::ok()) {
       const auto result = controller.run_next();

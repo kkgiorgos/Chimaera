@@ -18,6 +18,9 @@ def start(context):
                str(share / "config/gem5_wall_follow.py"), "--gem5-root", str(root),
                "--socket-path", LaunchConfiguration("timing_socket").perform(context)]
     command.extend(["--managed-shutdown", "--controller-file", LaunchConfiguration("parameters_file").perform(context)])
+    for name in ("cpu_type", "cpu_clock", "num_cores", "l1d_size", "l1i_size",
+                 "l2_size", "l1_assoc", "l2_assoc"):
+        command.extend(["--" + name.replace("_", "-"), LaunchConfiguration(name).perform(context)])
     for name in ("image", "kernel"):
         value = LaunchConfiguration(name).perform(context)
         if value:
@@ -36,6 +39,11 @@ def generate_launch_description():
         DeclareLaunchArgument("output_dir"),
         DeclareLaunchArgument("gem5_root", description="Absolute path to the custom gem5 tree"),
         DeclareLaunchArgument("outdir", default_value="m5out-wall-follow"),
+        *[DeclareLaunchArgument(name, default_value=value) for name, value in {
+            "cpu_type": "timing", "cpu_clock": "3GHz", "num_cores": "2",
+            "l1d_size": "16KiB", "l1i_size": "16KiB", "l2_size": "256KiB",
+            "l1_assoc": "8", "l2_assoc": "16",
+        }.items()],
         DeclareLaunchArgument("image", default_value=""),
         DeclareLaunchArgument("kernel", default_value=""),
         DeclareLaunchArgument("timing_socket", default_value="/tmp/chimaera_time.sock"),
