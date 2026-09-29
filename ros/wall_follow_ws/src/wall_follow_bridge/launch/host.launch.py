@@ -5,7 +5,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 
 def generate_launch_description():
@@ -26,5 +26,6 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(str(benchmark / "launch/host.launch.py")),
             launch_arguments={**arguments, "paused": "true"}.items()),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(str(share / "launch/bridge.launch.py"))),
+            PythonLaunchDescriptionSource(str(share / "launch/bridge.launch.py")),
+            launch_arguments={"timing_file": PathJoinSubstitution([LaunchConfiguration("output_dir"), "timing.csv"])}.items()),
     ])

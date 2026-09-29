@@ -17,6 +17,7 @@ def start(context):
                "--outdir=" + LaunchConfiguration("outdir").perform(context),
                str(share / "config/gem5_wall_follow.py"), "--gem5-root", str(root),
                "--socket-path", LaunchConfiguration("timing_socket").perform(context)]
+    command.extend(["--managed-shutdown", "--controller-file", LaunchConfiguration("parameters_file").perform(context)])
     for name in ("image", "kernel"):
         value = LaunchConfiguration(name).perform(context)
         if value:

@@ -9,6 +9,7 @@
 #include <ignition/transport/Node.hh>
 #include <limits>
 #include <mutex>
+#include <memory>
 #include <thread>
 
 namespace wall_follow_bridge
@@ -68,7 +69,9 @@ public:
     }
     interval_ = interval;
     pending_ = true;
+    const auto begin = std::chrono::steady_clock::now();
     const auto result = host_.step(interval_, poll_);
+    gem5_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
     if (!result.ok()) {
       throw std::runtime_error(result.message);
     }
@@ -83,20 +86,39 @@ public:
       target_ = iterations_ + interval_ / physics_step_;
       target_time_ = time_ns_ + interval_.count();
     }
+    gazebo_begin_ = std::chrono::steady_clock::now();
     ignition::msgs::WorldControl request;
     request.set_pause(true);
     request.set_multi_step(static_cast<uint32_t>(interval_ / physics_step_));
-    ignition::msgs::Boolean response;
-    bool accepted = false;
-    if (
-      !gazebo_.Request(
-        "/world/" + world_ + "/control", request,
-        static_cast<unsigned int>(
-          std::chrono::duration_cast<std::chrono::milliseconds>(timeout_).count()),
-        response, accepted) ||
-      !accepted || !response.data()) {
-      throw std::runtime_error("Gazebo rejected or timed out accepting a step");
+    if (cancelled && cancelled()) { throw std::runtime_error("Physics request cancelled"); }
+    // A synchronous Request can block until timeout after launch stops Gazebo.
+    // Keep callback state alive independently of this controller on cancellation.
+    struct Reply {
+      std::mutex mutex;
+      std::condition_variable changed;
+      bool received{false}, accepted{false};
+    };
+    auto reply = std::make_shared<Reply>();
+    std::function<void(const ignition::msgs::Boolean &, bool)> callback =
+      [reply](const ignition::msgs::Boolean & response, bool accepted) {
+        std::lock_guard lock(reply->mutex);
+        reply->received = true;
+        reply->accepted = accepted && response.data();
+        reply->changed.notify_all();
+      };
+    if (!gazebo_.Request("/world/" + world_ + "/control", request, callback)) {
+      throw std::runtime_error("Gazebo rejected a step request");
     }
+    std::unique_lock lock(reply->mutex);
+    const auto deadline = std::chrono::steady_clock::now() + timeout_;
+    while (!reply->received) {
+      if (cancelled && cancelled()) { throw std::runtime_error("Physics request cancelled"); }
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("Gazebo timed out accepting a step");
+      }
+      reply->changed.wait_for(lock, std::chrono::milliseconds(50));
+    }
+    if (!reply->accepted) { throw std::runtime_error("Gazebo rejected a step"); }
   }
 
   void wait() override
@@ -105,14 +127,22 @@ public:
       throw std::logic_error("wait without start");
     }
     std::unique_lock lock(mutex_);
-    if (!changed_.wait_for(lock, timeout_, [&] { return iterations_ >= target_ && paused_; })) {
-      throw std::runtime_error("Gazebo did not finish the requested physics steps");
+    const auto deadline = std::chrono::steady_clock::now() + timeout_;
+    while (!(iterations_ >= target_ && paused_)) {
+      if (cancelled && cancelled()) {
+        throw std::runtime_error("Physics wait cancelled");
+      }
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("Gazebo did not finish the requested physics steps");
+      }
+      changed_.wait_for(lock, std::chrono::milliseconds(50));
     }
     if (iterations_ != target_ || time_ns_ != target_time_) {
       throw std::runtime_error(
         "Gazebo step mismatch: check physics_step_ns and exclusive world control");
     }
     lock.unlock();
+    gazebo_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - gazebo_begin_).count();
     settle();
     pending_ = false;
   }
@@ -133,7 +163,9 @@ public:
   }
   chimaera::ControllerResult stop() { return host_.stop(); }
   uint64_t elapsed_ticks() const { return gem5_.elapsed_ticks(); }
+  double gem5_wall_seconds{}, gazebo_wall_seconds{};
   std::function<void()> pump;
+  std::function<bool()> cancelled;
 
 private:
   void settle()
@@ -165,6 +197,7 @@ private:
   bool seen_{false}, paused_{false}, pending_{false};
   uint64_t iterations_{}, target_{};
   int64_t time_ns_{}, target_time_{};
+  std::chrono::steady_clock::time_point gazebo_begin_;
   ignition::transport::Node gazebo_;
 };
 }  // namespace wall_follow_bridge

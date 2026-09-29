@@ -42,7 +42,9 @@ The guest stays on KVM throughout; workbegin does not switch CPU models.
 """
 
 import argparse
+import base64
 import socket
+import signal
 from pathlib import Path
 
 import m5
@@ -65,7 +67,17 @@ parser.add_argument("--boot-to-controller", action="store_true", default=True)
 parser.add_argument("--gem5-root", required=True)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
+parser.add_argument("--managed-shutdown", action="store_true", help="Let the host send QUIT on launch shutdown")
+parser.add_argument("--controller-file", help="Inject controller YAML into the guest at boot")
 args = parser.parse_args()
+boot_script = "#!/bin/bash\nset -e\n"
+if args.controller_file:
+    encoded = base64.b64encode(Path(args.controller_file).read_bytes()).decode("ascii")
+    boot_script += (f"printf %s {encoded} | base64 -d > /tmp/chimaera-controller.yaml\n"
+                    "exec sudo -n env CHIMAERA_ROBOT_CONFIG=/tmp/chimaera-controller.yaml "
+                    "/usr/local/bin/chimaera_wall_follow_guest\n")
+else:
+    boot_script += "exec sudo -n /usr/local/bin/chimaera_wall_follow_guest\n"
 m5.ticks.setGlobalFrequency("1THz")
 m5.ticks.fixGlobalFrequency()
 
@@ -115,7 +127,7 @@ board.set_kernel_disk_workload(
         "mce=off",
     ],
     readfile_contents=(
-        "#!/bin/bash\nexec sudo -n /usr/local/bin/chimaera_wall_follow_guest\n"
+        boot_script
         if args.boot_to_controller else "#!/bin/bash\n/bin/bash\n"
     ),
 )
@@ -217,6 +229,10 @@ def serve(path):
             server.bind(path)
             identity = socket_file.lstat()
             server.listen(8)
+            if args.managed_shutdown:
+                # ROS launch signals all children together; keep the timing server
+                # available for the host's QUIT. SIGTERM remains the fallback.
+                signal.signal(signal.SIGINT, signal.SIG_IGN)
             print(f"[host] Timing socket ready at {path}; gem5 paused at {m5.curTick()}", flush=True)
             while not exit_requested:
                 conn, _ = server.accept()

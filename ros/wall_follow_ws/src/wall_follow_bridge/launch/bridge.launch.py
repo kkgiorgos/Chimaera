@@ -18,12 +18,12 @@ def generate_launch_description():
         "gazebo_world": "wall_arena", "physics_step_ns": "1000000",
         "ratio": "1.0", "startup_timeout_s": "300",
         "status_bar": "true", "report_seconds": "1.0",
-        "timing_socket": "/tmp/chimaera_time.sock",
+        "timing_socket": "/tmp/chimaera_time.sock", "timing_file": "",
         "config_file": str(Path(get_package_share_directory("wall_follow_bridge")) / "config/bridge.json"),
     }
     parameters = {
         name: ParameterValue(LaunchConfiguration(name), value_type=(
-            str if name in ("timing_socket", "config_file", "gazebo_world") else bool if name == "status_bar"
+            str if name in ("timing_socket", "config_file", "gazebo_world", "timing_file") else bool if name == "status_bar"
             else float if name in ("ratio", "report_seconds") else int))
         for name in defaults
     }

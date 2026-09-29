@@ -3,6 +3,8 @@
 #include <chimaera/wall_clock_pacer.hpp>
 #include <cmath>
 #include <iomanip>
+#include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -35,6 +37,16 @@ int main(int argc, char ** argv)
       throw std::invalid_argument("report_seconds must be finite and positive");
     }
     wall_follow_bridge::StatusBar bar(node->declare_parameter<bool>("status_bar", true));
+    std::ofstream timing_log;
+    const auto timing_file = node->declare_parameter<std::string>("timing_file", "");
+    if (!timing_file.empty()) {
+      const auto parent = std::filesystem::path(timing_file).parent_path();
+      if (!parent.empty()) { std::filesystem::create_directories(parent); }
+      timing_log.open(timing_file);
+      if (!timing_log) { throw std::runtime_error("Cannot open timing_file: " + timing_file); }
+      timing_log << "step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,pacing_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n";
+      timing_log << std::setprecision(17);
+    }
     using Clock = std::chrono::steady_clock;
     auto last_report = Clock::time_point::min();
     auto refresh_due = [&] {
@@ -55,9 +67,10 @@ int main(int argc, char ** argv)
       node->declare_parameter<std::string>("gazebo_world", "wall_arena"),
       std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)));
     timing.pump = node->pump;
+    timing.cancelled = [] { return !rclcpp::ok(); };
     auto & controller = timing;
     try {
-      RCLCPP_INFO(node->get_logger(), "Data transport ready; waiting for gem5 guest");
+      RCLCPP_INFO(node->get_logger(), "Host bridge initialized; waiting for gem5 guest");
       const auto waiting_since = Clock::now();
       timing.wait_until_ready(std::chrono::seconds(timeout), [&] {
         if (refresh_due()) {
@@ -70,6 +83,8 @@ int main(int argc, char ** argv)
         }
         return !rclcpp::ok();
       });
+      const double startup_seconds = std::chrono::duration<double>(Clock::now() - waiting_since).count();
+      const auto run_begin = Clock::now();
       chimaera::WallClockPacer pacer(ratio);
       std::uint64_t completed_steps = 0;
       auto report_status = [&] {
@@ -89,16 +104,24 @@ int main(int argc, char ** argv)
         }
         text << " | ROS pub/sub " << node->local_talkers() << '/' << node->local_listeners()
              << " | avg " << rate.average_ratio << "x";
+        if (completed_steps && timing.gem5_wall_seconds > 0 && timing.gazebo_wall_seconds > 0) {
+          text << " | phase gem5 " << interval / 1e6 / timing.gem5_wall_seconds
+               << "x Gazebo " << interval / 1e6 / timing.gazebo_wall_seconds << "x";
+        }
         bar.update(text.str());
       };
       last_report = Clock::time_point::min();
       report_status();
       for (int64_t count = 0; rclcpp::ok() && (steps == 0 || count < steps); ++count) {
+        const auto step_begin = Clock::now();
+        const auto ticks_before = timing.elapsed_ticks();
         const auto result =
           controller.step(std::chrono::microseconds(interval), std::chrono::microseconds(poll));
         if (!result.ok()) {
+          if (!rclcpp::ok()) { break; }
           throw std::runtime_error(result.message);
         }
+        const auto step_end = Clock::now();
         ++completed_steps;
         while (rclcpp::ok()) {
           report_status();
@@ -109,6 +132,20 @@ int main(int argc, char ** argv)
           executor.spin_some();
           std::this_thread::sleep_for(
             std::min(delay, chimaera::Duration(std::chrono::milliseconds(10))));
+        }
+        const auto end = Clock::now();
+        const double active = std::chrono::duration<double>(step_end - step_begin).count();
+        if (timing_log.is_open()) {
+          timing_log << completed_steps << ',' << interval / 1e6 << ','
+                     << (timing.elapsed_ticks() - ticks_before) / 1e12 << ','
+                     << timing.gem5_wall_seconds << ',' << timing.gazebo_wall_seconds << ','
+                     << std::max(0.0, active - timing.gem5_wall_seconds - timing.gazebo_wall_seconds) << ','
+                     << std::chrono::duration<double>(end - step_end).count() << ','
+                     << std::chrono::duration<double>(end - step_begin).count() << ','
+                     << std::chrono::duration<double>(end - run_begin).count() << ','
+                     << startup_seconds << '\n';
+          timing_log.flush();
+          if (!timing_log) { throw std::runtime_error("Failed writing timing_file"); }
         }
       }
       const auto report = pacer.report(timing.elapsed_ticks());

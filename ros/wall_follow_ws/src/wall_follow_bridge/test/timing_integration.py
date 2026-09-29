@@ -2,9 +2,13 @@
 
 Does not boot gem5. Requires exclusive access to Chimaera's data sockets.
 """
+import csv
+import math
 import os
 from pathlib import Path
 import socket
+import signal
+import time
 import subprocess
 import sys
 import tempfile
@@ -17,9 +21,10 @@ WORLD = '''<sdf version="1.8"><world name="wall_arena">
 </world></sdf>'''
 
 
-def check(binary, config, extra, expected):
+def check(binary, config, extra, expected, cancel=False):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
+        timing_file = root / 'output' / 'timing.csv'
         world = root / 'world.sdf'
         world.write_text(WORLD)
         endpoint = str(root / 'timing.sock')
@@ -28,6 +33,7 @@ def check(binary, config, extra, expected):
             server.listen()
             server.settimeout(40)
             steps = []
+            first_step = threading.Event()
 
             def serve():
                 tick = 0
@@ -40,6 +46,7 @@ def check(binary, config, extra, expected):
                         elif line.startswith('STEP_TICKS '):
                             amount = int(line.split()[1])
                             steps.append(amount)
+                            first_step.set()
                             end = tick + amount
                             reply = f'OK {tick} {end}'
                             tick = end
@@ -58,18 +65,46 @@ def check(binary, config, extra, expected):
                 gazebo = subprocess.Popen(['ign', 'gazebo', '-s', str(world)], env=env,
                                           stdout=log, stderr=subprocess.STDOUT)
                 try:
-                    result = subprocess.run([
+                    command = [
                         binary, '--ros-args', '-p', f'timing_socket:={endpoint}',
-                        '-p', 'steps:=3', '-p', 'startup_timeout_s:=10',
-                        '-p', 'status_bar:=false', '-p', f'config_file:={config}', *extra,
-                    ], env=env, text=True, stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT, timeout=45)
+                        '-p', f'steps:={0 if cancel else 3}', '-p', 'startup_timeout_s:=10',
+                        '-p', 'status_bar:=false', '-p', f'timing_file:={timing_file}', '-p', f'config_file:={config}', *extra,
+                    ]
+                    if cancel:
+                        process = subprocess.Popen(command, env=env, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                        try:
+                            assert first_step.wait(15), 'Host never started stepping'
+                            gazebo.terminate()
+                            time.sleep(.2)
+                            process.send_signal(signal.SIGINT)
+                            stdout, _ = process.communicate(timeout=3)
+                            result = subprocess.CompletedProcess(command, process.returncode, stdout)
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                                process.wait()
+                    else:
+                        result = subprocess.run(command, env=env, text=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT, timeout=45)
                     print(result.stdout, flush=True)
                     assert (result.returncode == 0) == (expected is None), result.stdout
                     if expected:
                         assert expected in result.stdout, result.stdout
-                    else:
+                    elif not cancel:
                         assert steps == [100_000_000_000] * 3, steps
+                        with timing_file.open() as stream:
+                            rows = list(csv.DictReader(stream))
+                        assert len(rows) == 3
+                        for row in rows:
+                            values = {k: float(v) for k, v in row.items()}
+                            assert all(math.isfinite(v) and v >= 0 for v in values.values())
+                            assert values['sim_seconds'] == .1
+                            assert values['gem5_sim_seconds'] == .1
+                            phases = sum(values[k] for k in ('gem5_wall_seconds', 'gazebo_wall_seconds',
+                                         'other_wall_seconds', 'pacing_wall_seconds'))
+                            assert math.isclose(phases, values['wall_seconds'], abs_tol=1e-8)
+                            assert values['other_wall_seconds'] >= .04
                     thread.join(timeout=2)
                     assert not thread.is_alive(), 'gem5 did not receive QUIT'
                 finally:
@@ -86,3 +121,5 @@ if __name__ == '__main__':
     check(sys.argv[1], sys.argv[2], ['-p', 'physics_step_ns:=2000000'], 'Gazebo step mismatch')
     check(sys.argv[1], sys.argv[2], ['-p', 'physics_step_ns:=1500000'],
           'integral number of physics steps')
+
+    check(sys.argv[1], sys.argv[2], [], None, cancel=True)
