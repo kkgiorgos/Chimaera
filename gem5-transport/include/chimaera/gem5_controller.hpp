@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
+#include <chimaera/guest_transport.hpp>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -46,12 +47,17 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-// Owns GuestTransport; the application still owns the libm5 mapping. Polling
+// Owns GuestTransport; address mode requires an application-owned libm5 mapping.
+// Instruction mode runs on a simulated CPU without a mapping. For KVM boot,
+// address_bootstrap keeps using address ops until a nonzero host epoch confirms
+// the workbegin CPU switch; keep the mapping alive throughout run_next. Polling
 // sleeps use the guest OS clock. run_next returns when a later host interval is
 // observed, so completion is observed only after the next resume/poll.
 class Gem5GuestController final : public GuestController {
 public:
-    Gem5GuestController(DataProducer& producer, DataConsumer& consumer);
+    Gem5GuestController(DataProducer& producer, DataConsumer& consumer,
+                        GuestM5Ops ops = GuestM5Ops::address,
+                        bool address_bootstrap = false);
     ~Gem5GuestController() override;
     ControllerResult run_next() override;
 private:

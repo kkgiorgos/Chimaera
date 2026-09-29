@@ -151,3 +151,15 @@ a guest `TransportError` by this adapter. Likewise libm5's mapping helper may
 exit on setup failure. There is no timeout or peer-liveness channel while
 waiting for a new connection, and a successful send is not an application-level
 acknowledgment. Transfers do not add modeled communication latency.
+
+### Guest m5op backends
+
+`GuestTransport` and `Gem5GuestController` default to `GuestM5Ops::address`,
+retaining KVM compatibility and the application-owned libm5 mapping. Pass
+`GuestM5Ops::instruction` for a simulated x86 CPU: send/receive use instruction
+m5ops and require no mapping. Never execute instruction ops on the host or KVM.
+For KVM boot followed by a workbegin CPU switch, pass `address_bootstrap=true`
+to the guest controller and keep the mapping alive: bootstrap exchanges use
+address ops until a nonzero host epoch confirms the switched simulator is ready.
+The wall follower demonstrates this path with TimingSimpleCPU by default.
+Framing and the host transport remain identical across backends.

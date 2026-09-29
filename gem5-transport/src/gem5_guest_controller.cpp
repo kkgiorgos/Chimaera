@@ -7,16 +7,19 @@
 namespace chimaera {
 struct Gem5GuestController::Impl {
     GuestTransport transport;
+    GuestTransport bootstrap_transport;
+    bool address_bootstrap;
     DataProducer& producer;
     DataConsumer& consumer;
     std::optional<control::Packet> pending;
     std::optional<std::uint64_t> epoch;
     Duration poll{std::chrono::milliseconds(1)};
     std::string failure;
-    Impl(DataProducer& p, DataConsumer& c) : producer(p), consumer(c) {}
+    Impl(DataProducer& p, DataConsumer& c, GuestM5Ops ops, bool bootstrap)
+        : transport(ops), address_bootstrap(bootstrap), producer(p), consumer(c) {}
 };
-Gem5GuestController::Gem5GuestController(DataProducer& producer, DataConsumer& consumer)
-    : impl_(std::make_unique<Impl>(producer, consumer)) {}
+Gem5GuestController::Gem5GuestController(DataProducer& producer, DataConsumer& consumer, GuestM5Ops ops, bool address_bootstrap)
+    : impl_(std::make_unique<Impl>(producer, consumer, ops, address_bootstrap)) {}
 Gem5GuestController::~Gem5GuestController() = default;
 
 ControllerResult Gem5GuestController::run_next() {
@@ -30,10 +33,14 @@ ControllerResult Gem5GuestController::run_next() {
                 reply = std::move(*s.pending);
                 s.pending.reset();
             } else {
-                control::send(s.transport, {control::Kind::poll, s.epoch.value_or(0),
+                // A KVM workbegin exit can be serviced after guest execution
+                // resumes. The host publishes epoch 1 only after the CPU switch.
+                auto& transport = s.address_bootstrap && !s.epoch
+                    ? s.bootstrap_transport : s.transport;
+                control::send(transport, {control::Kind::poll, s.epoch.value_or(0),
                                            Duration{}, s.epoch ? control::collect(s.producer)
                                                                : control::Batch{}});
-                reply = control::receive(s.transport, control::Kind::reply);
+                reply = control::receive(transport, control::Kind::reply);
             }
             if (reply.poll.count() <= 0 ||
                 (s.epoch && reply.epoch < *s.epoch))
