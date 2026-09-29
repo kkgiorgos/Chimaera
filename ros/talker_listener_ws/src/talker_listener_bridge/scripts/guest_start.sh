@@ -19,7 +19,8 @@ ros2 run demo_nodes_cpp talker --ros-args -r __node:=guest_talker -r chatter:=/g
 pids+=("$!")
 ros2 run demo_nodes_cpp listener --ros-args -r __node:=guest_listener -r chatter:=/host/chatter &
 pids+=("$!")
-/usr/local/bin/chimaera_guest_bridge &
+/usr/local/bin/chimaera_guest_bridge --ros-args -p \
+    "config_file:=${CHIMAERA_BRIDGE_CONFIG:-/usr/local/share/chimaera/bridge.json}" &
 pids+=("$!")
 # If any component exits, terminate the remaining guest application processes.
 wait -n "${pids[@]}"

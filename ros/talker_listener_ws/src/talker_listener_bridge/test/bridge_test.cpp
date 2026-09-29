@@ -1,34 +1,84 @@
 #include <chrono>
+#include <fstream>
 #include <iostream>
+#include <std_msgs/msg/string.hpp>
+#include <std_msgs/msg/int32.hpp>
 #include <talker_listener_bridge/bridge.hpp>
 #include <thread>
-#include <vector>
+#include <unistd.h>
 
 using namespace std::chrono_literals;
-
+using talker_listener_bridge::Bridge;
 void require(bool condition, const char * message)
 {
-  if (!condition) {
-    throw std::runtime_error(message);
-  }
+  if (!condition) {throw std::runtime_error(message);}
+}
+template<typename F> void rejects(F operation)
+{
+  bool rejected = false;
+  try {operation();} catch (const std::exception &) {rejected = true;}
+  require(rejected, "invalid input was accepted");
 }
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   int status = 0;
+  const std::string temporary = "/tmp/chimaera-config-test-" + std::to_string(getpid()) + ".json";
   try {
-    auto bridge = std::make_shared<talker_listener_bridge::Bridge>("host");
+    const auto config = talker_listener_bridge::load_config(TEST_CONFIG);
+    require(config.size() == 3, "route count mismatch");
+    require(config[2].qos.depth() == 7 &&
+      config[2].qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort, "QoS mismatch");
+    std::ifstream input(TEST_CONFIG);
+    const std::string valid((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    auto write = [&](const std::string & text) {std::ofstream(temporary) << text;};
+    for (const auto & bad : {std::string("{"), std::string("{}"), valid + "garbage"}) {
+      write(bad);
+      rejects([&] {talker_listener_bridge::load_config(temporary);});
+    }
+    for (const auto & change : std::vector<std::pair<std::string, std::string>>{
+        {"keep_last", "keep_all"}, {"host_to_guest", "both"}, {"reliable", "system_default"},
+        {"volatile", "persistent"}, {"128", "0"}, {"128", "129"}, {"128", "1.5"},
+        {"history", "deadline"}, {"/test/host/route1", "/test/host/route0"},
+        {"std_msgs/msg/String", ""}})
+    {
+      auto bad = valid;
+      bad.replace(bad.find(change.first), change.first.size(), change.second);
+      write(bad);
+      rejects([&] {talker_listener_bridge::load_config(temporary);});
+    }
+    auto transient = valid;
+    transient.replace(transient.find("volatile"), 8, "transient_local");
+    write(transient);
+    require(talker_listener_bridge::load_config(temporary)[0].qos.durability() ==
+      rclcpp::DurabilityPolicy::TransientLocal, "transient local QoS mismatch");
+    rclcpp::NodeOptions options;
+    options.parameter_overrides({rclcpp::Parameter("config_file", TEST_CONFIG)});
+    auto host = std::make_shared<Bridge>("host", options);
+    auto guest = std::make_shared<Bridge>("guest", options);
+    auto remapped = options;
+    remapped.arguments({"--ros-args", "-r", "/test/host/route1:=/test/host/route0"});
+    rejects([&] {Bridge invalid("host", remapped);});
     auto peer = std::make_shared<rclcpp::Node>("bridge_test_peer");
-    auto publisher = peer->create_publisher<std_msgs::msg::String>("/host/chatter", 128);
-    std::vector<std::string> received;
-    auto subscription = peer->create_subscription<std_msgs::msg::String>(
-      "/guest/chatter", 128,
-      [&](std_msgs::msg::String::ConstSharedPtr message) { received.push_back(message->data); });
+    auto host_pub = peer->create_publisher<std_msgs::msg::String>("/test/host/route0", 128);
+    auto guest_pub = peer->create_publisher<std_msgs::msg::String>("/test/guest/route1", 128);
+    auto number_pub = peer->create_publisher<std_msgs::msg::Int32>(
+      "/test/host/number", rclcpp::QoS(7).best_effort());
+    std::vector<std::string> at_host, at_guest;
+    std::vector<int> numbers;
+    auto host_sub = peer->create_subscription<std_msgs::msg::String>(
+      "/test/host/route1", 128,
+      [&](std_msgs::msg::String::ConstSharedPtr m) {at_host.push_back(m->data);});
+    auto guest_sub = peer->create_subscription<std_msgs::msg::String>(
+      "/test/guest/route0", 128,
+      [&](std_msgs::msg::String::ConstSharedPtr m) {at_guest.push_back(m->data);});
+    auto number_sub = peer->create_subscription<std_msgs::msg::Int32>(
+      "/test/guest/number", rclcpp::QoS(7).best_effort(),
+      [&](std_msgs::msg::Int32::ConstSharedPtr m) {numbers.push_back(m->data);});
     rclcpp::executors::SingleThreadedExecutor executor;
-    executor.add_node(bridge);
-    executor.add_node(peer);
-    bridge->pump = [&] { executor.spin_some(); };
+    executor.add_node(host); executor.add_node(guest); executor.add_node(peer);
+    host->pump = guest->pump = [&] {executor.spin_some();};
     auto until = [&](auto predicate) {
       const auto deadline = std::chrono::steady_clock::now() + 5s;
       while (!predicate()) {
@@ -37,57 +87,73 @@ int main(int argc, char ** argv)
       }
     };
     until([&] {
-      return publisher->get_subscription_count() == 1 && subscription->get_publisher_count() == 1;
+      return host_pub->get_subscription_count() == 1 && guest_pub->get_subscription_count() == 1 &&
+        number_pub->get_subscription_count() == 1 && host_sub->get_publisher_count() == 1 &&
+        guest_sub->get_publisher_count() == 1 && number_sub->get_publisher_count() == 1;
     });
-    const std::vector<std::string> samples = {
-      "", "hello from ROS", "γειά σου",
-      std::string(talker_listener_bridge::Bridge::max_bytes, 'x')};
-    for (const auto & sample : samples) {
-      std_msgs::msg::String message;
-      message.data = sample;
-      publisher->publish(message);
-      std::optional<chimaera::Message> wire;
-      until([&] {
-        wire = bridge->take();
-        return wire.has_value();
-      });
-      require(wire->size() == sample.size(), "wire length mismatch");
-      if (!sample.empty()) {
-        require(std::memcmp(wire->data(), sample.data(), sample.size()) == 0, "wire data mismatch");
+    chimaera::Message saved;
+    for (const auto & sample : std::vector<std::string>{"", "hello", "γειά σου",
+        std::string(Bridge::max_bytes - 9, 'x')})
+    {
+      for (bool forward : {true, false}) {
+        auto & source = forward ? host : guest;
+        auto & destination = forward ? guest : host;
+        auto & received = forward ? at_guest : at_host;
+        const auto count = received.size();
+        std_msgs::msg::String message; message.data = sample;
+        (forward ? host_pub : guest_pub)->publish(message);
+        std::optional<chimaera::Message> wire;
+        until([&] {wire = source->take(); return wire.has_value();});
+        rejects([&] {source->submit(*wire);});  // wrong direction
+        if (forward) {saved = *wire;}
+        destination->submit(std::move(*wire));
+        until([&] {executor.spin_some(); return received.size() > count;});
+        require(received.back() == sample, "String round trip mismatch");
+        require(!host->take() && !guest->take(), "incoming publication echoed");
       }
-      bridge->submit(std::move(*wire));
-      const auto count = received.size();
-      until([&] {
-        executor.spin_some();
-        return received.size() > count;
-      });
-      require(received.back() == sample, "incoming String mismatch");
-      require(!bridge->take(), "incoming publication echoed into outgoing transport");
     }
+    std_msgs::msg::Int32 number; number.data = -314;
+    number_pub->publish(number);
+    std::optional<chimaera::Message> wire;
+    until([&] {wire = host->take(); return wire.has_value();});
+    guest->submit(std::move(*wire));
+    until([&] {executor.spin_some(); return !numbers.empty();});
+    require(numbers.back() == -314, "generic Int32 routing failed");
+    rejects([&] {guest->submit({});});
+    auto bad = saved; bad[0] = std::byte{0};
+    rejects([&] {guest->submit(bad);});
+    bad = saved; bad[4] = std::byte{255};
+    rejects([&] {guest->submit(bad);});
+    bad = saved; bad[10] ^= std::byte{1};
+    rejects([&] {guest->submit(bad);});
+    bad = saved; bad.push_back(std::byte{0});
+    rejects([&] {guest->submit(bad);});  // max serialized payload + 1
+    bad = saved; bad.resize(8);
+    rejects([&] {guest->submit(bad);});
+    std_msgs::msg::String oversized; oversized.data.assign(Bridge::max_bytes, 'x');
+    host_pub->publish(oversized);
     bool rejected = false;
-    try {
-      bridge->submit(chimaera::Message(talker_listener_bridge::Bridge::max_bytes + 1));
-    } catch (const std::runtime_error &) {
-      rejected = true;
-    }
-    require(rejected, "oversized incoming payload accepted");
-    std_msgs::msg::String oversized;
-    oversized.data.assign(talker_listener_bridge::Bridge::max_bytes + 1, 'x');
-    publisher->publish(oversized);
-    rejected = false;
     until([&] {
-      try {
-        (void)bridge->take();
-      } catch (const std::runtime_error &) {
-        rejected = true;
-      }
+      try {(void)host->take();} catch (const std::runtime_error &) {rejected = true;}
       return rejected;
     });
-    std::cout << "Bridge round trips, empty/UTF-8 strings, limits and echo isolation passed\n";
+    // Fill the bridge queue deliberately without draining it.
+    for (std::size_t i = 0; i < Bridge::max_messages; ++i) {
+      std_msgs::msg::String message; message.data = "queued";
+      host_pub->publish(message);
+      until([&] {executor.spin_some(); return host->pending() == i + 1;});
+    }
+    std_msgs::msg::String overflow; host_pub->publish(overflow);
+    rejected = false;
+    until([&] {
+      try {executor.spin_some();} catch (const std::runtime_error &) {rejected = true;}
+      return rejected;
+    });
+    std::cout << "Config validation, bidirectional generic routing, QoS, frame/queue limits and echo isolation passed\n";
   } catch (const std::exception & error) {
-    std::cerr << error.what() << '\n';
-    status = 1;
+    std::cerr << error.what() << '\n'; status = 1;
   }
+  std::remove(temporary.c_str());
   rclcpp::shutdown();
   return status;
 }

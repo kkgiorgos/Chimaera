@@ -1,4 +1,6 @@
 import sys
+from pathlib import Path
+from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, EmitEvent, RegisterEventHandler, SetEnvironmentVariable
@@ -15,10 +17,11 @@ def generate_launch_description():
         "ratio": "1.0", "startup_timeout_s": "300",
         "status_bar": "true", "report_seconds": "1.0",
         "timing_socket": "/tmp/chimaera_time.sock",
+        "config_file": str(Path(get_package_share_directory("talker_listener_bridge")) / "config/bridge.json"),
     }
     parameters = {
         name: ParameterValue(LaunchConfiguration(name), value_type=(
-            str if name == "timing_socket" else bool if name == "status_bar"
+            str if name in ("timing_socket", "config_file") else bool if name == "status_bar"
             else float if name in ("ratio", "report_seconds") else int))
         for name in defaults
     }

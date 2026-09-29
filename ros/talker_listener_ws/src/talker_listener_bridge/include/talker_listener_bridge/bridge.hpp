@@ -1,55 +1,77 @@
 #pragma once
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <chimaera/controller.hpp>
+#include <talker_listener_bridge/config.hpp>
+#include <rclcpp/generic_publisher.hpp>
+#include <rclcpp/generic_subscription.hpp>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <functional>
-#include <rclcpp/rclcpp.hpp>
-#include <std_msgs/msg/string.hpp>
-#include <stdexcept>
-#include <string>
+#include <map>
+#include <set>
 
 namespace talker_listener_bridge
 {
-
-// All ROS and controller callbacks run on the same thread. Wire payloads are
-// the exact String.data bytes; the transport already supplies message framing.
+// ROS and controller callbacks share one thread. Each transport frame contains
+// a versioned route identity followed by one unchanged ROS serialized message.
 class Bridge : public rclcpp::Node, public chimaera::DataProducer, public chimaera::DataConsumer
 {
 public:
-  explicit Bridge(const std::string & side) : Node(side + "_bridge")
+  explicit Bridge(const std::string & side, const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+  : Node(side + "_bridge", options)
   {
-    const auto outgoing = declare_parameter<std::string>("outgoing_topic", "/" + side + "/chatter");
-    const auto incoming = declare_parameter<std::string>(
-      "incoming_topic", side == "host" ? "/guest/chatter" : "/host/chatter");
-    publisher_ = create_publisher<std_msgs::msg::String>(incoming, 128);
-    subscription_ = create_subscription<std_msgs::msg::String>(
-      outgoing, 128, [this](std_msgs::msg::String::ConstSharedPtr message) {
-        if (message->data.size() > max_bytes || outgoing_.size() >= max_messages) {
-          throw std::runtime_error("bridge outgoing queue or message limit exceeded");
-        }
-        chimaera::Message bytes(message->data.size());
-        if (!bytes.empty()) {
-          std::memcpy(bytes.data(), message->data.data(), bytes.size());
-        }
-        outgoing_.push_back(std::move(bytes));
-      });
-    if (std::string(publisher_->get_topic_name()) == subscription_->get_topic_name()) {
-      throw std::invalid_argument("incoming and outgoing topics must differ to avoid an echo loop");
+    if (side != "host" && side != "guest") {throw std::invalid_argument("invalid bridge side");}
+    auto path = declare_parameter<std::string>("config_file", "");
+    if (path.empty()) {
+      path = ament_index_cpp::get_package_share_directory("talker_listener_bridge") +
+        "/config/bridge.json";
+    }
+    const auto routes = load_config(path);
+    std::set<std::string> resolved_topics;
+    // Validate remappings before creating endpoints: aliases must not form loops.
+    for (const auto & route : routes) {
+      const auto topic = get_node_topics_interface()->resolve_topic_name(
+        side == "host" ? route.host_topic : route.guest_topic);
+      if (!resolved_topics.insert(topic).second) {
+        throw std::invalid_argument("remapped bridge topics overlap: " + topic);
+      }
+    }
+    for (const auto & route : routes) {
+      const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
+      const bool outgoing = (side == "host") == (route.direction == "host_to_guest");
+      if (outgoing) {
+        subscriptions_.push_back(create_generic_subscription(
+          topic, route.type, route.qos,
+          [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
+            if (message->size() > max_bytes || outgoing_.size() >= max_messages) {
+              throw std::runtime_error("bridge outgoing queue or serialized message limit exceeded");
+            }
+            chimaera::Message bytes(8 + key.size() + message->size());
+            std::memcpy(bytes.data(), "CBR1", 4);
+            const auto length = static_cast<std::uint32_t>(key.size());
+            for (unsigned i = 0; i < 4; ++i) {
+              bytes[4 + i] = static_cast<std::byte>(length >> (24 - 8 * i));
+            }
+            std::memcpy(bytes.data() + 8, key.data(), key.size());
+            std::memcpy(bytes.data() + 8 + key.size(),
+              message->get_rcl_serialized_message().buffer, message->size());
+            outgoing_.push_back(std::move(bytes));
+          }));
+      } else {
+        publishers_.emplace(route.key, create_generic_publisher(topic, route.type, route.qos));
+      }
+      RCLCPP_INFO(get_logger(), "%s %s [%s] (%s)", outgoing ? "Send" : "Receive",
+        topic.c_str(), route.type.c_str(), route.direction.c_str());
     }
   }
 
   std::optional<chimaera::Message> take() override
   {
-    // Guest run_next() can stay inside one interval for many polls. Pump ROS
-    // here so talker messages are collected even before that call returns.
-    if (pump) {
-      pump();
-    }
-    if (outgoing_.empty()) {
-      return std::nullopt;
-    }
+    // Pump even when guest run_next() stays inside an interval for many polls.
+    if (pump) {pump();}
+    if (outgoing_.empty()) {return std::nullopt;}
     auto bytes = std::move(outgoing_.front());
     outgoing_.pop_front();
     ++transmitted_;
@@ -58,24 +80,48 @@ public:
 
   void submit(chimaera::Message bytes) override
   {
-    if (bytes.size() > max_bytes) {
-      throw std::runtime_error("oversized incoming String");
+    if (bytes.size() < 8 || std::memcmp(bytes.data(), "CBR1", 4) != 0) {
+      throw std::runtime_error("invalid bridge frame/version");
     }
-    std_msgs::msg::String message;
-    if (!bytes.empty()) {
-      message.data.assign(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    std::uint32_t length = 0;
+    for (unsigned i = 0; i < 4; ++i) {length = (length << 8) | std::to_integer<std::uint32_t>(bytes[4 + i]);}
+    if (length > 2048 || length > bytes.size() - 8) {
+      throw std::runtime_error("invalid bridge route header length");
     }
-    publisher_->publish(message);
+    const std::string key(reinterpret_cast<const char *>(bytes.data() + 8), length);
+    const auto publisher = publishers_.find(key);
+    if (publisher == publishers_.end()) {
+      throw std::runtime_error("unknown incoming route/direction or mismatched bridge configuration");
+    }
+    const auto size = bytes.size() - 8 - length;
+    if (size < 4 || size > max_bytes) {
+      throw std::runtime_error("invalid incoming serialized message size");
+    }
+    rclcpp::SerializedMessage message(size);
+    auto & serialized = message.get_rcl_serialized_message();
+    std::memcpy(serialized.buffer, bytes.data() + 8 + length, size);
+    serialized.buffer_length = size;
+    publisher->second->publish(message);
     ++received_;
     last_receive_ = std::chrono::steady_clock::now();
   }
 
-  std::uint64_t transmitted() const { return transmitted_; }
-  std::uint64_t received() const { return received_; }
-  std::size_t pending() const { return outgoing_.size(); }
-  std::size_t local_talkers() const { return subscription_->get_publisher_count(); }
-  std::size_t local_listeners() const { return publisher_->get_subscription_count(); }
-  std::chrono::steady_clock::time_point last_receive() const { return last_receive_; }
+  std::uint64_t transmitted() const {return transmitted_;}
+  std::uint64_t received() const {return received_;}
+  std::size_t pending() const {return outgoing_.size();}
+  std::size_t local_talkers() const
+  {
+    std::size_t count = 0;
+    for (const auto & subscription : subscriptions_) {count += subscription->get_publisher_count();}
+    return count;
+  }
+  std::size_t local_listeners() const
+  {
+    std::size_t count = 0;
+    for (const auto & publisher : publishers_) {count += publisher.second->get_subscription_count();}
+    return count;
+  }
+  std::chrono::steady_clock::time_point last_receive() const {return last_receive_;}
 
   static constexpr std::size_t max_bytes = 4096;
   static constexpr std::size_t max_messages = 128;
@@ -86,7 +132,7 @@ private:
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   std::chrono::steady_clock::time_point last_receive_{};
-  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr publisher_;
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr subscription_;
+  std::map<std::string, rclcpp::GenericPublisher::SharedPtr> publishers_;
+  std::vector<rclcpp::GenericSubscription::SharedPtr> subscriptions_;
 };
 }  // namespace talker_listener_bridge

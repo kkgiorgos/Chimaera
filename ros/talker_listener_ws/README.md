@@ -10,12 +10,108 @@ guest talker -> /guest/chatter -> guest_bridge -> gem5 -> host_bridge -> host li
 ```
 
 The host runs ROS domain 41 and the guest domain 42, both localhost-only.
-Separate source and destination topics prevent feedback. Each bridge sends the
-exact `std_msgs/String.data` bytes, including empty strings and UTF-8 text. ROS strings are text, not binary payloads.
-There are at most 128 pending outgoing messages, each at most 4096 bytes;
-exceeding either limit fails the bridge instead of silently dropping its queue.
-ROS QoS is reliable, keep-last 128; this is a demo, not an end-to-end delivery
-acknowledgment protocol.
+Both bridges read the same JSON route configuration and automatically create ROS
+subscriptions for outgoing routes and publishers for incoming routes. The supplied
+[`bridge.json`](src/talker_listener_bridge/config/bridge.json) preserves the two
+external `demo_nodes_cpp` talker/listener pairs shown above.
+
+Messages use ROS serialized payloads with a versioned route header. Message type
+support must be installed and sourced on **both** machines, with matching message
+definitions and compatible ROS serialization. There are at most 128 pending
+outgoing messages across all routes, each at most 4096 **serialized payload** bytes
+(excluding the route header). For `std_msgs/msg/String`, serialization uses nine
+additional bytes, leaving 4087 bytes for text. Exceeding either limit fails the
+bridge instead of silently dropping its transport queue. The wire format has
+changed; rebuild and redeploy both bridges together.
+
+## JSON configuration
+
+A configuration contains `version: 1` and a nonempty `topics` array. Each entry
+requires these fields (no implicit QoS defaults):
+
+```json
+{
+  "version": 1,
+  "topics": [
+    {
+      "host_topic": "/sensors/temperature",
+      "guest_topic": "/input/temperature",
+      "type": "std_msgs/msg/Float64",
+      "direction": "host_to_guest",
+      "qos": {
+        "history": "keep_last",
+        "depth": 10,
+        "reliability": "best_effort",
+        "durability": "volatile"
+      }
+    }
+  ]
+}
+```
+
+`host_to_guest` subscribes on the host and publishes on the guest;
+`guest_to_host` reverses those roles. Topic names may differ between sides and
+must be absolute. For traffic in both directions, use two routes with separate
+local topics, as in the default config. Each local topic may occur only once;
+remappings that merge routes are rejected to prevent feedback. External nodes
+remain independent of configuration: when changing the demo topics, also adjust
+the external nodes' remappings in `host.launch.py` and `guest_start.sh`.
+
+The maximum is 128 routes. Unknown fields, unsupported QoS values, invalid depths,
+and missing required fields fail startup. Configuration is loaded once at startup;
+restart both bridges after changes. Route ordering and JSON formatting need not
+match. Every frame identifies the complete route (names, direction, type, and QoS);
+unrecognized or mismatched incoming routes fail rather than reaching the wrong
+publisher. There is no startup configuration handshake: differences on unused
+routes are not detected until traffic arrives.
+
+Choose a host config with either launch file:
+
+```bash
+ros2 launch talker_listener_bridge bringup.launch.py \
+  gem5_root:="$(realpath ../../gem5)" config_file:=/absolute/path/bridge.json
+# Or start just the bridge:
+ros2 run talker_listener_bridge host_bridge --ros-args \
+  -p config_file:=/absolute/path/bridge.json
+```
+
+Without `config_file`, a bridge uses the installed package's `config/bridge.json`.
+The deployed guest startup script explicitly uses
+`/usr/local/share/chimaera/bridge.json`; set `CHIMAERA_BRIDGE_CONFIG` inside the guest
+to override it. Host file paths are not automatically shared with the guest.
+Deploy the same JSON to the offline guest image (third positional argument):
+
+```bash
+./deploy_guest.sh /absolute/path/to/disk.img 2 /absolute/path/bridge.json
+```
+
+## QoS support and limitations
+
+The configured QoS is applied to both ROS endpoints of each route. It describes
+local DDS behavior; Chimaera carries message bytes across a synchronization
+barrier, not the original DDS writer identity, acknowledgments, or QoS events.
+
+| Setting | Accepted values | Limitation |
+| --- | --- | --- |
+| History | `keep_last` | Only bounded history; `keep_all` is rejected. |
+| Depth | Integer 1–128 | ROS endpoint history depth; the separate transport queue has a global 128-message limit and fails on overflow. |
+| Reliability | `reliable`, `best_effort` | Enforced on each local ROS hop. Reliable does not add end-to-end acknowledgments, restart recovery, or exactly-once delivery. Best-effort samples may be lost on either ROS hop. |
+| Durability | `volatile`, `transient_local` | Transient-local caching is owned by each local DDS publisher, including the bridge publisher. Cache contents are not persisted through bridge restarts; history older than what the bridge received cannot be reconstructed. |
+
+Deadline, lifespan, manual liveliness, liveliness lease duration, system-default
+policies, and additional QoS keys are rejected. The bridge uses automatic local
+DDS liveliness and default/infinite timing policies. It cannot propagate the
+source writer's liveliness or deadline events. Lifespan would require carrying
+source timestamps and translating host wall time to guest simulation time;
+resetting age at republish would not preserve its meaning. Pausing the guest and
+batching at barriers also prevent end-to-end real-time deadline guarantees.
+
+External publishers/subscribers must offer/request compatible QoS. In particular,
+a reliable bridge subscription will not match a best-effort source, and a
+transient-local subscription requires a transient-local source. The default demo
+uses reliable, volatile endpoints. Generic serialized endpoints do not support
+intra-process or loaned-message/zero-copy transfer through this bridge. Services,
+actions, and automatic same-topic bidirectional loop suppression are not provided.
 
 The host bridge owns `Gem5HostController`, its transport worker and the timing
 controller. It advances gem5 at synchronization boundaries and paces simulated
@@ -29,7 +125,7 @@ support nodes are the controller producers and consumers themselves.
 ## Build
 
 From this workspace, on Ubuntu 22.04 with ROS Humble, `demo_nodes_cpp`, colcon,
-CMake >= 3.22 and the custom x86 gem5/libm5 build available:
+`libjson-c-dev`, `pkg-config`, CMake >= 3.22 and the custom x86 gem5/libm5 build available:
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -67,7 +163,7 @@ and inherits `-no-pie` from the transport.
 ## Deploy once, with the image offline
 
 Stop gem5/QEMU before editing the image. This installs the guest executable and
-its startup script using the existing transport image installer (requires sudo):
+its startup script and JSON config using the existing transport image installer (requires sudo):
 
 ```bash
 ./deploy_guest.sh
@@ -75,7 +171,8 @@ its startup script using the existing transport image installer (requires sudo):
 ./deploy_guest.sh /absolute/path/to/disk.img 2
 ```
 
-The image must already contain ROS Humble and `demo_nodes_cpp`, execute the gem5
+The image must already contain ROS Humble, `demo_nodes_cpp`, and the JSON-C runtime
+(`libjson-c5` on Ubuntu 22.04), execute the gem5
 readfile script on boot, and permit that script to run the guest startup command
 as root via passwordless sudo (or already run as root). Root is needed for the
 m5 mapping device or `/dev/mem`. The startup script is installed at
@@ -129,10 +226,18 @@ are fixed by gem5. Do not run the transport console examples alongside this
 application. Existing socket paths are never deleted on startup; after a forced
 kill, verify no owner remains before removing stale sockets.
 
-The bridge test exercises real local ROS publication/subscription and transport
-payload conversion, empty and UTF-8 strings, maximum payload size, oversize
-rejection, and echo isolation. It does not execute guest m5 operations. Full
-simulation validation additionally requires the deployed offline image and KVM.
+`bridge_test` exercises configuration validation, local ROS String/Int32 routing
+in both directions, QoS, empty/UTF-8/max-size strings, malformed frames, queue
+limits, and echo isolation. `mock_bridge_integration` uses the sibling `mock-sim`
+controllers, separate bridge processes in ROS domains 198/199, and external
+`demo_nodes_cpp` talkers/listeners. It checks messages reach both listeners across
+controller barriers without starting gem5 or using guest m5 operations.
+
+Tests default to using `../../mock-sim`; override with `-DMOCK_SIM_ROOT=/path/to/mock-sim`,
+or disable that test with `-DBUILD_MOCK_BRIDGE_TEST=OFF`. To build and test without
+libm5, also pass `-DBUILD_GUEST_BRIDGE=OFF`. Mock tests require Linux pidfd support
+and permission for local DDS and Unix sockets. Actual gem5/image boot remains a
+separate validation step requiring the deployed offline image and KVM.
 
 ## Host status bar
 
