@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "host_topic": "/test/host/route0",
+      "guest_topic": "/test/guest/route0",
+      "type": "std_msgs/msg/String",
+      "direction": "host_to_guest",
+      "qos": {
+        "history": "keep_last",
+        "depth": 128,
+        "reliability": "reliable",
+        "durability": "volatile"
+      }
+    },
+    {
+      "host_topic": "/test/host/route1",
+      "guest_topic": "/test/guest/route1",
+      "type": "std_msgs/msg/String",
+      "direction": "guest_to_host",
+      "qos": {
+        "history": "keep_last",
+        "depth": 128,
+        "reliability": "reliable",
+        "durability": "volatile"
+      }
+    },
+    {
+      "host_topic": "/test/host/number",
+      "guest_topic": "/test/guest/number",
+      "type": "std_msgs/msg/Int32",
+      "direction": "host_to_guest",
+      "qos": {
+        "history": "keep_last",
+        "depth": 7,
+        "reliability": "best_effort",
+        "durability": "volatile"
+      }
+    }
+  ]
+}

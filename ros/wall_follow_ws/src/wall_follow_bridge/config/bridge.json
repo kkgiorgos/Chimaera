@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "topics": [
+    {
+      "host_topic": "/robot/scan",
+      "guest_topic": "/robot/scan",
+      "type": "sensor_msgs/msg/LaserScan",
+      "direction": "host_to_guest",
+      "qos": {
+        "history": "keep_last",
+        "depth": 10,
+        "reliability": "best_effort",
+        "durability": "volatile"
+      }
+    },
+    {
+      "host_topic": "/clock",
+      "guest_topic": "/clock",
+      "type": "rosgraph_msgs/msg/Clock",
+      "direction": "host_to_guest",
+      "qos": {
+        "history": "keep_last",
+        "depth": 10,
+        "reliability": "best_effort",
+        "durability": "volatile"
+      }
+    },
+    {
+      "host_topic": "/robot/cmd_vel",
+      "guest_topic": "/robot/cmd_vel",
+      "type": "geometry_msgs/msg/Twist",
+      "direction": "guest_to_host",
+      "qos": {
+        "history": "keep_last",
+        "depth": 10,
+        "reliability": "reliable",
+        "durability": "volatile"
+      }
+    }
+  ]
+}

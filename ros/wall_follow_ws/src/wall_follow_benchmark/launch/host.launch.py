@@ -9,7 +9,9 @@ from launch_ros.actions import Node
 
 def start(context):
     get = lambda key: LaunchConfiguration(key).perform(context)
-    args = ['ign', 'gazebo', '-r']
+    args = ['ign', 'gazebo']
+    if get('paused').lower() != 'true':
+        args += ['-r']
     if get('gui').lower() != 'true':
         args += ['-s', '--headless-rendering']
     sim = ExecuteProcess(cmd=args + [get('world')], output='screen')
@@ -34,6 +36,7 @@ def start(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('world'),
+        DeclareLaunchArgument('paused', default_value='false'),
         DeclareLaunchArgument('parameters_file'),
         DeclareLaunchArgument('output_dir'),
         DeclareLaunchArgument('duration', default_value='120'),

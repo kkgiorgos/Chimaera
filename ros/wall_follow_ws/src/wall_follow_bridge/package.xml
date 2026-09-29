@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>wall_follow_bridge</name>
+  <version>0.1.0</version>
+  <description>Wall-following gem5 and Gazebo cosimulation bridges.</description>
+  <maintainer email="maintainers@example.com">Chimaera maintainers</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>libjson-c-dev</depend>
+  <build_depend>pkg-config</build_depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>ignition-transport11</depend>
+  <depend>ignition-msgs8</depend>
+  <exec_depend>wall_follow_benchmark</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
