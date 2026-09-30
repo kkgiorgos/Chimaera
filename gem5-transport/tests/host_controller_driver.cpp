@@ -12,6 +12,13 @@ struct App : DataProducer, DataConsumer {
         queued.pop_front();
         return message;
     }
+    std::string_view coalescing_key(const Message& message) const noexcept override {
+        return !message.empty() && message.front() == std::byte{'c'} ? "clock" : "";
+    }
+    void queue(const std::string& text) {
+        const auto bytes = std::as_bytes(std::span(text));
+        queued.emplace_back(bytes.begin(), bytes.end());
+    }
     void submit(Message) override { throw std::runtime_error("unexpected guest message"); }
 };
 int main(int argc, char** argv) {
@@ -25,13 +32,12 @@ int main(int argc, char** argv) {
             if (!result.ok()) throw std::runtime_error(result.message);
         };
         for (unsigned i = 0; i < 1100; ++i) {
-            const auto text = std::to_string(i);
-            const auto bytes = std::as_bytes(std::span(text));
-            app.queued.emplace_back(bytes.begin(), bytes.end());
+            app.queue("c:" + std::to_string(i));
+            if (i == 10 || i == 1000) app.queue("s:" + std::to_string(i));
             step();
         }
         if (timing.elapsed_ticks() != 1100ULL * 1000000000)
-            throw std::runtime_error("timing stopped advancing under backpressure");
+            throw std::runtime_error("timing stopped advancing while guest polls were withheld");
         std::cout << "READY\n" << std::flush;
         std::string command;
         while (std::getline(std::cin, command) && command == "step") {

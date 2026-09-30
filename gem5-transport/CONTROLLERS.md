@@ -182,6 +182,13 @@ Producers and consumers are application-owned and must outlive their
 controllers. Calls into each controller must be serialized. All callbacks run
 on that controller's calling thread; none run on the host I/O worker.
 
+`DataProducer::coalescing_key(message)` defaults to an empty key, preserving
+FIFO delivery. A producer can return a nonempty key for replaceable state,
+such as a simulation clock. Collection retains the latest pending message for
+each key, and the host also replaces matching updates buffered across steps.
+Other messages retain their order. Coalescing cannot replace a reply already
+detached by the I/O worker or in flight. It leaves packet framing unchanged.
+
 ## Buffering and pause boundaries
 
 The underlying m5 operations are synchronous and open a fresh host socket per
@@ -196,11 +203,9 @@ Startup polls carry no application data until the first host interval is
 observed. This also covers the small window in which KVM executes past the
 workbegin marker while gem5 handles the global exit; no producer or consumer is called during that bootstrap window.
 
-Before a step, the host collects producer data when its pending outgoing batch
-is empty. If the guest has not collected that batch, the host leaves newer data
-with the producer and continues advancing simulation time. Producers retain
-their own buffering policy, including FIFO or bounded topic history. After the
-timing server confirms the pause, the host delivers the current
+Before a step, the host collects producer data and replaces pending messages
+with matching nonempty coalescing keys. Other messages retain their FIFO order.
+After the timing server confirms the pause, the host delivers the current
 snapshot of fully decoded guest batches to its consumer. A transfer can span
 a pause: partially transferred or not-yet-decoded batches remain pending and
 are delivered at a subsequent boundary. No partial application message is

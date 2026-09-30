@@ -3,6 +3,7 @@
 #include <chimaera/transport.hpp>
 #include <chrono>
 #include <optional>
+#include <string_view>
 
 namespace chimaera {
 
@@ -15,6 +16,14 @@ public:
     virtual ~DataProducer() = default;
     // Remove the next queued message, or return nullopt when no data is ready.
     virtual std::optional<Message> take() = 0;
+    // Nonempty keys identify replaceable state updates: only the latest pending
+    // message for each key is retained. Other messages keep their FIFO order.
+    // The returned view must remain valid while data is unchanged. Empty opts
+    // out, preserving the default lossless queue behavior.
+    virtual std::string_view coalescing_key(const Message& data) const noexcept {
+        (void)data;
+        return {};
+    }
 };
 
 class DataConsumer {

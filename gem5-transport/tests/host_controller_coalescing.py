@@ -1,4 +1,4 @@
-"""Withhold guest polls past the queue limit, then verify lossless FIFO delivery."""
+"""Withhold guest polls and check the newest clock and ordered scan delivery."""
 from pathlib import Path
 import select
 import socket
@@ -19,7 +19,7 @@ def read_exact(connection, size):
 
 
 def check(binary):
-    with tempfile.TemporaryDirectory(prefix='chimaera-backpressure-') as directory:
+    with tempfile.TemporaryDirectory(prefix='chimaera-coalescing-') as directory:
         root = Path(directory)
         timing, g2h, h2g = [str(root / name) for name in ('timing', 'g2h', 'h2g')]
         errors = []
@@ -78,21 +78,18 @@ def check(binary):
                     for _ in range(count):
                         length, = struct.unpack('>Q', data[offset:offset + 8])
                         offset += 8
-                        messages.append(int(data[offset:offset + length]))
+                        messages.append(data[offset:offset + length].decode())
                         offset += length
                     assert offset == len(data)
                     return messages
 
                 line('READY')
-                assert poll() == [0]
+                messages = poll()
+                assert messages == ['s:10', 's:1000', 'c:1099'], messages
                 process.stdin.write('step\n')
                 process.stdin.flush()
                 line('STEPPED')
-                assert poll() == list(range(1, 1025))
-                process.stdin.write('step\n')
-                process.stdin.flush()
-                line('STEPPED')
-                assert poll() == list(range(1025, 1100))
+                assert poll() == []
                 process.stdin.write('quit\n')
                 process.stdin.flush()
                 assert process.wait(timeout=5) == 0, process.stderr.read()
@@ -102,7 +99,7 @@ def check(binary):
                 if process.poll() is None:
                     process.kill()
                     process.wait()
-    print('1100 stalled-guest intervals advanced; all messages delivered in FIFO order')
+    print('1100 stalled-guest intervals advanced; newest clock and both ordered scans delivered')
 
 
 if __name__ == '__main__':

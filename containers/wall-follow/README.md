@@ -274,11 +274,10 @@ for dynamic scheduling; the new scheduler refuses to reinterpret old results.
 For short benchmarks, set `--warmup` below the run duration. For example, use
 `--warmup 0` to include all command samples in a run lasting five seconds.
 
-The host transport holds one pending producer batch while the guest is busy.
-The ROS bridge retains each outgoing route's configured `keep_last` depth and
-discards its oldest unsent message when that history fills. This bounds clock and
-scan backlog for slow guests. Reliable delivery and history depth are separate
-QoS settings; reliable routes also retain only their configured history.
+The host bridge and transport coalesce pending clock updates, retaining the
+latest timestamp for each host-to-guest Clock route while the guest is busy.
+Scans and other messages retain their FIFO order. Queue limits still report
+overflow if the guest cannot drain ordinary messages.
 
 For a native check, add `--local` and omit guest assets. Run the repeatable real
 container verification with a fresh output directory:

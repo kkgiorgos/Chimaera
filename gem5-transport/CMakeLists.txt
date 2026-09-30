@@ -66,14 +66,18 @@ endif()
 option(GEM5_TRANSPORT_BUILD_TESTS "Build channel integration tests" ${PROJECT_IS_TOP_LEVEL})
 if(GEM5_TRANSPORT_BUILD_TESTS)
     enable_testing()
+    add_executable(controller_protocol_tests tests/controller_protocol_tests.cpp)
+    target_link_libraries(controller_protocol_tests PRIVATE chimaera::transport)
+    add_test(NAME controller_protocol COMMAND controller_protocol_tests)
+    set_tests_properties(controller_protocol PROPERTIES TIMEOUT 15)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_executable(host_controller_driver tests/host_controller_driver.cpp)
         target_link_libraries(host_controller_driver PRIVATE chimaera::host_controller)
-        add_test(NAME host_controller_backpressure COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tests/host_controller_backpressure.py
+        add_test(NAME host_controller_coalescing COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/host_controller_coalescing.py
             $<TARGET_FILE:host_controller_driver>)
-        set_tests_properties(host_controller_backpressure PROPERTIES TIMEOUT 15)
+        set_tests_properties(host_controller_coalescing PROPERTIES TIMEOUT 15)
     endif()
     if(GEM5_TRANSPORT_BUILD_GUEST)
         add_executable(guest_m5ops_tests tests/guest_m5ops_tests.cpp

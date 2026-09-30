@@ -171,6 +171,11 @@ int main(int argc, char ** argv)
       node->get_logger(), "gem5 disconnected; TX %llu, RX %llu",
       static_cast<unsigned long long>(node->transmitted()),
       static_cast<unsigned long long>(node->received()));
+    RCLCPP_INFO(
+      node->get_logger(), "Clock callbacks %llu; superseded in bridge queue %llu "
+      "(batch and transport queues also coalesce clocks)",
+      static_cast<unsigned long long>(node->clock_updates_received()),
+      static_cast<unsigned long long>(node->clock_updates_coalesced()));
   } catch (const std::exception & error) {
     std::cerr << "Host bridge: " << error.what() << '\n';
     status = 1;

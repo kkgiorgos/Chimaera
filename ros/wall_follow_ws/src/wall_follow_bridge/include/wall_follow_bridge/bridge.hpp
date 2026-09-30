@@ -1,7 +1,7 @@
 #pragma once
 
-#include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <algorithm>
 #include <chimaera/controller.hpp>
 #include <cstdint>
 #include <cstring>
@@ -46,21 +46,17 @@ public:
       const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
       const bool outgoing = (side == "host") == (route.direction == "host_to_guest");
       if (outgoing) {
+        // Clock is replaceable state. Keep its wire identity unchanged so the
+        // deployed guest can receive coalesced updates without a protocol change.
+        if (side == "host" && route.type == "rosgraph_msgs/msg/Clock") {
+          clock_routes_.insert(route.key);
+        }
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
-          [this, key = route.key, depth = route.qos.depth()](
-            std::shared_ptr<rclcpp::SerializedMessage> message) {
+          [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
             if (message->size() > max_bytes) {
-              throw std::runtime_error("bridge serialized message limit exceeded");
-            }
-            auto same_route = [&](const auto & queued) { return queued.first == key; };
-            if (static_cast<std::size_t>(
-                std::count_if(outgoing_.begin(), outgoing_.end(), same_route)) >= depth) {
-              outgoing_.erase(std::find_if(outgoing_.begin(), outgoing_.end(), same_route));
-              ++discarded_;
-            }
-            if (outgoing_.size() >= max_messages) {
-              throw std::runtime_error("bridge outgoing queue limit exceeded");
+              throw std::runtime_error(
+                "bridge outgoing queue or serialized message limit exceeded");
             }
             chimaera::Message bytes(8 + key.size() + message->size());
             std::memcpy(bytes.data(), "CBR1", 4);
@@ -72,7 +68,20 @@ public:
             std::memcpy(
               bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
               message->size());
-            outgoing_.emplace_back(key, std::move(bytes));
+            const auto coalescing = coalescing_key(bytes);
+            if (!coalescing.empty()) {
+              ++clock_updates_received_;
+              const auto before = outgoing_.size();
+              std::erase_if(outgoing_, [&](const chimaera::Message & pending) {
+                return coalescing_key(pending) == coalescing;
+              });
+              clock_updates_coalesced_ += before - outgoing_.size();
+            }
+            if (outgoing_.size() >= max_messages) {
+              throw std::runtime_error(
+                "bridge outgoing queue or serialized message limit exceeded");
+            }
+            outgoing_.push_back(std::move(bytes));
           }));
       } else {
         publishers_.emplace(route.key, create_generic_publisher(topic, route.type, route.qos));
@@ -81,6 +90,25 @@ public:
         get_logger(), "%s %s [%s] (%s)", outgoing ? "Send" : "Receive", topic.c_str(),
         route.type.c_str(), route.direction.c_str());
     }
+    if (!clock_routes_.empty()) {
+      RCLCPP_INFO(get_logger(), "Pending host clock updates coalesced at synchronization boundaries");
+    }
+  }
+
+  std::string_view coalescing_key(const chimaera::Message & bytes) const noexcept override
+  {
+    if (clock_routes_.empty() || bytes.size() < 8 || std::memcmp(bytes.data(), "CBR1", 4) != 0) {
+      return {};
+    }
+    std::uint32_t length = 0;
+    for (unsigned i = 0; i < 4; ++i) {
+      length = (length << 8) | std::to_integer<std::uint32_t>(bytes[4 + i]);
+    }
+    if (length > bytes.size() - 8) {
+      return {};
+    }
+    const std::string_view key(reinterpret_cast<const char *>(bytes.data() + 8), length);
+    return clock_routes_.find(key) == clock_routes_.end() ? std::string_view{} : key;
   }
 
   std::optional<chimaera::Message> take() override
@@ -92,7 +120,7 @@ public:
     if (outgoing_.empty()) {
       return std::nullopt;
     }
-    auto bytes = std::move(outgoing_.front().second);
+    auto bytes = std::move(outgoing_.front());
     outgoing_.pop_front();
     ++transmitted_;
     return bytes;
@@ -131,8 +159,11 @@ public:
 
   std::uint64_t transmitted() const { return transmitted_; }
   std::uint64_t received() const { return received_; }
-  std::uint64_t discarded() const { return discarded_; }
   std::size_t pending() const { return outgoing_.size(); }
+  // Callback and replacement counts for the local bridge queue. Additional
+  // replacements may occur during batch collection and in the host controller.
+  std::uint64_t clock_updates_received() const { return clock_updates_received_; }
+  std::uint64_t clock_updates_coalesced() const { return clock_updates_coalesced_; }
   std::size_t local_talkers() const
   {
     std::size_t count = 0;
@@ -156,8 +187,10 @@ public:
   std::function<void()> pump;
 
 private:
-  std::deque<std::pair<std::string, chimaera::Message>> outgoing_;
-  std::uint64_t discarded_{};
+  std::deque<chimaera::Message> outgoing_;
+  std::set<std::string, std::less<>> clock_routes_;
+  std::uint64_t clock_updates_received_{};
+  std::uint64_t clock_updates_coalesced_{};
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   std::chrono::steady_clock::time_point last_receive_{};
