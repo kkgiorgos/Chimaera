@@ -1,0 +1,4 @@
+artifacts/
+guest-assets/
+__pycache__/
+*.pyc
