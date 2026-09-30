@@ -36,7 +36,7 @@ def summarize(path):
                 cycles=cycles, ipc=instructions / cycles if cycles else None,
                 l1d_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d+\.L1Dcache\.m_demand_misses'),
                 l1i_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d+\.L1Icache\.m_demand_misses'),
-                l2_misses=total(r'board\.cache_hierarchy\.ruby_system\.l2_controllers\d+\.L2cache\.m_demand_misses'))
+                l2_misses=total(r'board\.cache_hierarchy\.ruby_system\.l2_controllers\d*\.L2cache\.m_demand_misses'))
 
 
 def load_metrics(path):

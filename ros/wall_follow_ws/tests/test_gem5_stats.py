@@ -39,3 +39,18 @@ def test_no_stats_dump(tmp_path):
     stats.write_text('')
     with pytest.raises(ValueError):
         summarize(stats)
+
+
+@pytest.mark.parametrize('controllers, expected', [
+    (['l2_controllers'], 3),
+    (['l2_controllers0'], 3),
+    (['l2_controllers0', 'l2_controllers1'], 6),
+])
+def test_l2_single_controller_and_multiple_banks(tmp_path, controllers, expected):
+    counters = '\n'.join(
+        f'board.cache_hierarchy.ruby_system.{name}.L2cache.m_demand_misses 3'
+        for name in controllers)
+    stats = tmp_path/'stats.txt'
+    stats.write_text('---------- Begin Simulation Statistics ----------\n'
+                     + counters + '\n---------- End Simulation Statistics ----------\n')
+    assert summarize(stats)['l2_misses'] == expected
