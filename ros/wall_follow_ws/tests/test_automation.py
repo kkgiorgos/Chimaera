@@ -9,7 +9,7 @@ import pytest
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE/'scripts'))
-from run_experiments import make_plan
+from run_experiments import make_plan, select_runs
 from compare_experiments import discover
 
 
@@ -22,6 +22,18 @@ def test_cartesian_plan_and_validation():
         make_plan(dict(sweep=dict(arena_width=[float('nan')])), 'cpu')
     with pytest.raises(ValueError):
         make_plan(dict(fixed=dict(control_hz=20), sweep=dict(control_hz=[10])), 'cpu')
+
+
+def test_selection_preserves_global_ids_and_duplicate_cases():
+    plan = make_plan(dict(repetitions=2, sweep=dict(control_hz=[10, 10])), 'cpu')
+    ids = ['case_001_rep_02', 'case_002_rep_02']
+    selected = select_runs(plan, ids)
+    assert [run['id'] for run in selected] == ids
+    assert len(plan['runs']) == 4
+    assert selected[0]['parameters'] == selected[1]['parameters']
+    for invalid in ([], ids + ids, ['unknown'], list(reversed(ids)), [1], {}):
+        with pytest.raises(ValueError):
+            select_runs(plan, invalid)
 
 
 @pytest.fixture
@@ -74,6 +86,25 @@ def test_run_resume_and_mismatch(suite):
     assert len(list(output.rglob('attempt.json'))) == 4
     assert subprocess.run(command, env=env, capture_output=True).returncode != 0
     assert subprocess.run(command+['--resume', '--architecture', 'different'], env=env, capture_output=True).returncode != 0
+
+
+def test_selected_run_execution_and_resume(suite, tmp_path):
+    command, env, output = suite
+    selection = tmp_path/'ids.json'
+    ids = ['case_001_rep_02', 'case_002_rep_01']
+    selection.write_text(json.dumps(ids))
+    command += ['--run-ids-file', str(selection)]
+    subprocess.run(command, env=env, check=True, capture_output=True)
+    assert sorted(p.name for p in (output/'runs').iterdir()) == ids
+    plan = json.loads((output/'suite.json').read_text())
+    assert len(plan['runs']) == 4
+    assert plan['selected_run_ids'] == ids
+    subprocess.run(command+['--resume'], env=env, check=True, capture_output=True)
+    assert len(list(output.rglob('attempt.json'))) == 2
+    selection.write_text(json.dumps(['case_001_rep_01']))
+    result = subprocess.run(command+['--resume'], env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'settings differ' in result.stderr
 
 
 def test_failure_is_retained_and_retried(suite):

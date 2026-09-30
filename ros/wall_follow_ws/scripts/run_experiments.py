@@ -87,6 +87,20 @@ def completed(path):
         return False
 
 
+def select_runs(plan, run_ids):
+    if (not isinstance(run_ids, list) or not run_ids
+            or any(type(value) is not str for value in run_ids)
+            or len(set(run_ids)) != len(run_ids)):
+        raise ValueError('run IDs must be a nonempty JSON array of distinct strings')
+    ids = set(run_ids)
+    selected = [run for run in plan['runs'] if run['id'] in ids]
+    if len(selected) != len(run_ids):
+        raise ValueError('selection contains unknown run IDs')
+    if [run['id'] for run in selected] != run_ids:
+        raise ValueError('selected run IDs must follow the original plan order')
+    return selected
+
+
 def eligible(path):
     if not completed(path):
         return False
@@ -240,6 +254,7 @@ def main():
     parser.add_argument('--image', type=Path, help='Previously deployed guest image')
     parser.add_argument('--kernel', type=Path)
     parser.add_argument('--root-device', default='/dev/sda2', help='Guest root device or PARTUUID identity')
+    parser.add_argument('--run-ids-file', type=Path, help='JSON array selecting global run IDs in plan order')
     parser.add_argument('--interval-us', type=int, default=50000)
     parser.add_argument('--poll-us', type=int, default=10000)
     parser.add_argument('--ratio', type=float, default=1.0, help='Co-simulation pacing target')
@@ -283,6 +298,10 @@ def main():
                 for path in (root/'build/X86/gem5.opt', image, kernel):
                     if not path.is_file():
                         raise ValueError(f'Missing gem5 resource: {path}')
+        runs = plan['runs']
+        if args.run_ids_file:
+            runs = select_runs(plan, json.loads(args.run_ids_file.read_text()))
+            plan['selected_run_ids'] = [run['id'] for run in runs]
     except (OSError, ValueError, TypeError) as exc:
         parser.error(str(exc))
     if args.dry_run:
@@ -310,10 +329,10 @@ def main():
         output.mkdir(parents=True)
         (output/'suite.json').write_text(json.dumps(plan, indent=2))
     failures = 0
-    for index, run in enumerate(plan['runs'], 1):
+    for index, run in enumerate(runs, 1):
         parent = output/'runs'/run['id']
         if any(eligible(p) for p in parent.glob('attempt_*')):
-            print(f"[{index}/{len(plan['runs'])}] {run['id']}: already completed", flush=True)
+            print(f"[{index}/{len(runs)}] {run['id']}: already completed", flush=True)
             continue
         attempt = 1
         while (parent/f'attempt_{attempt:03d}').exists():
@@ -345,7 +364,7 @@ def main():
         record = dict(command=command, started_unix=time.time(), status='running')
         status_file = directory/'attempt.json'
         status_file.write_text(json.dumps(record, indent=2))
-        print(f"[{index}/{len(plan['runs'])}] {run['id']} -> {directory}", flush=True)
+        print(f"[{index}/{len(runs)}] {run['id']} -> {directory}", flush=True)
         process = None
         interrupted = False
         try:
