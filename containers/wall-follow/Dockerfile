@@ -62,6 +62,7 @@ RUN python3 /opt/chimaera/scripts/stage-runtime.py
 
 FROM ${BASE_IMAGE} AS worker
 ARG ROS_DISTRO=humble
+LABEL io.chimaera.run-selection="1"
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     ROS_DISTRO=${ROS_DISTRO} \

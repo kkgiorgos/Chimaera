@@ -2,6 +2,7 @@
 """Run an isolated wall follow worker using the local Docker daemon."""
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
 import hashlib
@@ -43,6 +44,29 @@ def mount(source, destination, readonly=True):
     return ["--mount", f"type=bind,source={source},target={destination}" + (",readonly" if readonly else "")]
 
 
+def container_name(output):
+    return "chimaera-worker-" + hashlib.sha256(os.fsencode(output)).hexdigest()[:20]
+
+
+@contextmanager
+def idle_output(output):
+    """Refuse collection or resume while an output still has a writer or container."""
+    if not output.is_dir():
+        yield
+        return
+    with (output / ".worker.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError(f"A worker still owns {output}; wait for its cleanup") from None
+        result = docker("container", "inspect", container_name(output), check=False)
+        if result.returncode == 0:
+            raise ValueError(f"A container still owns {output}; wait for its cleanup")
+        if "No such" not in result.stderr:
+            raise RuntimeError(f"Cannot verify worker cleanup: {result.stderr.strip()}")
+        yield
+
+
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest="action", required=True)
@@ -65,6 +89,7 @@ def parser():
     run.add_argument("--guest-assets", type=Path, help="Completed guest directory; verify disk/kernel hashes and use its root identity")
     run.add_argument("--resume", action="store_true")
     run.add_argument("--keep-going", action="store_true")
+    run.add_argument("--run-ids-file", type=Path, help="Read-only JSON selection of global suite run IDs")
     run.add_argument("--warmup", type=float, default=5)
     run.add_argument("--interval-us", type=int, default=50000)
     run.add_argument("--poll-us", type=int, default=10000)
@@ -116,6 +141,13 @@ def run_worker(args):
         command = ["python3", "/opt/chimaera/ws/scripts/run_experiments.py", "--config", "/assets/experiment.json",
                    "--output", "/output/suite", "--architecture", args.architecture,
                    "--no-plot", "--warmup", str(args.warmup)]
+        if args.run_ids_file:
+            if (image_info["Config"].get("Labels") or {}).get("io.chimaera.run-selection") != "1":
+                raise ValueError("Worker image lacks run selection; rebuild with build.py --target worker")
+            selection = input_file(args.run_ids_file)
+            identity["run_selection_sha256"] = sha256(selection)
+            inputs.append((selection, "/assets/run-ids.json"))
+            command += ["--run-ids-file", "/assets/run-ids.json"]
         if args.local:
             if args.guest_image or args.kernel or args.guest_assets:
                 raise ValueError("--local does not accept guest assets")
@@ -169,7 +201,7 @@ def run_worker(args):
     for device in devices:
         if not stat.S_ISCHR(device.stat().st_mode) or not os.access(device, os.R_OK | os.W_OK):
             raise ValueError(f"Device must be accessible for reading and writing: {device}")
-    name = "chimaera-worker-" + hashlib.sha256(os.fsencode(output)).hexdigest()[:20]
+    name = container_name(output)
     output.mkdir(parents=True, exist_ok=True)
     with (output / ".worker.lock").open("a") as lock:
         try:
