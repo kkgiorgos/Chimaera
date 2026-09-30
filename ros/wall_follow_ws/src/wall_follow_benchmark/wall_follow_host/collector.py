@@ -108,8 +108,22 @@ class Collector(Node):
         if rclpy.ok():
             self.publisher.publish(Twist())
         if self.recorder:
+            gap = (self.sim - self.last_command
+                   if self.sim is not None and self.last_command is not None else None)
+            self.recorder.metadata['collection_status'] = dict(
+                finish_sim_time=self.sim, last_command_sim_time=self.last_command,
+                command_gap_sim_seconds=gap,
+                command_timeout_sim_seconds=self.command_timeout)
             self.recorder.finish(success, reason)
             self.success = self.recorder.metadata['completed']
+            details = [f'{self.recorder.count} command receipts']
+            if self.sim is not None:
+                details.append(f'simulation time {self.sim:.3f}s')
+            if gap is not None:
+                details.append(f'last command {self.last_command:.3f}s, gap {gap:.3f}s '
+                               f'(timeout {self.command_timeout:.3f}s)')
+            message = f'Collection {"completed" if self.success else "failed"}: {reason}; ' + '; '.join(details)
+            (self.get_logger().info if self.success else self.get_logger().error)(message)
 
 
 def main():

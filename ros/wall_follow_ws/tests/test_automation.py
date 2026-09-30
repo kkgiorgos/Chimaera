@@ -34,6 +34,9 @@ import json, os, pathlib, sys
 p = dict(arg.split(':=', 1) for arg in sys.argv if ':=' in arg)
 d = pathlib.Path(p['output_dir'])
 if os.environ.get('FAKE_FAIL'):
+    (d/'metadata.json').write_text(json.dumps(dict(schema_version=3, completed=False,
+        finish_reason='robot command timeout', sample_count=1,
+        collection_status=dict(command_gap_sim_seconds=1.05, command_timeout_sim_seconds=1.))))
     sys.exit(0)  # ros2 launch can exit zero even when its controller failed.
 (d/'metadata.json').write_text(json.dumps(dict(schema_version=2, completed=True, parameters=p)))
 (d/'poses.csv').write_text('sim_time,stamp,x,y\\n')
@@ -78,8 +81,11 @@ def test_run_resume_and_mismatch(suite):
 
 def test_failure_is_retained_and_retried(suite):
     command, env, output = suite
-    result = subprocess.run(command, env=dict(env, FAKE_FAIL='1'), capture_output=True)
+    result = subprocess.run(command, env=dict(env, FAKE_FAIL='1'), capture_output=True, text=True)
     assert result.returncode == 1
+    assert 'Collector: robot command timeout; command receipts: 1' in result.stdout
+    failed = json.loads((output/'runs/case_001_rep_01/attempt_001/attempt.json').read_text())
+    assert failed['collector_status']['command_gap_sim_seconds'] == 1.05
     assert discover([output]) == []
     subprocess.run(command+['--resume'], env=env, check=True, capture_output=True)
     attempts = list(output.rglob('attempt.json'))

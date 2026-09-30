@@ -391,8 +391,23 @@ def main():
                 if record['status'] == 'completed':
                     record['status'] = 'failed'
         record['finished_unix'] = time.time()
+        try:
+            metadata = json.loads((directory/'metadata.json').read_text())
+            record['collector_status'] = dict(
+                completed=metadata.get('completed'), finish_reason=metadata.get('finish_reason'),
+                sample_count=metadata.get('sample_count'),
+                **metadata.get('collection_status', {}))
+        except (OSError, ValueError, TypeError):
+            pass  # Launch/boot failures may not create collector metadata.
         status_file.write_text(json.dumps(record, indent=2))
         print(f"  {record['status']} (log: {directory/'launch.log'})", flush=True)
+        if record['status'] != 'completed' and record.get('collector_status'):
+            collector = record['collector_status']
+            print(f"  Collector: {collector['finish_reason'] or 'no finish reason'}; "
+                  f"command receipts: {collector['sample_count']}", flush=True)
+            if collector.get('command_gap_sim_seconds') is not None:
+                print(f"  Simulated command gap: {collector['command_gap_sim_seconds']:.3f}s "
+                      f"(timeout {collector['command_timeout_sim_seconds']:.3f}s)", flush=True)
         if interrupted:
             return 130
         if record['status'] != 'completed':
