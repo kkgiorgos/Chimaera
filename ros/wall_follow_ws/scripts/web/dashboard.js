@@ -18,7 +18,7 @@ const signals = [['gt_error','Wall-distance error (m)'],['compute_ms','Control c
  ['scan_age','Robot scan age (s, sim, legacy)'],['dt_wall','Observation interval (s, wall)'],
  ['host_scan_age','Latest host-observed scan age (s, sim)'],['path_m','Cumulative distance (m)']];
 const hash = new URLSearchParams(location.hash.slice(1));
-let selected = new Set(hash.has('runs') ? hash.get('runs').split(',') : data.runs.slice(0,3).map(r=>r.id));
+let selected = new Set(hash.has('runs') ? hash.get('runs').split(',') : data.runs.map(r=>r.id));
 selected = new Set([...selected].filter(id=>data.runs.some(r=>r.id===id)));
 function elem(tag, text, cls) { const e=document.createElement(tag); if(text!==undefined)e.textContent=text; if(cls)e.className=cls; return e; }
 function finite(v) { return typeof v==='number' && Number.isFinite(v); }

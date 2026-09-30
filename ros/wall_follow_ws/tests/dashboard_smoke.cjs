@@ -27,6 +27,7 @@ const context=vm.createContext({
   window:{innerWidth:1200,innerHeight:900},setTimeout,Blob,URL,
 });
 vm.runInContext(html.match(/<\/script><script>([\s\S]*?)<\/script>/)[1],context);
+assert.equal(elements.get('selection-count').textContent,`${data.runs.length} selected · ${data.runs.length} shown`);
 elements.get('select-visible').events.click();
 for(const [key] of data.timing_metrics) {
   elements.get('timing-metric').value=key;

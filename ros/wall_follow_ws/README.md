@@ -295,14 +295,21 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
 
 Start with these short suites (one repetition each):
 
+- [Extreme timing-CPU PoC](experiments/timing_extreme.md): four three-second
+  cases crossing 100MHz/3GHz with tiny/generous cache profiles. Ready-to-run
+  presets and comparison commands target visible cache and guest-progress
+  differences, with fixed sensor/controller load. Run
+  `./scripts/run_timing_extreme.sh` to execute large caches first, then tiny
+  caches, and generate combined plots and a dashboard.
 - `experiments/timing_clock.json`: 1GHz versus 3GHz with identical scans and
-  controller settings. Check simulated computation time and scan age; wall
-  throughput need not increase with simulated frequency.
+  controller settings. Compare observed command cadence and whole-guest
+  hardware counters; wall throughput need not increase with simulated frequency.
 - `experiments/timing_cache.json`: 8KiB versus 32KiB L1D. Compare demand misses
   and cycles; a small wall follower may show little difference.
 - `experiments/timing_load.json`: 180 versus 720 lidar beams and stride 1 versus
   4. Check how scan density and subsampling affect instruction count, misses,
-  controller computation time, and tracking error.
+  observed command cadence, and tracking error. Guest computation time and
+  guest scan age are unavailable in the current recorder.
 
 ```bash
 python3 scripts/run_gem5_experiments.py \
