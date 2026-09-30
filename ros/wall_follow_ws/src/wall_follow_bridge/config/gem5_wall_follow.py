@@ -44,6 +44,7 @@ CPU (TimingSimpleCPU by default). The ROI uses instruction transport m5ops.
 
 import argparse
 import base64
+import re
 import socket
 import signal
 from pathlib import Path
@@ -81,7 +82,8 @@ parser.add_argument("--controller-file", help="Inject controller YAML into the g
 args = parser.parse_args()
 if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
     parser.error("core count and cache associativity must be positive")
-boot_script = "#!/bin/bash\nset -e\n"
+boot_script = ("#!/bin/bash\nset -e\n"
+               'printf "CHIMAERA_ONLINE_CPUS=%s\\n" "$(getconf _NPROCESSORS_ONLN)"\n')
 if args.controller_file:
     encoded = base64.b64encode(Path(args.controller_file).read_bytes()).decode("ascii")
     boot_script += (f"printf %s {encoded} | base64 -d > /tmp/chimaera-controller.yaml\n"
@@ -149,10 +151,26 @@ finished = False
 exit_requested = False
 
 
+def verify_online_cpus():
+    # The serial output is flushed as it is written. Read the boot script's
+    # guest count before switching CPUs or spending time on the measured ROI.
+    serial = Path(m5.options.outdir) / "board.pc.com_1.device"
+    counts = re.findall(r"^CHIMAERA_ONLINE_CPUS=(\d+)\r?$",
+                        serial.read_text(errors="replace"), re.MULTILINE)
+    if not counts:
+        raise RuntimeError(f"Guest online CPU count missing from {serial}")
+    online = int(counts[-1])
+    if online != args.num_cores:
+        raise RuntimeError(f"Guest has {online} online CPUs; requested {args.num_cores}. "
+                           f"Check the SMP boot errors in {serial}")
+    print(f"[host] Verified {online} guest CPUs online", flush=True)
+
+
 def on_workbegin():
     global roi_started
     while True:
         if not roi_started:
+            verify_online_cpus()
             processor.switch()
             roi_started = True
             m5.stats.reset()

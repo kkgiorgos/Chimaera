@@ -255,6 +255,28 @@ settings also work as ROS launch arguments or hyphenated gem5 config flags.
 Each run records hardware settings in `suite.json` and `experiment.json`, so
 comparisons keep different hardware configurations in separate groups.
 
+The local gem5 fixes MESI L1 set indexing and rechecks queued startup interrupts
+after KVM INIT delivery. Rebuild `gem5/build/X86/gem5.opt` after changing those
+sources; the cache constructor is embedded in the binary. Rebuild the
+`wall_follow_bridge` ROS package to install updated launch/config files.
+At workbegin the host verifies the guest's online CPU count against `num_cores`
+before switching models or resetting ROI statistics. A mismatch fails the run
+with the guest serial-log path instead of accepting an incomplete CPU boot.
+The CPU-count marker is injected through readfile, so these fixes do not require
+editing or redeploying the guest image.
+
+Component checks cover both plain integers and gem5 numeric parameters, then
+connect the full two-core X86 board and cache hierarchy without booting Linux
+or starting simulation:
+
+```bash
+../../gem5/build/X86/gem5.opt --outdir=/tmp/chimaera-components-check \
+  tests/verify_gem5_components.py
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q \
+  tests/test_gem5_cache.py tests/test_kvm_startup.py \
+  tests/test_gem5_config.py tests/test_gem5_stats.py
+```
+
 Start with these short suites (one repetition each):
 
 - `experiments/timing_clock.json`: 1GHz versus 3GHz with identical scans and
