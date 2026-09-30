@@ -19,7 +19,7 @@ def start(context):
                "--socket-path", LaunchConfiguration("timing_socket").perform(context)]
     command.extend(["--managed-shutdown", "--controller-file", LaunchConfiguration("parameters_file").perform(context)])
     for name in ("cpu_type", "cpu_clock", "num_cores", "l1d_size", "l1i_size",
-                 "l2_size", "l1_assoc", "l2_assoc"):
+                 "l2_size", "l1_assoc", "l2_assoc", "root_device"):
         command.extend(["--" + name.replace("_", "-"), LaunchConfiguration(name).perform(context)])
     for name in ("image", "kernel"):
         value = LaunchConfiguration(name).perform(context)
@@ -46,6 +46,7 @@ def generate_launch_description():
         }.items()],
         DeclareLaunchArgument("image", default_value=""),
         DeclareLaunchArgument("kernel", default_value=""),
+        DeclareLaunchArgument("root_device", default_value="/dev/sda2"),
         DeclareLaunchArgument("timing_socket", default_value="/tmp/chimaera_time.sock"),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(share / "launch/host.launch.py")),

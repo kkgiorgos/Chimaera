@@ -44,6 +44,7 @@ CPU (TimingSimpleCPU by default). The ROI uses instruction transport m5ops.
 
 import argparse
 import base64
+import re
 import socket
 import signal
 from pathlib import Path
@@ -76,19 +77,24 @@ parser.add_argument("--l1-assoc", type=int, default=8)
 parser.add_argument("--l2-assoc", type=int, default=16)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
+parser.add_argument("--root-device", default="/dev/sda2")
 parser.add_argument("--managed-shutdown", action="store_true", help="Let the host send QUIT on launch shutdown")
 parser.add_argument("--controller-file", help="Inject controller YAML into the guest at boot")
 args = parser.parse_args()
 if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
     parser.error("core count and cache associativity must be positive")
+if not re.fullmatch(r"(?:/dev/[A-Za-z0-9]+|PARTUUID=[0-9a-fA-F]{8}-[0-9a-fA-F]{2})", args.root_device):
+    parser.error("invalid guest root device")
 boot_script = "#!/bin/bash\nset -e\n"
 if args.controller_file:
     encoded = base64.b64encode(Path(args.controller_file).read_bytes()).decode("ascii")
     boot_script += (f"printf %s {encoded} | base64 -d > /tmp/chimaera-controller.yaml\n"
-                    "exec sudo -n env CHIMAERA_ROBOT_CONFIG=/tmp/chimaera-controller.yaml "
-                    "/usr/local/bin/chimaera_wall_follow_guest\n")
-else:
-    boot_script += "exec sudo -n /usr/local/bin/chimaera_wall_follow_guest\n"
+                    "export CHIMAERA_ROBOT_CONFIG=/tmp/chimaera-controller.yaml\n")
+boot_script += ("if (( EUID == 0 )); then\n"
+                "  exec /usr/local/bin/chimaera_wall_follow_guest\n"
+                "fi\n"
+                "exec sudo -n env CHIMAERA_ROBOT_CONFIG=\"${CHIMAERA_ROBOT_CONFIG:-/usr/local/share/chimaera/controller.yaml}\" "
+                "/usr/local/bin/chimaera_wall_follow_guest\n")
 m5.ticks.setGlobalFrequency("1THz")
 m5.ticks.fixGlobalFrequency()
 
@@ -130,12 +136,12 @@ board = X86Board(
 resources = Path(args.gem5_root).resolve() / "resources"
 board.set_kernel_disk_workload(
     kernel=KernelResource(local_path=str(Path(args.kernel) if args.kernel else resources / "x86-linux-kernel-5.15.180")),
-    disk_image=DiskImageResource(local_path=str(Path(args.image) if args.image else resources / "x86-ubuntu-22.04-ros-humble.img")),
+    disk_image=DiskImageResource(local_path=str(Path(args.image) if args.image else resources / "x86-ubuntu-22.04-ros-humble.img"), root_partition="2"),
     kernel_args=[
         "earlyprintk=ttyS0",
         "console=ttyS0",
         "lpj=7999923",
-        "root=/dev/sda2",
+        "root=" + args.root_device,
         "mce=off",
     ],
     readfile_contents=(
@@ -173,6 +179,11 @@ def on_exit():
         yield True
 
 
+def on_fail():
+    raise RuntimeError("guest reported a startup or workload failure; see its serial log")
+    yield True
+
+
 def on_max_tick():
     while True:
         yield True
@@ -182,6 +193,7 @@ simulator = Simulator(board=board, on_exit_event={
     ExitEvent.WORKBEGIN: on_workbegin(),
     ExitEvent.WORKEND: on_workend(),
     ExitEvent.EXIT: on_exit(),
+    ExitEvent.FAIL: on_fail(),
     ExitEvent.MAX_TICK: on_max_tick(),
 })
 

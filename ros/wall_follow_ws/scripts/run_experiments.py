@@ -239,6 +239,7 @@ def main():
     parser.add_argument('--gem5-root', type=Path, default=WORKSPACE/'../../gem5')
     parser.add_argument('--image', type=Path, help='Previously deployed guest image')
     parser.add_argument('--kernel', type=Path)
+    parser.add_argument('--root-device', default='/dev/sda2', help='Guest root device or PARTUUID identity')
     parser.add_argument('--interval-us', type=int, default=50000)
     parser.add_argument('--poll-us', type=int, default=10000)
     parser.add_argument('--ratio', type=float, default=1.0, help='Co-simulation pacing target')
@@ -260,6 +261,8 @@ def main():
         plan = make_plan(json.loads(args.config.read_text()), args.architecture, gem5=args.gem5)
         plan['deployment'] = 'gem5' if args.gem5 else 'host_only' if args.host_only else 'local'
         if args.gem5:
+            if not re.fullmatch(r'(?:/dev/[A-Za-z0-9]+|PARTUUID=[0-9a-fA-F]{8}-[0-9a-fA-F]{2})', args.root_device):
+                raise ValueError('invalid guest root device')
             if args.host_only:
                 raise ValueError('--gem5 and --host-only are mutually exclusive')
             if not 0 < args.poll_us < args.interval_us <= 3600000000:
@@ -269,7 +272,7 @@ def main():
             root = args.gem5_root.expanduser().resolve()
             image = (args.image or root/'resources/x86-ubuntu-22.04-ros-humble.img').expanduser().resolve()
             kernel = (args.kernel or root/'resources/x86-linux-kernel-5.15.180').expanduser().resolve()
-            plan['gem5'] = dict(gem5_root=str(root), image=str(image), kernel=str(kernel),
+            plan['gem5'] = dict(gem5_root=str(root), image=str(image), kernel=str(kernel), root_device=args.root_device,
                                 interval_us=args.interval_us, poll_us=args.poll_us,
                                 ratio=args.ratio, startup_timeout_s=args.startup_timeout)
             for run in plan['runs']:
