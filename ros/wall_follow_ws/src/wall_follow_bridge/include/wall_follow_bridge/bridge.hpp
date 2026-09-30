@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <chimaera/controller.hpp>
 #include <cstdint>
@@ -47,10 +48,19 @@ public:
       if (outgoing) {
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
-          [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
-            if (message->size() > max_bytes || outgoing_.size() >= max_messages) {
-              throw std::runtime_error(
-                "bridge outgoing queue or serialized message limit exceeded");
+          [this, key = route.key, depth = route.qos.depth()](
+            std::shared_ptr<rclcpp::SerializedMessage> message) {
+            if (message->size() > max_bytes) {
+              throw std::runtime_error("bridge serialized message limit exceeded");
+            }
+            auto same_route = [&](const auto & queued) { return queued.first == key; };
+            if (static_cast<std::size_t>(
+                std::count_if(outgoing_.begin(), outgoing_.end(), same_route)) >= depth) {
+              outgoing_.erase(std::find_if(outgoing_.begin(), outgoing_.end(), same_route));
+              ++discarded_;
+            }
+            if (outgoing_.size() >= max_messages) {
+              throw std::runtime_error("bridge outgoing queue limit exceeded");
             }
             chimaera::Message bytes(8 + key.size() + message->size());
             std::memcpy(bytes.data(), "CBR1", 4);
@@ -62,7 +72,7 @@ public:
             std::memcpy(
               bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
               message->size());
-            outgoing_.push_back(std::move(bytes));
+            outgoing_.emplace_back(key, std::move(bytes));
           }));
       } else {
         publishers_.emplace(route.key, create_generic_publisher(topic, route.type, route.qos));
@@ -82,7 +92,7 @@ public:
     if (outgoing_.empty()) {
       return std::nullopt;
     }
-    auto bytes = std::move(outgoing_.front());
+    auto bytes = std::move(outgoing_.front().second);
     outgoing_.pop_front();
     ++transmitted_;
     return bytes;
@@ -121,6 +131,7 @@ public:
 
   std::uint64_t transmitted() const { return transmitted_; }
   std::uint64_t received() const { return received_; }
+  std::uint64_t discarded() const { return discarded_; }
   std::size_t pending() const { return outgoing_.size(); }
   std::size_t local_talkers() const
   {
@@ -145,7 +156,8 @@ public:
   std::function<void()> pump;
 
 private:
-  std::deque<chimaera::Message> outgoing_;
+  std::deque<std::pair<std::string, chimaera::Message>> outgoing_;
+  std::uint64_t discarded_{};
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   std::chrono::steady_clock::time_point last_receive_{};

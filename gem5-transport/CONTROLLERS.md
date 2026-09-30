@@ -196,8 +196,11 @@ Startup polls carry no application data until the first host interval is
 observed. This also covers the small window in which KVM executes past the
 workbegin marker while gem5 handles the global exit; no producer or consumer is called during that bootstrap window.
 
-Before each step, the host collects producer data and queues it for future
-polls. After the timing server confirms the pause, it delivers the current
+Before a step, the host collects producer data when its pending outgoing batch
+is empty. If the guest has not collected that batch, the host leaves newer data
+with the producer and continues advancing simulation time. Producers retain
+their own buffering policy, including FIFO or bounded topic history. After the
+timing server confirms the pause, the host delivers the current
 snapshot of fully decoded guest batches to its consumer. A transfer can span
 a pause: partially transferred or not-yet-decoded batches remain pending and
 are delivered at a subsequent boundary. No partial application message is

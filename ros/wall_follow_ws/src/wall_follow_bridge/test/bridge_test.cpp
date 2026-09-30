@@ -186,7 +186,7 @@ int main(int argc, char ** argv)
     // Fill the bridge queue deliberately without draining it.
     for (std::size_t i = 0; i < Bridge::max_messages; ++i) {
       std_msgs::msg::String message;
-      message.data = "queued";
+      message.data = "queued-" + std::to_string(i);
       host_pub->publish(message);
       until([&] {
         executor.spin_some();
@@ -194,16 +194,44 @@ int main(int argc, char ** argv)
       });
     }
     std_msgs::msg::String overflow;
+    overflow.data = "newest";
     host_pub->publish(overflow);
-    rejected = false;
     until([&] {
-      try {
-        executor.spin_some();
-      } catch (const std::runtime_error &) {
-        rejected = true;
-      }
-      return rejected;
+      executor.spin_some();
+      return host->discarded() == 1;
     });
+    require(host->pending() == Bridge::max_messages, "keep_last grew the queue");
+    for (std::size_t i = 1; i <= Bridge::max_messages; ++i) {
+      const auto count = at_guest.size();
+      guest->submit(*host->take());
+      until([&] { executor.spin_some(); return at_guest.size() > count; });
+      require(
+        at_guest.back() == (i == Bridge::max_messages ? "newest" : "queued-" + std::to_string(i)),
+        "keep_last retained the wrong message");
+    }
+    overflow.data = "independent";
+    host_pub->publish(overflow);
+    until([&] { executor.spin_some(); return host->pending() == 1; });
+    for (int i = 0; i < 20; ++i) {
+      number.data = i;
+      number_pub->publish(number);
+      until([&] {
+        executor.spin_some();
+        return host->pending() == 1 + std::min(i + 1, 7) &&
+               host->discarded() == 1 + std::max(0, i - 6);
+      });
+    }
+    const auto strings_before = at_guest.size();
+    const auto numbers_before = numbers.size();
+    while (auto retained = host->take()) { guest->submit(std::move(*retained)); }
+    until([&] {
+      executor.spin_some();
+      return at_guest.size() == strings_before + 1 && numbers.size() == numbers_before + 7;
+    });
+    require(at_guest.back() == "independent", "one route evicted another route");
+    for (int i = 0; i < 7; ++i) {
+      require(numbers[numbers_before + i] == 13 + i, "depth-7 retained stale messages");
+    }
     // Exercise the deployed routes with the largest supported benchmark scan.
     rclcpp::NodeOptions wall_options;
     wall_options.parameter_overrides({rclcpp::Parameter("config_file", WALL_CONFIG)});

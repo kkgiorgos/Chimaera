@@ -67,7 +67,12 @@ ControllerResult Gem5HostController::step(Duration interval, Duration poll) {
             std::lock_guard lock(s.mutex);
             if (!s.failure.empty()) throw std::runtime_error(s.failure);
         }
-        auto outgoing = control::collect(s.producer);
+        bool collect;
+        {
+            std::lock_guard lock(s.mutex);
+            collect = s.outgoing.empty();
+        }
+        auto outgoing = collect ? control::collect(s.producer) : control::Batch{};
         {
             std::lock_guard lock(s.mutex);
             control::append(s.outgoing, std::move(outgoing));
