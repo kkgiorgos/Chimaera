@@ -205,12 +205,76 @@ limits are 2 CPUs, 8 GiB memory with no additional swap, 512 processes, 256 MiB
 shared memory, and 512 MiB temporary files.
 
 Start another foreground command with a different output directory to run in
-parallel. Split the DSE configuration between workers; the launcher does not
-partition a sweep. Configurations must set `gui=false`. The launcher expects a
+parallel, or use the suite orchestrator below to partition one sweep automatically.
+Configurations must set `gui=false`. The launcher expects a
 local Linux amd64 Docker daemon, and never mounts host home, `/tmp`, or Docker's
 socket. Docker's [run options](https://docs.docker.com/engine/containers/run/)
 and [tmpfs mounts](https://docs.docker.com/engine/storage/tmpfs/) describe these
 isolation and resource controls.
+
+## Run and compare a parallel suite
+
+Rebuild the worker to include global run selection:
+
+```sh
+python3 containers/wall-follow/build.py --target worker --jobs 5
+```
+
+The orchestrator runs on a host Python environment with NumPy and Matplotlib,
+using the existing analysis package in `ros/wall_follow_ws/benchmarking`. It checks
+these imports before starting containers and installs no packages. ROS and Gazebo
+remain inside the workers. An older worker image is rejected before launching.
+
+Review assignments without starting Docker or writing results:
+
+```sh
+python3 containers/wall-follow/run-suite.py \
+    --config ros/wall_follow_ws/experiments/demo.json --architecture baseline \
+    --workers 4 --output results/parallel-suite --dry-run
+```
+
+Run the suite and create the comparison:
+
+```sh
+python3 containers/wall-follow/run-suite.py \
+    --config ros/wall_follow_ws/experiments/demo.json --architecture baseline \
+    --guest-assets containers/wall-follow/guest-assets/jammy-humble-fortress \
+    --workers 4 --cpus 2 --memory 8g --output results/parallel-suite
+```
+
+`--workers` is the maximum number of concurrent containers. Each container runs
+one shard sequentially. Runs retain their original case and repetition IDs;
+repetitions can be distributed across workers. Fewer runs than workers produces
+fewer nonempty shards. CPU and memory limits apply to each container.
+
+After every worker exits and cleans up, the command gathers raw attempts and
+creates `comparison/dashboard.html`, PNG plots, CSV/JSON summaries, and
+`comparison/coverage.json`. The dashboard works offline. `orchestration.json`
+records the pinned image, inputs, assignments, worker commands and exit codes.
+Launcher and comparison logs are under `launches/`.
+
+Repeat the same command with `--resume` to retry failed or interrupted runs while
+preserving successful attempts. Changing configuration, image, assets, worker
+count, or execution options rejects resume. An existing live worker blocks resume;
+wait for its cleanup. SIGINT and SIGTERM stop workers and wait for their removal.
+
+Every planned run and every comparison member must be present for exit zero.
+Failures still allow the other assigned runs to finish. Readable partial results
+produce a marked partial dashboard and a nonzero exit. Historical failures stay
+in `gathered/`; the comparison includes one successful attempt per run. Gathered
+files use hard links when possible and copies otherwise. Generation directories
+retain prior results and reports; `gathered` and `comparison` point to the current
+generation. A new attempt clears the current pointers before running.
+
+For a native check, add `--local` and omit guest assets. Run the repeatable real
+container verification with a fresh output directory:
+
+```sh
+python3 containers/wall-follow/verify-suite.py --output results/parallel-verification
+python3 containers/wall-follow/verify-suite.py --gem5 \
+    --guest-assets containers/wall-follow/guest-assets/jammy-humble-fortress \
+    --output results/parallel-gem5-verification
+```
 
 Later stacks need a new base/build profile, runtime profile, and guest profile, plus any source
 changes needed for their ROS/Gazebo APIs. The current source targets Humble,
