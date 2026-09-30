@@ -2,6 +2,7 @@
 """Run a Cartesian benchmark suite in isolated parallel workers, then compare it."""
 
 import argparse
+from collections import deque
 from contextlib import ExitStack
 from datetime import datetime, timezone
 import fcntl
@@ -27,12 +28,32 @@ from guest_assets import sha256, verify as verify_guest
 from run_experiments import eligible, make_plan, select_runs
 
 
-def partition(plan, count):
-    if count < 1:
-        raise ValueError('workers must be positive')
-    ids = [run['id'] for run in plan['runs']]
-    return [dict(name=f'worker-{index + 1:03d}', run_ids=ids[index::min(count, len(ids))])
-            for index in range(min(count, len(ids)))]
+def make_jobs(plan):
+    return [dict(name=run['id'], run_ids=[run['id']]) for run in plan['runs']]
+
+
+def check_assignment(suite, plan, job):
+    saved = json.loads((suite / 'suite.json').read_text())
+    if (saved['runs'] != plan['runs'] or saved['architecture'] != plan['architecture']
+            or saved.get('selected_run_ids') != job['run_ids']):
+        raise ValueError('worker plan differs from its assignment')
+    unexpected = {p.name for p in (suite / 'runs').glob('*')} - set(job['run_ids'])
+    if unexpected:
+        raise ValueError(f'unassigned runs {sorted(unexpected)}')
+
+
+def completed_job(root, plan, job):
+    output = root / 'jobs' / job['name']
+    if not (output / 'suite/suite.json').exists():
+        return False
+    check_assignment(output / 'suite', plan, job)
+    attempts = [p for p in (output / 'suite/runs' / job['name']).glob('attempt_*') if eligible(p)]
+    if len(attempts) > 1:
+        raise ValueError(f"multiple completed attempts for {job['name']}")
+    if not (output / 'worker.json').is_file():
+        return False
+    saved = json.loads((output / 'worker.json').read_text())
+    return len(attempts) == 1 and saved.get('status') == 'completed' and saved.get('exit_code') == 0
 
 
 def write_json(path, value):
@@ -56,24 +77,18 @@ def link_or_copy(source, destination):
     return destination
 
 
-def collect(root, plan, shards, destination):
+def collect(root, plan, jobs, destination):
     destination.mkdir(parents=True)
     selected, missing, duplicates, errors = {}, [], [], []
-    for shard in shards:
-        suite = root / 'workers' / shard['name'] / 'suite'
+    for job in jobs:
+        suite = root / 'jobs' / job['name'] / 'suite'
         try:
-            saved = json.loads((suite / 'suite.json').read_text())
-            if (saved['runs'] != plan['runs'] or saved['architecture'] != plan['architecture']
-                    or saved.get('selected_run_ids') != shard['run_ids']):
-                raise ValueError('worker plan differs from its assignment')
+            check_assignment(suite, plan, job)
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            errors.append(f"{shard['name']}: {exc}")
-            missing.extend(shard['run_ids'])
+            errors.append(f"{job['name']}: {exc}")
+            missing.extend(job['run_ids'])
             continue
-        unexpected = {p.name for p in (suite / 'runs').glob('*')} - set(shard['run_ids'])
-        if unexpected:
-            errors.append(f"{shard['name']}: unassigned runs {sorted(unexpected)}")
-        for run_id in shard['run_ids']:
+        for run_id in job['run_ids']:
             parent = suite / 'runs' / run_id
             gathered = destination / 'runs' / run_id
             if parent.is_dir():
@@ -156,10 +171,10 @@ def prepare(args):
             if (round(step) < 1 or not math.isclose(step, round(step), abs_tol=1e-6, rel_tol=0)
                     or args.interval_us * 1000 % round(step)):
                 raise ValueError('gem5 interval must contain integral nanosecond physics steps')
-    shards = partition(plan, args.workers)
-    for shard in shards:
-        select_runs(plan, shard['run_ids'])
-    return content, plan, shards
+    jobs = make_jobs(plan)
+    for job in jobs:
+        select_runs(plan, job['run_ids'])
+    return content, plan, jobs
 
 
 def execution(args, content):
@@ -172,7 +187,7 @@ def execution(args, content):
     if (image['Os'] != 'linux' or image['Architecture'] != 'amd64'
             or labels.get('io.chimaera.run-selection') != '1'):
         raise ValueError('image lacks run selection; rebuild with build.py --target worker --jobs 5')
-    options = dict(local=args.local, architecture=args.architecture, workers=args.workers,
+    options = dict(local=args.local, architecture=args.architecture,
                    cpus=args.cpus, memory=args.memory.lower(), warmup=args.warmup,
                    interval_us=args.interval_us, poll_us=args.poll_us, ratio=args.ratio,
                    startup_timeout=args.startup_timeout, software_rendering=args.software_rendering)
@@ -210,12 +225,12 @@ def execution(args, content):
                 options=options, assets=assets)
 
 
-def command(args, root, shard, image_id):
-    output = root / 'workers' / shard['name']
+def command(args, root, job, image_id):
+    output = root / 'jobs' / job['name']
     argv = [sys.executable, str(DIRECTORY / 'worker.py'), 'run', '--image', image_id,
             '--config', str(root / 'inputs/config.json'), '--output', str(output),
             '--architecture', args.architecture, '--run-ids-file',
-            str(root / 'inputs' / (shard['name'] + '.json')), '--keep-going']
+            str(root / 'inputs' / (job['name'] + '.json'))]
     for name in ('cpus', 'memory', 'warmup', 'interval_us', 'poll_us', 'ratio', 'startup_timeout'):
         argv += ['--' + name.replace('_', '-'), str(getattr(args, name))]
     if args.local:
@@ -230,12 +245,12 @@ def command(args, root, shard, image_id):
     return argv
 
 
-def run(args, content, plan, shards):
+def run(args, content, plan, jobs):
     root = args.output.expanduser().resolve()
     if ',' in str(root):
         raise ValueError('Docker output paths cannot contain commas')
     identity = execution(args, content)
-    identity.update(plan=plan, shards=shards)
+    identity.update(plan=plan, jobs=jobs)
     root.mkdir(parents=True, exist_ok=True)
     with (root / '.orchestration.lock').open('a') as lock:
         try:
@@ -246,21 +261,26 @@ def run(args, content, plan, shards):
         if state_file.exists():
             if not args.resume:
                 raise ValueError('output already exists; choose a new directory or use --resume')
-            if json.loads(state_file.read_text())['identity'] != identity:
+            previous = json.loads(state_file.read_text())
+            if previous.get('schema_version') != 2:
+                raise ValueError('static suite layout cannot resume with the dynamic scheduler; '
+                                 'use the previous runner or choose a fresh output directory')
+            if previous['identity'] != identity:
                 raise ValueError('cannot resume: inputs, image, assignments, or execution options differ')
-            for shard in shards:
-                with worker.idle_output(root / 'workers' / shard['name']):
+            for job in jobs:
+                with worker.idle_output(root / 'jobs' / job['name']):
                     pass
         elif args.resume:
             raise ValueError('cannot resume: orchestration.json is missing')
         elif any(path.name != '.orchestration.lock' for path in root.iterdir()):
             raise ValueError('output has no valid orchestration record; choose a new directory')
-        state = dict(schema_version=1, identity=identity, status='planned')
+        skipped = {job['name'] for job in jobs if completed_job(root, plan, job)}
+        state = dict(schema_version=2, identity=identity, status='planned')
         if not state_file.exists():
             write_json(state_file, state)
         (root / 'inputs').mkdir(exist_ok=True)
         snapshots = {'config.json': content, **{s['name'] + '.json':
-            (json.dumps(s['run_ids'], indent=2) + '\n').encode() for s in shards}}
+            (json.dumps(s['run_ids'], indent=2) + '\n').encode() for s in jobs}}
         for name, data in snapshots.items():
             path = root / 'inputs' / name
             if path.exists():
@@ -275,7 +295,10 @@ def run(args, content, plan, shards):
         launch = root / 'launches' / token
         launch.mkdir(parents=True)
         state.update(status='running', token=token, started_at=datetime.now(timezone.utc).isoformat(),
-                     workers=[dict(name=s['name'], run_ids=s['run_ids'], exit_code=None) for s in shards])
+                     workers_limit=args.workers,
+                     jobs=[dict(name=s['name'], run_ids=s['run_ids'],
+                                status='skipped' if s['name'] in skipped else 'queued',
+                                exit_code=0 if s['name'] in skipped else None) for s in jobs])
 
         def save():
             write_json(state_file, state)
@@ -301,32 +324,50 @@ def run(args, content, plan, shards):
             save()
             for name in ('comparison', 'gathered'):
                 (root / name).unlink(missing_ok=True)
-            print(f"Running {len(plan['runs'])} runs on {len(shards)} workers; logs: {launch}", flush=True)
-            for index, shard in enumerate(shards):
-                if interrupted:
-                    break
-                argv = command(args, root, shard, identity['image_id'])
-                log = (launch / (shard['name'] + '.log')).open('w')
-                logs.append(log)
-                processes.append(subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True))
-                state['workers'][index]['command'] = argv
+            print(f"Running {len(jobs) - len(skipped)}/{len(jobs)} runs with up to {args.workers} containers; logs: {launch}", flush=True)
+            pending = deque((job, record) for job, record in zip(jobs, state['jobs'])
+                            if job['name'] not in skipped)
+            active = {}
             notified = False
-            while any(process.poll() is None for process in processes):
+            while pending or active:
                 if interrupted and not notified:
-                    for process in processes:
+                    for process, _, _ in active.values():
                         if process.poll() is None:
                             process.send_signal(interrupted)
                     notified = True
                     print('Stopping workers and waiting for container cleanup...', flush=True)
-                for record, process in zip(state['workers'], processes):
+                for name, (process, record, log) in list(active.items()):
                     code = process.poll()
-                    if code is not None and record['exit_code'] is None:
-                        record['exit_code'] = code
+                    if code is not None:
+                        with worker.idle_output(root / 'jobs' / name):
+                            pass
+                        record.update(exit_code=code, status='completed' if code == 0 else 'failed')
+                        log.close()
+                        del active[name]
                         print(f"{record['name']} exited {code}", flush=True)
                         save()
-                time.sleep(.25)
-            for record, process in zip(state['workers'], processes):
-                record['exit_code'] = process.returncode
+                while pending and len(active) < args.workers and not interrupted:
+                    job, record = pending.popleft()
+                    argv = command(args, root, job, identity['image_id'])
+                    record['command'] = argv
+                    log = (launch / (job['name'] + '.log')).open('w')
+                    logs.append(log)
+                    try:
+                        process = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,
+                                                   start_new_session=True)
+                    except OSError as exc:
+                        record.update(status='failed', exit_code=2, error=str(exc))
+                        log.close()
+                    else:
+                        processes.append(process)
+                        active[job['name']] = (process, record, log)
+                        record['status'] = 'running'
+                        print(f"Started {job['name']}", flush=True)
+                    save()
+                if interrupted and not active:
+                    break
+                if active:
+                    time.sleep(.25)
             if interrupted:
                 state.update(status='interrupted', exit_code=128 + interrupted)
                 return state['exit_code']
@@ -334,9 +375,9 @@ def run(args, content, plan, shards):
             save()
             collection = root / 'collections' / token
             with ExitStack() as idle:
-                for shard in shards:
-                    idle.enter_context(worker.idle_output(root / 'workers' / shard['name']))
-                coverage = collect(root, plan, shards, collection)
+                for job in jobs:
+                    idle.enter_context(worker.idle_output(root / 'jobs' / job['name']))
+                coverage = collect(root, plan, jobs, collection)
             publish(root, 'gathered', collection)
             state['coverage'] = coverage
             state['collection_sha256'] = sha256(collection / 'coverage.json')
@@ -373,7 +414,7 @@ def run(args, content, plan, shards):
                     state.update(status='interrupted', exit_code=128 + interrupted)
                     return state['exit_code']
                 partial = (coverage['missing'] or coverage['duplicates'] or coverage['errors']
-                           or any(record['exit_code'] != 0 for record in state['workers']))
+                           or any(record['exit_code'] != 0 for record in state['jobs']))
                 write_json(comparison / 'coverage.json', dict(**coverage,
                     status='partial' if partial else 'completed',
                     collection_sha256=state['collection_sha256']))
@@ -393,7 +434,7 @@ def run(args, content, plan, shards):
                 return state['exit_code']
             complete = (not coverage['missing'] and not coverage['duplicates'] and not coverage['errors']
                         and len(coverage['selected']) == len(plan['runs'])
-                        and all(record['exit_code'] == 0 for record in state['workers'])
+                        and all(record['exit_code'] == 0 for record in state['jobs'])
                         and len(state.get('reported', [])) == len(plan['runs']))
             state.update(status='completed' if complete else 'partial', exit_code=0 if complete else 1)
         except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -426,11 +467,11 @@ def main():
     cli = parser()
     args = cli.parse_args()
     try:
-        content, plan, shards = prepare(args)
+        content, plan, jobs = prepare(args)
         if args.dry_run:
-            print(json.dumps(dict(plan=plan, shards=shards, requested_workers=args.workers), indent=2))
+            print(json.dumps(dict(plan=plan, jobs=jobs, requested_workers=args.workers), indent=2))
             return 0
-        return run(args, content, plan, shards)
+        return run(args, content, plan, jobs)
     except ImportError as exc:
         cli.error(f'host reporting requires NumPy and Matplotlib in this Python environment: {exc}')
     except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:

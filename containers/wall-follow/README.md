@@ -243,9 +243,10 @@ python3 containers/wall-follow/run-suite.py \
 ```
 
 `--workers` is the maximum number of concurrent containers. Each container runs
-one shard sequentially. Runs retain their original case and repetition IDs;
-repetitions can be distributed across workers. Fewer runs than workers produces
-fewer nonempty shards. CPU and memory limits apply to each container.
+one case and repetition, then exits. After its launcher verifies cleanup, the
+orchestrator starts the next pending run in a fresh container. Runs retain their
+original IDs and have private outputs under `jobs/<run-id>/`. CPU and memory
+limits apply to each container.
 
 After every worker exits and cleans up, the command gathers raw attempts and
 creates `comparison/dashboard.html`, PNG plots, CSV/JSON summaries, and
@@ -254,8 +255,9 @@ records the pinned image, inputs, assignments, worker commands and exit codes.
 Launcher and comparison logs are under `launches/`.
 
 Repeat the same command with `--resume` to retry failed or interrupted runs while
-preserving successful attempts. Changing configuration, image, assets, worker
-count, or execution options rejects resume. An existing live worker blocks resume;
+preserving successful attempts. Completed runs start no containers. You can change
+`--workers` on resume. Changing configuration, image, assets, or execution options
+rejects resume. An existing live worker blocks resume;
 wait for its cleanup. SIGINT and SIGTERM stop workers and wait for their removal.
 
 Every planned run and every comparison member must be present for exit zero.
@@ -266,6 +268,18 @@ files use hard links when possible and copies otherwise. Generation directories
 retain prior results and reports; `gathered` and `comparison` point to the current
 generation. A new attempt clears the current pointers before running.
 
+The dynamic layout uses schema version 2. Outputs from the earlier static shard
+scheduler require its previous runner for resume. Start a fresh output directory
+for dynamic scheduling; the new scheduler refuses to reinterpret old results.
+For short benchmarks, set `--warmup` below the run duration. For example, use
+`--warmup 0` to include all command samples in a run lasting five seconds.
+
+The host transport holds one pending producer batch while the guest is busy.
+The ROS bridge retains each outgoing route's configured `keep_last` depth and
+discards its oldest unsent message when that history fills. This bounds clock and
+scan backlog for slow guests. Reliable delivery and history depth are separate
+QoS settings; reliable routes also retain only their configured history.
+
 For a native check, add `--local` and omit guest assets. Run the repeatable real
 container verification with a fresh output directory:
 
@@ -274,7 +288,13 @@ python3 containers/wall-follow/verify-suite.py --output results/parallel-verific
 python3 containers/wall-follow/verify-suite.py --gem5 \
     --guest-assets containers/wall-follow/guest-assets/jammy-humble-fortress \
     --output results/parallel-gem5-verification
+python3 containers/wall-follow/verify-suite.py --overload \
+    --guest-assets containers/wall-follow/guest-assets/jammy-humble-fortress \
+    --output results/slow-guest-verification
 ```
+
+If a verification check fails after running benchmarks, repeat its command with
+`--resume` to reuse completed runs and retry the remaining checks.
 
 Later stacks need a new base/build profile, runtime profile, and guest profile, plus any source
 changes needed for their ROS/Gazebo APIs. The current source targets Humble,
