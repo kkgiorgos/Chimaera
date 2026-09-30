@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
+#include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
@@ -39,16 +40,34 @@ inline void append(Batch& target, Batch source) {
         throw std::runtime_error("controller queue limit exceeded");
     for (auto& message : source) target.push_back(std::move(message));
 }
+inline void enqueue(Batch& target, Message message, const DataProducer& producer,
+                    std::size_t& count) {
+    const auto key = producer.coalescing_key(message);
+    if (!key.empty()) {
+        // Remove old updates rather than replacing them in place, so the latest
+        // update retains its position relative to non-coalesced messages.
+        std::erase_if(target, [&](const Message& pending) {
+            if (producer.coalescing_key(pending) != key) return false;
+            count -= pending.size();
+            return true;
+        });
+    }
+    if (target.size() >= max_messages || message.size() > max_bytes - count)
+        throw std::runtime_error("controller queue limit exceeded");
+    count += message.size();
+    target.push_back(std::move(message));
+}
+inline void append(Batch& target, Batch source, const DataProducer& producer) {
+    auto count = bytes(target);
+    for (auto& message : source) enqueue(target, std::move(message), producer, count);
+}
 inline Batch collect(DataProducer& producer) {
     Batch batch;
     std::size_t count = 0;
     while (batch.size() < max_messages) {
         auto message = producer.take();
         if (!message) break;
-        if (message->size() > max_bytes - count)
-            throw std::runtime_error("producer batch exceeds 32 MiB");
-        count += message->size();
-        batch.push_back(std::move(*message));
+        enqueue(batch, std::move(*message), producer, count);
     }
     return batch;
 }

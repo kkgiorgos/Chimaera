@@ -182,6 +182,13 @@ Producers and consumers are application-owned and must outlive their
 controllers. Calls into each controller must be serialized. All callbacks run
 on that controller's calling thread; none run on the host I/O worker.
 
+`DataProducer::coalescing_key(message)` defaults to an empty key, preserving
+FIFO delivery. A producer can return a nonempty key for replaceable state,
+such as a simulation clock. Collection retains the latest pending message for
+each key, and the host also replaces matching updates buffered across steps.
+Other messages retain their order. Coalescing cannot replace a reply already
+detached by the I/O worker or in flight. It leaves packet framing unchanged.
+
 ## Buffering and pause boundaries
 
 The underlying m5 operations are synchronous and open a fresh host socket per

@@ -3,11 +3,13 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <thread>
 #include <wall_follow_bridge/bridge.hpp>
+#include "controller_protocol.hpp"
 
 using namespace std::chrono_literals;
 using wall_follow_bridge::Bridge;
@@ -218,9 +220,13 @@ int main(int argc, char ** argv)
     auto scans =
       peer->create_publisher<sensor_msgs::msg::LaserScan>("/robot/scan", rclcpp::SensorDataQoS());
     sensor_msgs::msg::LaserScan::ConstSharedPtr delivered;
+    std::vector<sensor_msgs::msg::LaserScan> scan_history;
     auto scan_sub = peer->create_subscription<sensor_msgs::msg::LaserScan>(
       "/guest/scan", rclcpp::SensorDataQoS(),
-      [&](sensor_msgs::msg::LaserScan::ConstSharedPtr message) { delivered = message; });
+      [&](sensor_msgs::msg::LaserScan::ConstSharedPtr message) {
+        delivered = message;
+        scan_history.push_back(*message);
+      });
     until(
       [&] { return scans->get_subscription_count() == 1 && scan_sub->get_publisher_count() == 1; });
     sensor_msgs::msg::LaserScan scan;
@@ -240,8 +246,92 @@ int main(int argc, char ** argv)
       return bool(delivered);
     });
     require(*delivered == scan, "LaserScan round trip mismatch");
+
+    // The host retains one latest clock even after a burst larger than its
+    // queue capacity, without discarding or reordering surrounding scans.
+    auto clocks = peer->create_publisher<rosgraph_msgs::msg::Clock>(
+      "/clock", rclcpp::QoS(10).best_effort());
+    std::vector<rosgraph_msgs::msg::Clock> clock_history;
+    auto clock_sub = peer->create_subscription<rosgraph_msgs::msg::Clock>(
+      "/guest/clock", rclcpp::QoS(10).best_effort(),
+      [&](rosgraph_msgs::msg::Clock::ConstSharedPtr message) { clock_history.push_back(*message); });
+    until([&] {
+      return clocks->get_subscription_count() == 1 && clock_sub->get_publisher_count() == 1;
+    });
+    auto queue_clock = [&](int seconds) {
+      const auto target = wall_host->clock_updates_received() + 1;
+      rosgraph_msgs::msg::Clock message;
+      message.clock.sec = seconds;
+      message.clock.nanosec = 123456;
+      clocks->publish(message);
+      until([&] {
+        executor.spin_some();
+        return wall_host->clock_updates_received() == target;
+      });
+    };
+    scan_history.clear();
+    scan.ranges.assign(2, 1.25f);
+    scan.intensities.assign(2, 3.5f);
+    queue_clock(43);
+    scan.header.stamp.sec = 43;
+    scans->publish(scan);
+    until([&] {
+      executor.spin_some();
+      return wall_host->pending() == 2;
+    });
+    for (int i = 0; i < static_cast<int>(Bridge::max_messages) + 16; ++i) {
+      queue_clock(44 + i);
+      require(wall_host->pending() == 2, "clock burst grew the bridge queue");
+    }
+    scan.header.stamp.sec = 200;
+    scans->publish(scan);
+    until([&] {
+      executor.spin_some();
+      return wall_host->pending() == 3;
+    });
+    auto boundary = chimaera::control::collect(*wall_host);
+    require(boundary.size() == 3, "clock coalescing dropped scans");
+    require(
+      wall_host->coalescing_key(boundary[0]).empty() &&
+        !wall_host->coalescing_key(boundary[1]).empty() &&
+        wall_host->coalescing_key(boundary[2]).empty(),
+      "clock coalescing changed scan order or latest clock position");
+    require(wall_guest->coalescing_key(boundary[1]).empty(), "guest producer coalesces host routes");
+    require(wall_host->coalescing_key({}).empty(), "invalid frame has a coalescing key");
+    for (auto & frame : boundary) {
+      wall_guest->submit(std::move(frame));
+    }
+    until([&] {
+      executor.spin_some();
+      return scan_history.size() == 2 && clock_history.size() == 1;
+    });
+    require(
+      scan_history[0].header.stamp.sec == 43 && scan_history[1].header.stamp.sec == 200,
+      "scan timestamps or FIFO delivery changed");
+    require(
+      clock_history[0].clock.sec == 187 && clock_history[0].clock.nanosec == 123456,
+      "latest clock timestamp was modified or lost");
+    require(wall_host->clock_updates_coalesced() == 144, "clock replacement count mismatch");
+
+    // Replacing an existing clock must work when scans occupy every other slot.
+    for (std::size_t i = 0; i < Bridge::max_messages - 1; ++i) {
+      scans->publish(scan);
+      until([&] {
+        executor.spin_some();
+        return wall_host->pending() == i + 1;
+      });
+    }
+    queue_clock(201);
+    require(wall_host->pending() == Bridge::max_messages, "queue did not fill");
+    queue_clock(202);
+    require(wall_host->pending() == Bridge::max_messages, "full queue clock replacement failed");
+    boundary = chimaera::control::collect(*wall_host);
+    require(
+      boundary.size() == Bridge::max_messages &&
+        !wall_host->coalescing_key(boundary.back()).empty(),
+      "full queue replacement discarded scans");
     std::cout << "Config validation, bidirectional generic routing, QoS, frame/queue limits and "
-                 "echo isolation passed\n";
+                 "echo isolation, latest-clock coalescing and scan FIFO passed\n";
   } catch (const std::exception & error) {
     std::cerr << error.what() << '\n';
     status = 1;

@@ -41,6 +41,7 @@ install(DIRECTORY launch config DESTINATION share/${PROJECT_NAME})
 install(PROGRAMS scripts/guest_start.sh DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   enable_testing()
+  find_package(rosgraph_msgs REQUIRED)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_test(NAME timing_integration COMMAND ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/test/timing_integration.py $<TARGET_FILE:host_bridge>
@@ -48,7 +49,8 @@ if(BUILD_TESTING)
   set_tests_properties(timing_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
   add_executable(bridge_test test/bridge_test.cpp)
   target_link_libraries(bridge_test PRIVATE bridge)
-  ament_target_dependencies(bridge_test PUBLIC rclcpp std_msgs sensor_msgs ament_index_cpp)
+  target_include_directories(bridge_test PRIVATE "${GEM5_TRANSPORT_ROOT}/src")
+  ament_target_dependencies(bridge_test PUBLIC rclcpp std_msgs sensor_msgs rosgraph_msgs ament_index_cpp)
   target_compile_definitions(bridge_test PRIVATE WALL_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/config/bridge.json" TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/routes.json")
   add_test(NAME bridge_test COMMAND bridge_test)
   set_tests_properties(bridge_test PROPERTIES TIMEOUT 30

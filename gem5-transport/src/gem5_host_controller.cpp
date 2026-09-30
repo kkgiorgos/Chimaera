@@ -70,7 +70,9 @@ ControllerResult Gem5HostController::step(Duration interval, Duration poll) {
         auto outgoing = control::collect(s.producer);
         {
             std::lock_guard lock(s.mutex);
-            control::append(s.outgoing, std::move(outgoing));
+            // State updates may supersede messages retained from earlier
+            // intervals when the guest has not polled the transport yet.
+            control::append(s.outgoing, std::move(outgoing), s.producer);
             s.poll = poll;
             ++s.epoch;
         }

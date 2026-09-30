@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include <algorithm>
 #include <chimaera/controller.hpp>
 #include <cstdint>
 #include <cstring>
@@ -45,10 +46,15 @@ public:
       const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
       const bool outgoing = (side == "host") == (route.direction == "host_to_guest");
       if (outgoing) {
+        // Clock is replaceable state. Keep its wire identity unchanged so the
+        // deployed guest can receive coalesced updates without a protocol change.
+        if (side == "host" && route.type == "rosgraph_msgs/msg/Clock") {
+          clock_routes_.insert(route.key);
+        }
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
           [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
-            if (message->size() > max_bytes || outgoing_.size() >= max_messages) {
+            if (message->size() > max_bytes) {
               throw std::runtime_error(
                 "bridge outgoing queue or serialized message limit exceeded");
             }
@@ -62,6 +68,19 @@ public:
             std::memcpy(
               bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
               message->size());
+            const auto coalescing = coalescing_key(bytes);
+            if (!coalescing.empty()) {
+              ++clock_updates_received_;
+              const auto before = outgoing_.size();
+              std::erase_if(outgoing_, [&](const chimaera::Message & pending) {
+                return coalescing_key(pending) == coalescing;
+              });
+              clock_updates_coalesced_ += before - outgoing_.size();
+            }
+            if (outgoing_.size() >= max_messages) {
+              throw std::runtime_error(
+                "bridge outgoing queue or serialized message limit exceeded");
+            }
             outgoing_.push_back(std::move(bytes));
           }));
       } else {
@@ -71,6 +90,25 @@ public:
         get_logger(), "%s %s [%s] (%s)", outgoing ? "Send" : "Receive", topic.c_str(),
         route.type.c_str(), route.direction.c_str());
     }
+    if (!clock_routes_.empty()) {
+      RCLCPP_INFO(get_logger(), "Pending host clock updates coalesced at synchronization boundaries");
+    }
+  }
+
+  std::string_view coalescing_key(const chimaera::Message & bytes) const noexcept override
+  {
+    if (clock_routes_.empty() || bytes.size() < 8 || std::memcmp(bytes.data(), "CBR1", 4) != 0) {
+      return {};
+    }
+    std::uint32_t length = 0;
+    for (unsigned i = 0; i < 4; ++i) {
+      length = (length << 8) | std::to_integer<std::uint32_t>(bytes[4 + i]);
+    }
+    if (length > bytes.size() - 8) {
+      return {};
+    }
+    const std::string_view key(reinterpret_cast<const char *>(bytes.data() + 8), length);
+    return clock_routes_.find(key) == clock_routes_.end() ? std::string_view{} : key;
   }
 
   std::optional<chimaera::Message> take() override
@@ -122,6 +160,10 @@ public:
   std::uint64_t transmitted() const { return transmitted_; }
   std::uint64_t received() const { return received_; }
   std::size_t pending() const { return outgoing_.size(); }
+  // Callback and replacement counts for the local bridge queue. Additional
+  // replacements may occur during batch collection and in the host controller.
+  std::uint64_t clock_updates_received() const { return clock_updates_received_; }
+  std::uint64_t clock_updates_coalesced() const { return clock_updates_coalesced_; }
   std::size_t local_talkers() const
   {
     std::size_t count = 0;
@@ -146,6 +188,9 @@ public:
 
 private:
   std::deque<chimaera::Message> outgoing_;
+  std::set<std::string, std::less<>> clock_routes_;
+  std::uint64_t clock_updates_received_{};
+  std::uint64_t clock_updates_coalesced_{};
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   std::chrono::steady_clock::time_point last_receive_{};

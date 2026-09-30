@@ -168,6 +168,22 @@ with a 128 KiB serialized-payload limit to accommodate scans with up to 8192
 ranges and intensities. Its outgoing queue is bounded at 128 messages; exceeding
 either limit fails the run. Message definitions must match on both sides.
 
+Host-to-guest `Clock` updates are coalesced: the bridge queue, each collected
+batch, and the host transport backlog retain only the latest pending timestamp
+per clock route. Serialized timestamps are forwarded unchanged; scans and
+commands retain their queue order. This sends at most one clock update per
+synchronization boundary (20Hz with the default 50ms interval), instead of
+forwarding every 1ms physics update. A reply already in flight cannot be
+replaced. The host logs that coalescing is enabled and reports local clock
+callback/replacement counts on shutdown; transport can replace additional
+updates. `TX` counts frames taken from the bridge, before batch/transport
+coalescing, rather than confirmed guest deliveries.
+
+Rebuild `wall_follow_bridge` to apply this host policy. The wire protocol and
+route identities are unchanged, so the existing deployed guest image remains
+compatible. Clock delivery granularity changes; compare hardware cases with
+the same policy and use fresh result directories after changing it.
+
 `TimingController` implements Chimaera's timing interface by composing the
 existing `Gem5TimingController` and `Gem5HostController` with Gazebo world
 control. Each interval runs the guest against the preceding physics boundary,
