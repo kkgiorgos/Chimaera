@@ -39,3 +39,23 @@ def test_no_stats_dump(tmp_path):
     stats.write_text('')
     with pytest.raises(ValueError):
         summarize(stats)
+
+
+def test_single_core_and_cache_bank_names(tmp_path):
+    stats = tmp_path/'stats.txt'
+    stats.write_text('''---------- Begin Simulation Statistics ----------
+simSeconds 1.3
+simInsts 120
+board.processor.start.core.numCycles 9999
+board.processor.switch.core.numCycles 300
+board.cache_hierarchy.ruby_system.l1_controllers.L1Dcache.m_demand_misses 10
+board.cache_hierarchy.ruby_system.l1_controllers.L1Icache.m_demand_misses 7
+board.cache_hierarchy.ruby_system.l2_controllers.L2cache.m_demand_misses 600215
+---------- End Simulation Statistics ----------
+''')
+    result = summarize(stats)
+    assert result['cycles'] == 300
+    assert result['ipc'] == .4
+    assert result['l1d_misses'] == 10
+    assert result['l1i_misses'] == 7
+    assert result['l2_misses'] == 600215
