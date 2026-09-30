@@ -73,6 +73,11 @@ class X86KvmCPU : public BaseKvmCPU
   protected:
     typedef std::vector<struct kvm_msr_entry> KvmMSRVector;
 
+    // Recheck interrupts after INIT has suspended the thread. A SIPI may
+    // already be queued, so its original wakeup need not have activated us.
+    EventFunctionWrapper pendingInterruptEvent;
+    void wakeupIfInterruptPending();
+
     Tick kvmRun(Tick ticks) override;
 
     /**

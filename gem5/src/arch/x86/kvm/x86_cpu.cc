@@ -571,6 +571,8 @@ checkSeg(const char *name, const int idx, const struct kvm_segment &seg,
 
 X86KvmCPU::X86KvmCPU(const X86KvmCPUParams &params)
     : BaseKvmCPU(params),
+      pendingInterruptEvent([this] { wakeupIfInterruptPending(); },
+                            name() + ".pendingInterruptEvent"),
       useXSave(params.useXSave)
 {}
 
@@ -1225,6 +1227,20 @@ X86KvmCPU::updateThreadContextXCRs()
 }
 
 void
+X86KvmCPU::wakeupIfInterruptPending()
+{
+    bool pending;
+    {
+        EventQueue::ScopedMigration migrate(interrupts[0]->eventQueue());
+        auto *lapic = dynamic_cast<X86ISA::Interrupts *>(interrupts[0]);
+        assert(lapic);
+        pending = lapic->hasPendingUnmaskable();
+    }
+    if (pending)
+        wakeup(0);
+}
+
+void
 X86KvmCPU::deliverInterrupts()
 {
     Fault fault;
@@ -1257,6 +1273,13 @@ X86KvmCPU::deliverInterrupts()
         // interrupt before restarting the thread. The simulated CPUs
         // use the same kind of hack using a microcode routine.
         thread->suspend();
+        // INIT and SIPI can both arrive before this tick (for example within
+        // one KVM synchronization quantum). The SIPI's wakeup then happened
+        // while the thread was active, and suspending here loses that wakeup.
+        // Recheck on the next tick, after the current CPU tick has finished,
+        // to avoid scheduling its tick event twice from activateContext().
+        if (!pendingInterruptEvent.scheduled())
+            schedule(pendingInterruptEvent, clockEdge(Cycles(1)));
     } else if (dynamic_cast<StartupInterrupt *>(fault.get())) {
         DPRINTF(KvmInt, "STARTUP interrupt\n");
         fault.get()->invoke(tc);
