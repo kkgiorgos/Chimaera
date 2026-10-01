@@ -39,6 +39,9 @@ Simulation time and the real time spent running an experiment are different.
 | `docs/` | Architecture material and [custom gem5 operations](docs/gem5ops.md). |
 | `ros/franka_ws/` | Additional robot integration work. |
 
+Historical components are preserved under `legacy/` on the `archive` branch.
+Use `git switch archive` to access them; active development continues on `main`.
+
 ## Start here
 
 **A fresh clone is not ready to run a gem5 session.** The repository supplies

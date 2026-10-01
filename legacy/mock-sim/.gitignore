@@ -1,7 +1,0 @@
-/build/
-/build-*/
-/install/
-/compile_commands.json
-/CMakeUserPresets.json
-.cache/
-__pycache__/
