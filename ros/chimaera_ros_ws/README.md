@@ -10,9 +10,7 @@ The first version targets the existing Ubuntu 22.04/x86 ROS Humble guest. Guest
 binaries must be built in an environment matching that image. It transports topics;
 services/actions and automatic `/clock` or `use_sim_time` changes are outside this
 version. The wall-follow integration continues to use its existing bridge. The universal
-bridge runs exclusively through gem5-transport; the local mock-sim adapter and
-standalone queue-manager are archived under `legacy/`. See the
-[simplification audit](../../docs/universal-ros-bridge-audit.md) for the scope and remaining limits.
+bridge runs exclusively through gem5-transport.
 
 ## Build and try the example
 

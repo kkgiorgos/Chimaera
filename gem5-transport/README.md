@@ -9,8 +9,6 @@ Read [CONTROLLERS.md](CONTROLLERS.md) for controller integration, the execution
 sequence, timing, and protocol design. The ROS integrations are in
 [wall-follow](../ros/wall_follow_ws/README.md) and
 [talker/listener](../ros/talker_listener_ws/README.md).
-Interactive demos, local channel IPC, and image deployment helpers live in the
-[self-contained legacy archive](../legacy/gem5-transport-demos/README.md).
 
 ## Build and link
 

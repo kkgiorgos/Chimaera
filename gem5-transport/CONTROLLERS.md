@@ -186,8 +186,7 @@ individual pause boundaries.
 
 Host intervals advance as soon as the previous exchange completes. No wall-time
 ratio or pacing delay is imposed. Simulation tick accounting remains independent
-of host execution speed. The former pacer is archived in
-[legacy/wall-clock-pacer](../legacy/wall-clock-pacer/README.md).
+of host execution speed.
 
 ## Protocols
 
