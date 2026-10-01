@@ -13,7 +13,7 @@
     "sector_end": -40.0,
     "min_points": 6,
     "fit_threshold": 0.04,
-    "duration": 15.0,
+    "duration": 5.0,
     "gui": false,
     "lidar_samples": 720,
     "noise_std": 0.05,
