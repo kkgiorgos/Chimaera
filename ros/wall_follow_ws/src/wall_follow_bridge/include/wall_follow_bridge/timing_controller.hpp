@@ -21,9 +21,10 @@ class TimingController final : public chimaera::TimingController
 {
 public:
   TimingController(
-    std::string socket, std::chrono::seconds timeout, Bridge & bridge, std::string world, chimaera::Duration physics_step)
+    std::string socket, std::chrono::seconds timeout, Bridge & bridge, std::string world,
+    chimaera::Duration physics_step, chimaera::Duration poll_interval)
   : gem5_(std::move(socket), timeout),
-    host_(gem5_),
+    host_(gem5_, poll_interval),
     bridge_(bridge),
     timeout_(timeout),
     physics_step_(physics_step),
@@ -72,7 +73,7 @@ public:
     pending_ = true;
     const auto begin = std::chrono::steady_clock::now();
     bridge_.exchange(host_);
-    const auto result = host_.step(interval_, poll_);
+    const auto result = host_.step(interval_);
     gem5_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
     if (!result.ok()) {
       throw std::runtime_error(result.message);
@@ -150,13 +151,9 @@ public:
     pending_ = false;
   }
 
-  chimaera::ControllerResult step(chimaera::Duration interval, chimaera::Duration poll)
+  chimaera::ControllerResult step(chimaera::Duration interval)
   {
     try {
-      if (poll.count() <= 0 || poll >= interval) {
-        throw std::invalid_argument("Invalid poll interval");
-      }
-      poll_ = poll;
       start(interval);
       wait();
       return {};
@@ -194,7 +191,7 @@ private:
   chimaera::Gem5HostController host_;
   Bridge & bridge_;
   std::chrono::seconds timeout_;
-  chimaera::Duration physics_step_, interval_{}, poll_{std::chrono::milliseconds(10)};
+  chimaera::Duration physics_step_, interval_{};
   std::string world_;
   std::mutex mutex_;
   std::condition_variable changed_;

@@ -34,13 +34,15 @@ private:
 // stop terminates gem5; destruction alone cancels local I/O without advancing it.
 class Gem5HostController final : public HostController {
 public:
+    // Configure polling once; startup sends this duration to the guest.
     Gem5HostController(Gem5TimingController& timing,
+                       Duration poll_interval = std::chrono::milliseconds(1),
                        std::string guest_to_host = "/tmp/chimaera_g2h.sock",
                        std::string host_to_guest = "/tmp/chimaera_h2g.sock");
     ~Gem5HostController() override;
     void submit(Message data, std::string_view coalescing_key = {}) override;
     std::optional<Message> take() override;
-    ControllerResult step(Duration interval, Duration poll_interval) override;
+    ControllerResult step(Duration interval) override;
     ControllerResult stop() override;
 private:
     struct Impl;
@@ -49,10 +51,10 @@ private:
 
 // Owns GuestTransport; address mode requires an application-owned libm5 mapping.
 // Instruction mode runs on a simulated CPU without a mapping. For KVM boot,
-// address_bootstrap keeps using address ops until a nonzero host epoch confirms
-// the workbegin CPU switch; keep the mapping alive throughout run_next. Polling
-// sleeps use the guest OS clock. run_next performs one exchange, allowing the
-// application to submit/take data between polls.
+// address_bootstrap keeps using address ops until startup confirms host readiness
+// after the workbegin CPU switch; keep the mapping alive throughout run_next. Polling
+// sleeps use the guest OS clock. run_next performs one batch exchange after
+// startup, allowing the application to submit/take data between polls.
 class Gem5GuestController final : public GuestController {
 public:
     explicit Gem5GuestController(GuestM5Ops ops = GuestM5Ops::address,

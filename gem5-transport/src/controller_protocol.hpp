@@ -10,15 +10,9 @@ namespace chimaera::control {
 using Batch = std::vector<Message>;
 inline constexpr std::size_t max_messages = 1024;
 inline constexpr std::size_t max_bytes = 32 * 1024 * 1024;
-inline constexpr std::uint64_t magic = 0x4348494d43545231; // CHIMCTR1
-enum class Kind : std::uint64_t { poll = 1, reply = 2 };
-struct Packet {
-    Kind kind;
-    std::uint64_t epoch{};
-    Duration poll{};
-    Batch messages{};
-};
-
+// Version identification belongs to startup, not every message batch.
+inline constexpr std::uint64_t startup_magic = 0x4348494d43545232; // CHIMCTR2
+inline constexpr auto bootstrap_delay = std::chrono::milliseconds(1);
 inline bool valid(Duration interval, Duration poll) {
     return interval.count() > 0 && poll.count() > 0 && poll <= interval &&
            interval <= std::chrono::hours(1) &&
@@ -120,56 +114,65 @@ inline void put(Message& data, std::uint64_t value) {
     for (int shift = 56; shift >= 0; shift -= 8)
         data.push_back(static_cast<std::byte>((value >> shift) & 255));
 }
-inline Message encode(const Packet& packet) {
+inline std::uint64_t get(std::span<const std::byte>& data) {
+    if (data.size() < 8) throw std::runtime_error("truncated controller packet");
+    std::uint64_t value = 0;
+    for (auto byte : data.first(8)) value = (value << 8) | std::to_integer<unsigned>(byte);
+    data = data.subspan(8);
+    return value;
+}
+inline Message startup_request() {
     Message data;
-    data.reserve(40 + packet.messages.size() * 8 + bytes(packet.messages));
-    put(data, magic);
-    put(data, static_cast<std::uint64_t>(packet.kind));
-    put(data, packet.epoch);
-    put(data, packet.poll.count());
-    put(data, packet.messages.size());
-    for (const auto& message : packet.messages) {
+    put(data, startup_magic);
+    return data;
+}
+// Zero means not ready. A positive duration completes startup and stays fixed.
+inline Message encode_startup(Duration poll) {
+    auto data = startup_request();
+    put(data, poll.count());
+    return data;
+}
+inline Duration decode_startup(std::span<const std::byte> data) {
+    if (get(data) != startup_magic) throw std::runtime_error("controller protocol mismatch");
+    const auto poll = get(data);
+    if (!data.empty() || poll > static_cast<std::uint64_t>(Duration(std::chrono::hours(1)).count()))
+        throw std::runtime_error("invalid controller startup reply");
+    return Duration(poll);
+}
+inline Message encode(const Batch& batch) {
+    Message data;
+    data.reserve(8 + batch.size() * 8 + bytes(batch));
+    put(data, batch.size());
+    for (const auto& message : batch) {
         put(data, message.size());
         data.insert(data.end(), message.begin(), message.end());
     }
     return data;
 }
-inline Packet decode(std::span<const std::byte> data, Kind expected) {
-    auto get = [&]() {
-        if (data.size() < 8) throw std::runtime_error("truncated controller packet");
-        std::uint64_t value = 0;
-        for (auto byte : data.first(8)) value = (value << 8) | std::to_integer<unsigned>(byte);
-        data = data.subspan(8);
-        return value;
-    };
-    if (get() != magic || get() != static_cast<std::uint64_t>(expected))
-        throw std::runtime_error("controller protocol mismatch");
-    Packet packet{expected};
-    packet.epoch = get();
-    const auto poll = get();
-    if (poll > static_cast<std::uint64_t>(Duration(std::chrono::hours(1)).count()))
-        throw std::runtime_error("invalid controller poll duration");
-    packet.poll = Duration(poll);
-    const auto count = get();
+inline Batch decode(std::span<const std::byte> data) {
+    const auto count = get(data);
     if (count > max_messages) throw std::runtime_error("invalid controller batch size");
+    Batch batch;
+    std::size_t payload_bytes = 0;
     for (std::uint64_t i = 0; i < count; ++i) {
-        const auto size = get();
+        const auto size = get(data);
         if (size > data.size()) throw std::runtime_error("truncated controller message");
-        packet.messages.emplace_back(data.begin(), data.begin() + size);
+        if (size > max_bytes - payload_bytes)
+            throw std::runtime_error("controller batch exceeds 32 MiB");
+        payload_bytes += size;
+        batch.emplace_back(data.begin(), data.begin() + size);
         data = data.subspan(size);
     }
-    bytes(packet.messages);
     if (!data.empty()) throw std::runtime_error("trailing controller data");
-    return packet;
+    return batch;
 }
-inline void send(Transport& transport, const Packet& packet) {
-    const auto data = encode(packet);
+inline void send(Transport& transport, std::span<const std::byte> data) {
     auto result = transport.send(data);
     if (!result.ok()) throw std::runtime_error(result.message);
 }
-inline Packet receive(Transport& transport, Kind expected) {
+inline Message receive(Transport& transport) {
     auto result = transport.receive();
     if (!result.ok()) throw std::runtime_error(result.message);
-    return decode(result.data, expected);
+    return std::move(result.data);
 }
 } // namespace chimaera::control

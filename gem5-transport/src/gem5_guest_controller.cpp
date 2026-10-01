@@ -11,8 +11,7 @@ struct Gem5GuestController::Impl {
     bool address_bootstrap;
     control::OutgoingQueue outgoing;
     control::ReceivedQueue incoming;
-    std::optional<std::uint64_t> epoch;
-    Duration poll{std::chrono::milliseconds(1)};
+    Duration poll{}; // Zero until startup supplies the immutable polling interval.
     std::string failure;
     Impl(GuestM5Ops ops, bool bootstrap)
         : transport(ops), address_bootstrap(bootstrap) {}
@@ -33,33 +32,23 @@ ControllerResult Gem5GuestController::run_next() {
     auto& s = *impl_;
     if (!s.failure.empty()) return {ControllerState::failed, s.failure};
     try {
-        // Let the application deliver the previous reply before waiting for
-        // another poll. This uses the guest OS clock and pauses with gem5.
-        if (s.epoch) std::this_thread::sleep_for(s.poll);
-        while (true) {
-            // Retain submitted application data until bootstrap has completed.
-            auto& transport = s.address_bootstrap && !s.epoch
-                ? s.bootstrap_transport : s.transport;
-            control::send(transport, {control::Kind::poll, s.epoch.value_or(0),
-                                      Duration{}, s.epoch ? s.outgoing.drain() : control::Batch{}});
-            auto reply = control::receive(transport, control::Kind::reply);
-            if (reply.poll.count() <= 0 ||
-                (s.epoch && reply.epoch < *s.epoch))
-                throw std::runtime_error("invalid host controller interval");
-            // KVM can execute past workbegin until its global exit is serviced.
-            // Before the first host step, exchange only empty bootstrap polls; never
-            // expose application data during this startup window.
-            if (reply.epoch == 0) {
-                if (!reply.messages.empty())
-                    throw std::runtime_error("application data in bootstrap reply");
-                std::this_thread::sleep_for(reply.poll);
-                continue;
-            }
-            s.epoch = reply.epoch;
-            s.poll = reply.poll;
-            s.incoming.append(std::move(reply.messages));
-            return {};
+        if (s.poll.count() > 0) {
+            // Deliver the previous reply before waiting on the guest OS clock.
+            std::this_thread::sleep_for(s.poll);
+        } else {
+            auto& bootstrap = s.address_bootstrap ? s.bootstrap_transport : s.transport;
+            do {
+                control::send(bootstrap, control::startup_request());
+                s.poll = control::decode_startup(control::receive(bootstrap));
+                // KVM may execute beyond workbegin before its exit/CPU switch
+                // completes. Keep submitted data local until the host is ready.
+                if (s.poll.count() == 0) std::this_thread::sleep_for(control::bootstrap_delay);
+            } while (s.poll.count() == 0);
         }
+        // Once initialized, both directions carry only batches of messages.
+        control::send(s.transport, control::encode(s.outgoing.drain()));
+        s.incoming.append(control::decode(control::receive(s.transport)));
+        return {};
     } catch (const std::exception& error) {
         s.failure = error.what();
         return {ControllerState::failed, s.failure};

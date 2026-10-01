@@ -265,8 +265,8 @@ allows retries after forced termination leaves stale sockets behind.
 ### Simulated CPU proof of concept
 
 Rebuild and **redeploy the guest bridge** before running the updated config.
-The bridge uses an address-based workbegin marker during KVM boot. Bootstrap
-polls also use address ops until the first nonzero host epoch confirms the CPU
+The bridge uses an address-based workbegin marker during KVM boot. Startup
+exchanges also use address ops until the host confirms readiness after the CPU
 switch; subsequent transport calls use instruction m5ops. KVM remains required
 for boot. The existing transport's default address backend remains available
 for other examples.

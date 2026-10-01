@@ -17,13 +17,13 @@ paused timing server, and exchanges application data around each step:
 
 ```cpp
 chimaera::Gem5TimingController timing("/tmp/chimaera_time.sock");
-chimaera::Gem5HostController host(timing); // timing must outlive host
+chimaera::Gem5HostController host(timing, std::chrono::milliseconds(10)); // fixed polling interval
+// timing must outlive host
 try {
     timing.wait_until_ready();
     for (int i = 0; i < 10; ++i) {
         host.submit(chimaera::Message{}); // example application message
-        const auto result = host.step(std::chrono::milliseconds(100),
-                                      std::chrono::milliseconds(10));
+        const auto result = host.step(std::chrono::milliseconds(100));
         if (!result.ok()) throw std::runtime_error(result.message);
         while (auto message = host.take()) {
             // Deliver *message to your application.
@@ -72,8 +72,8 @@ does not receive a stopped result or execute cleanup on that path.
 
 For KVM boot followed by a workbegin switch to a simulated CPU, construct
 `Gem5GuestController(GuestM5Ops::instruction, true)`. It uses address ops during
-bootstrap and instruction ops after the first nonzero host epoch. Keep the
-mapping alive throughout polling. A nonzero epoch is meaningful only when the
+startup and instruction ops after the host supplies the session configuration. Keep the
+mapping alive throughout polling. Host readiness is meaningful only when the
 simulator configuration guarantees that the CPU switch precedes host stepping.
 Pure simulated-CPU operation can use instruction mode without address bootstrap.
 
@@ -99,25 +99,37 @@ sequenceDiagram
     participant IO as Host I/O worker
     App->>Time: STEP_TICKS budget
     Note over Time: Resume guest execution
-    Guest->>IO: Poll with outgoing batch
-    IO-->>Guest: Reply with host batch, epoch, poll duration
+    Guest->>IO: Startup request (first call only, retry until ready)
+    IO-->>Guest: Fixed polling duration
+    Guest->>IO: Outgoing batch
+    IO-->>Guest: Host batch
     Note over Guest: Deliver messages; next call waits on guest OS clock
     Note over Time: Pause when interval ends
     Time-->>App: OK start_tick end_tick
     Note over App: Snapshot decoded guest batches; take() delivers them
 ```
 
-A guest `run_next()` performs one exchange. Before the next exchange it sleeps
-for the previous reply's polling duration, using the simulated guest OS clock.
+Configure the polling interval once in the host controller constructor (default
+1 ms); it must be positive and at most one simulated hour. Startup sends this
+immutable value to the guest. A guest `run_next()` performs one batch exchange.
+Before subsequent exchanges it sleeps for that duration on the guest OS clock.
 Returning before that sleep lets the application deliver received messages and
-run callbacks promptly. Actual spacing also includes guest scheduling and
-application work; the duration is not a guarantee of a fixed poll count.
+run callbacks promptly. The first call completes startup, then sends queued
+application output and receives a batch immediately, without a polling wait.
+Actual spacing also includes guest scheduling and application work; the duration is not a guarantee of a fixed poll count.
 
-An empty reply is valid, so polling never waits for application data. Before the
-first host step, replies carry epoch zero and no application data. The guest
-keeps bootstrap polls inside `run_next()` until a nonzero epoch arrives, retaining
-submitted data. This protects the window in which KVM executes beyond workbegin
-before gem5 services its global exit.
+An empty batch is valid, so polling never waits for application data. Before the
+first host step, the guest exchanges startup requests and receives not-ready
+replies. It retries after 1 ms on the guest OS clock and retains queued application
+messages locally. When the first step starts, a startup reply supplies the fixed
+polling interval and completes initialization. The host never puts application
+messages in startup replies.
+
+This protects the window in which KVM executes beyond workbegin before gem5
+services its global exit. Startup remains inside the first `run_next()` call;
+address bootstrap remains active until initialization finishes. Sending a
+not-ready reply promptly matters: blocking the bootstrap exchange until host
+stepping could prevent the simulator from reaching its startup pause.
 
 ## What an interval boundary guarantees
 
@@ -127,10 +139,10 @@ the pause. Such data becomes available at a later boundary; no partial message
 is delivered. The controller never resumes gem5 just to finish a transfer and
 never joins its I/O worker at a boundary.
 
-A prepared reply can carry the preceding epoch or polling settings. The guest
-picks up new settings on a later poll. Poll more frequently than the synchronization
-interval to reduce that delay. An interval is a simulation pause and receive
-snapshot, not an acknowledgment that every queued message reached its application.
+Polling settings never change during a session. Poll more frequently than the
+synchronization interval to reduce exchange latency. An interval is a simulation
+pause and receive snapshot, not an acknowledgment that every queued message
+reached its application. No interval counter is carried by application batches.
 
 Each controller queue and packet batch is capped at 1024 messages and 32 MiB of
 payload. Unconsumed received data counts toward the queue limits. The worker can
@@ -151,7 +163,9 @@ These choices keep the worker from delaying the application at a boundary.
 `wait()` reads completion once the simulator pauses. Only one timing request may
 be outstanding, and only this timing session may advance that simulator.
 Intervals must be positive and at most one simulated hour. Host `step()` also
-requires `0 < poll <= interval` and at most 100000 nominal polls per interval.
+requires the configured poll duration to be no greater than the interval and
+at most 100000 nominal polls per interval. `step(interval)` does not configure
+polling.
 
 The simulator uses a fixed 1 THz tick frequency: one nanosecond equals 1000 ticks.
 The controller anchors an ideal cumulative target at the first step's start tick.
@@ -191,24 +205,38 @@ Disconnecting does not undo a command. The C++ constructor's wall timeout defaul
 to 300 seconds. `wait_until_ready()` has a separate startup timeout and an optional
 cancellation callback while retrying an unavailable endpoint.
 
-Controller packets travel inside the [raw transport framing](README.md).
-[src/controller_protocol.hpp](src/controller_protocol.hpp) defines their current
-format: five big-endian uint64 fields followed by length-prefixed messages.
+The message protocol has two phases, both inside the [raw transport framing](README.md).
+[src/controller_protocol.hpp](src/controller_protocol.hpp) defines their encoding.
+All integers below are unsigned, eight-byte, and big-endian.
 
-| Field | Poll request | Host reply |
-| --- | --- | --- |
-| Magic | `CHIMCTR1` | `CHIMCTR1` |
-| Kind | 1 | 2 |
-| Epoch | Last observed epoch, initially zero; currently ignored by host | Host interval number; zero means bootstrap |
-| Poll duration | Zero; currently ignored by host | Guest waiting duration in nanoseconds |
-| Message count | Number of outgoing messages | Number of outgoing messages |
+**Startup:** the guest sends the protocol identifier `CHIMCTR2`. The host replies
+with that identifier followed by the polling duration in nanoseconds. Zero means
+not ready, so the guest retries after its 1 ms bootstrap wait. A positive value
+completes startup. Both ends check the identifier; the guest also rejects
+truncated/trailing startup data and durations above one hour. There are no
+application messages in startup, and queued data stays intact until it finishes.
 
-Each message has an eight-byte big-endian length followed by its bytes.
-Decoding rejects mismatched magic/kind, truncation, trailing bytes, excessive
-counts/payload, and polling durations above one hour. The guest also rejects
-nonpositive reply durations, epoch regression, and application data in bootstrap
-replies. This documents the existing protocol; directional packet refactoring
-is deferred.
+**Running:** both directions use exactly the same format:
+
+```text
+message_count
+for each message:
+    message_length
+    message_bytes
+```
+
+A zero count is an empty batch; a zero message length is an empty application
+message. There is no type, epoch, version identifier, or polling duration in a
+regular batch. The startup version and ordered request/reply flow identify the
+protocol and phase. Batch decoding rejects excessive counts/payload, truncation,
+and trailing data. The outer transport already provides total packet length.
+
+The host worker completes its startup reply before accepting batches. The guest
+completes startup before sending its first batch, including switching m5op backend
+when requested. Pauses can occur during either phase; progress resumes naturally
+when the simulator runs again. The protocol has no reconnect/resynchronization
+path after a partial transfer. Both peers must use this version; rebuild and
+redeploy the guest alongside the host when updating from the previous protocol.
 
 ## Shutdown and failures
 

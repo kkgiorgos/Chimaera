@@ -43,15 +43,15 @@ class HostController : public DataController {
 public:
     virtual ~HostController() = default;
     // Resume for an interval, then make decoded guest data available to take().
-    [[nodiscard]] virtual ControllerResult step(Duration interval, Duration poll_interval) = 0;
+    [[nodiscard]] virtual ControllerResult step(Duration interval) = 0;
     [[nodiscard]] virtual ControllerResult stop() = 0;
 };
 
 class GuestController : public DataController {
 public:
     virtual ~GuestController() = default;
-    // Wait for the previous reply's polling duration, then exchange one poll.
-    // Startup polls stay inside this call until the first host epoch arrives.
+    // Wait for the configured polling duration, then exchange one batch.
+    // The first call completes startup and exchanges a batch without a polling wait.
     // External scheduling pauses this call along with all other guest code.
     [[nodiscard]] virtual ControllerResult run_next() = 0;
 };

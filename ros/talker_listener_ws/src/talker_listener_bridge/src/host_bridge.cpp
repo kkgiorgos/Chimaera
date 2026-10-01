@@ -50,7 +50,7 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
     chimaera::Gem5TimingController timing(socket, std::chrono::seconds(timeout));
-    chimaera::Gem5HostController controller(timing);
+    chimaera::Gem5HostController controller(timing, std::chrono::microseconds(poll));
     try {
       RCLCPP_INFO(node->get_logger(), "Data transport ready; waiting for gem5 guest");
       const auto waiting_since = Clock::now();
@@ -91,7 +91,7 @@ int main(int argc, char ** argv)
       for (int64_t count = 0; rclcpp::ok() && (steps == 0 || count < steps); ++count) {
         node->exchange(controller);
         const auto result =
-          controller.step(std::chrono::microseconds(interval), std::chrono::microseconds(poll));
+          controller.step(std::chrono::microseconds(interval));
         if (!result.ok()) {
           throw std::runtime_error(result.message);
         }

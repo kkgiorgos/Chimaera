@@ -39,16 +39,18 @@ void transfer(const std::string& path, std::span<std::byte> bytes, bool sending)
         bytes = bytes.subspan(n);
     }
 }
-control::Packet exchange(const std::string& g2h, const std::string& h2g,
-                         control::Batch messages = {}) {
-    auto data = control::encode({control::Kind::poll, 0, Duration{}, std::move(messages)});
+Message exchange_frame(const std::string& g2h, const std::string& h2g, Message data) {
     auto header = detail::encode(data.size());
     transfer(g2h, header, true);
     transfer(g2h, data, true);
     transfer(h2g, header, false);
     data.resize(detail::decode(header));
     transfer(h2g, data, false);
-    return control::decode(data, control::Kind::reply);
+    return data;
+}
+control::Batch exchange(const std::string& g2h, const std::string& h2g,
+                        control::Batch messages = {}) {
+    return control::decode(exchange_frame(g2h, h2g, control::encode(messages)));
 }
 }
 int main() {
@@ -61,18 +63,25 @@ int main() {
         expect(::bind(listener.fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) == 0);
         expect(::listen(listener.fd, 4) == 0);
         Gem5TimingController timing(endpoint, std::chrono::seconds(2));
-        Gem5HostController host(timing, g2h, h2g);
+        bool invalid_poll = false;
+        try { Gem5HostController invalid(timing, Duration{}, g2h, h2g); }
+        catch (const std::invalid_argument&) { invalid_poll = true; }
+        expect(invalid_poll);
+        Gem5HostController host(timing, Duration(1), g2h, h2g);
         const Message first{std::byte{1}}, second{std::byte{2}};
         expect(!host.take());
         host.submit(first, "state");
         host.submit(second, "state");
         host.submit({});
-        // Queuing data before step must not leak it into epoch-zero replies.
-        const auto bootstrap = exchange(g2h, h2g);
-        expect(bootstrap.epoch == 0 && bootstrap.messages.empty());
+        // Pending startup replies carry no data and retain the outgoing queue.
+        for (int i = 0; i < 2; ++i)
+            expect(control::decode_startup(exchange_frame(g2h, h2g, control::startup_request())) == Duration{});
+        expect(!host.step(Duration{}).ok()); // Validation does not poison startup.
+        expect(!host.step(Duration(100001)).ok());
         auto server = std::async(std::launch::async, [&] {
             std::uint64_t tick = 0;
-            for (int step = 0; step < 3; ++step) {
+            Message configuration;
+            for (int step = 0; step < 4; ++step) {
                 Socket client(::accept(listener.fd, nullptr, nullptr));
                 std::string command;
                 char byte;
@@ -80,20 +89,33 @@ int main() {
                     expect(::recv(client.fd, &byte, 1, 0) == 1);
                     command += byte;
                 } while (byte != '\n');
-                if (step == 2) {
+                if (step == 3) {
                     expect(command == "QUIT\n");
                     expect(::send(client.fd, "BYE\n", 4, MSG_NOSIGNAL) == 4);
                     break;
                 }
                 expect(command.starts_with("STEP_TICKS "));
-                // Fully decoded messages accumulate until the pause response.
-                const auto reply = exchange(g2h, h2g, step == 0 ? control::Batch{first, {}}
-                                                                          : control::Batch{second});
-                expect(reply.epoch == static_cast<unsigned>(step + 1));
-                expect(reply.messages == (step == 0 ? control::Batch{second, {}} : control::Batch{first}));
-                // Another poll in the same interval must not resend detached data.
-                const auto next_reply = exchange(g2h, h2g);
-                expect(next_reply.epoch == reply.epoch && next_reply.messages.empty());
+                if (step == 0) {
+                    auto request = control::startup_request();
+                    auto header = detail::encode(request.size());
+                    transfer(g2h, header, true);
+                    transfer(g2h, request, true);
+                    transfer(h2g, header, false);
+                    configuration.resize(detail::decode(header));
+                    // Pause before requesting the configuration payload. The host
+                    // must return from step while its I/O worker remains blocked.
+                } else {
+                    if (step == 1) {
+                        transfer(h2g, configuration, false);
+                        expect(control::decode_startup(configuration) == Duration(1));
+                    }
+                    // Fully decoded messages accumulate until the pause response.
+                    const auto reply = exchange(g2h, h2g, step == 1 ? control::Batch{first, {}}
+                                                                              : control::Batch{second});
+                    expect(reply == (step == 1 ? control::Batch{second, {}} : control::Batch{first}));
+                    // Another poll must not resend detached data or configuration.
+                    expect(exchange(g2h, h2g).empty());
+                }
                 const auto ticks = std::stoull(command.substr(11));
                 const auto response = "OK " + std::to_string(tick) + " " + std::to_string(tick + ticks) + "\n";
                 tick += ticks;
@@ -101,21 +123,30 @@ int main() {
                        static_cast<ssize_t>(response.size()));
             }
         });
-        expect(host.step(Duration(10), Duration(1)).ok());
+        expect(host.step(Duration(10)).ok());
+        expect(!host.take()); // Startup spans the first pause, with no application data.
+        expect(host.step(Duration(10)).ok());
         // The shared outgoing queue accepts fresh data after a detached drain.
         host.submit(first, "state");
         // Unconsumed data survives the next step and retains order.
-        expect(host.step(Duration(10), Duration(1)).ok());
+        expect(host.step(Duration(10)).ok());
         expect(host.take() == first);
         expect(host.take() == Message{});
         expect(host.take() == second);
         expect(!host.take());
         expect(host.stop().state == ControllerState::stopped);
-        expect(host.step(Duration(10), Duration(1)).state == ControllerState::stopped);
+        expect(host.step(Duration(10)).state == ControllerState::stopped);
         bool rejected = false;
         try { host.submit(first); } catch (const std::runtime_error&) { rejected = true; }
         expect(rejected);
         server.get();
+        // Destruction cancels a partially received startup request while paused.
+        {
+            const auto cancel_g2h = base + "/cancel-g2h", cancel_h2g = base + "/cancel-h2g";
+            Gem5HostController pending(timing, Duration(1), cancel_g2h, cancel_h2g);
+            auto header = detail::encode(control::startup_request().size());
+            transfer(cancel_g2h, header, true);
+        }
     } catch (...) {
         ::unlink(endpoint.c_str());
         ::rmdir(directory);

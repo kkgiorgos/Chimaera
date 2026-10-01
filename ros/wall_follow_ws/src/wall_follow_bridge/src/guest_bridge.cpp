@@ -28,7 +28,7 @@ int main(int argc, char ** argv)
       chimaera::GuestM5Ops::instruction, true);
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
     // KVM boots to this address op. gem5 switches CPUs before resuming us;
-    // transport switches to instruction ops once the host confirms epoch 1.
+    // transport switches to instruction ops once the host completes startup.
     m5_work_begin_addr(0, 0);
     while (rclcpp::ok()) {
       const auto result = controller.run_next();

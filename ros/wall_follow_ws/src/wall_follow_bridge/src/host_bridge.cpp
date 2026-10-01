@@ -62,7 +62,8 @@ int main(int argc, char ** argv)
     wall_follow_bridge::TimingController timing(
       socket, std::chrono::seconds(timeout), *node,
       node->declare_parameter<std::string>("gazebo_world", "wall_arena"),
-      std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)));
+      std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)),
+      std::chrono::microseconds(poll));
     timing.pump = node->pump;
     timing.cancelled = [] { return !rclcpp::ok(); };
     auto & controller = timing;
@@ -122,7 +123,7 @@ int main(int argc, char ** argv)
         const auto step_begin = Clock::now();
         const auto ticks_before = timing.elapsed_ticks();
         const auto result =
-          controller.step(std::chrono::microseconds(interval), std::chrono::microseconds(poll));
+          controller.step(std::chrono::microseconds(interval));
         if (!result.ok()) {
           if (!rclcpp::ok()) { break; }
           throw std::runtime_error(result.message);

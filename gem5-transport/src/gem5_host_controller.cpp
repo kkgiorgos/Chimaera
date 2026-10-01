@@ -14,14 +14,16 @@ struct Gem5HostController::Impl {
     std::size_t incoming_bytes{};
     control::ReceivedQueue ready;
     control::OutgoingQueue outgoing;
-    Duration poll{std::chrono::milliseconds(1)};
-    std::uint64_t epoch{};
+    const Duration poll;
+    bool started{false};
     std::string failure;
     bool stopped{false};
     std::thread worker;
 
-    Impl(Gem5TimingController& t, std::string g2h, std::string h2g)
-        : transport(std::move(g2h), std::move(h2g)), timing(t) {
+    Impl(Gem5TimingController& t, Duration p, std::string g2h, std::string h2g)
+        : transport(std::move(g2h), std::move(h2g)), timing(t), poll(p) {
+        if (poll.count() <= 0 || poll > std::chrono::hours(1))
+            throw std::invalid_argument("poll interval must be positive and at most one hour");
         // Reserve descriptor storage before starting the worker, so publishing
         // received batches does not allocate while holding the shared mutex.
         incoming.reserve(control::max_messages);
@@ -35,25 +37,34 @@ struct Gem5HostController::Impl {
     }
     void serve() {
         try {
-            control::OutgoingQueue detached;
+            // Keep bootstrap responsive while KVM services its workbegin exit.
+            // Sending configuration completes startup; only then accept batches.
             while (true) {
-                auto request = control::receive(transport, control::Kind::poll);
-                const auto request_bytes = control::bytes(request.messages);
-                control::Packet reply{control::Kind::reply};
+                if (control::receive(transport) != control::startup_request())
+                    throw std::runtime_error("controller protocol mismatch");
+                bool ready;
                 {
                     std::lock_guard lock(mutex);
-                    if (incoming.size() + request.messages.size() > control::max_messages ||
+                    ready = started;
+                }
+                control::send(transport, control::encode_startup(ready ? poll : Duration{}));
+                if (ready) break;
+            }
+            control::OutgoingQueue detached;
+            while (true) {
+                auto request = control::decode(control::receive(transport));
+                const auto request_bytes = control::bytes(request);
+                {
+                    std::lock_guard lock(mutex);
+                    if (incoming.size() + request.size() > control::max_messages ||
                         request_bytes > control::max_bytes - incoming_bytes)
                         throw std::runtime_error("controller queue limit exceeded");
-                    for (auto& message : request.messages) incoming.push_back(std::move(message));
+                    for (auto& message : request) incoming.push_back(std::move(message));
                     incoming_bytes += request_bytes;
-                    reply.epoch = epoch;
-                    reply.poll = poll;
-                    // Never expose application data in a bootstrap reply.
-                    if (epoch) outgoing.swap(detached);
+                    outgoing.swap(detached);
                 }
                 // Batch allocation and key destruction happen outside the mutex.
-                reply.messages = detached.drain();
+                const auto reply = control::encode(detached.drain());
                 // A paused guest may be between either pair of transport ops.
                 // Leave this exchange pending until gem5 resumes; never join it
                 // at an interval boundary.
@@ -66,8 +77,9 @@ struct Gem5HostController::Impl {
     }
 };
 
-Gem5HostController::Gem5HostController(Gem5TimingController& timing, std::string g2h, std::string h2g)
-    : impl_(std::make_unique<Impl>(timing, std::move(g2h), std::move(h2g))) {}
+Gem5HostController::Gem5HostController(Gem5TimingController& timing, Duration poll,
+                                       std::string g2h, std::string h2g)
+    : impl_(std::make_unique<Impl>(timing, poll, std::move(g2h), std::move(h2g))) {}
 Gem5HostController::~Gem5HostController() = default;
 
 void Gem5HostController::submit(Message data, std::string_view key) {
@@ -81,17 +93,16 @@ std::optional<Message> Gem5HostController::take() {
     return impl_->ready.take();
 }
 
-ControllerResult Gem5HostController::step(Duration interval, Duration poll) {
+ControllerResult Gem5HostController::step(Duration interval) {
     auto& s = *impl_;
     if (s.stopped) return {ControllerState::stopped, {}};
-    if (!control::valid(interval, poll))
+    if (!control::valid(interval, s.poll))
         return {ControllerState::failed, "require 0 < poll <= interval <= 1 hour, at most 100000 polls"};
     try {
         {
             std::lock_guard lock(s.mutex);
             if (!s.failure.empty()) throw std::runtime_error(s.failure);
-            s.poll = poll;
-            ++s.epoch;
+            s.started = true;
         }
         s.timing.start(interval);
         s.timing.wait();

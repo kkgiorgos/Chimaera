@@ -68,47 +68,59 @@ int main() {
     expect(!instruction.send(data).ok() && calls.size() == failed_calls);
     short_send = false;
     calls.clear();
-    // A delayed KVM exit can produce epoch-zero polls. No instruction op or
-    // application data is sent until a switched host publishes epoch 1.
+    // Pending startup uses address ops and retains application messages. Ready
+    // supplies the poll duration once; the first batch uses instruction ops.
     m5_mem = &address;
     sent.clear();
-    enqueue(control::encode({control::Kind::reply, 0, Duration(1), {}}));
-    enqueue(control::encode({control::Kind::reply, 1, Duration(3), {data, {}}}));
-    enqueue(control::encode({control::Kind::reply, 2, Duration(7), {data}}));
+    enqueue(control::encode_startup(Duration{}));
+    enqueue(control::encode_startup(Duration(3)));
+    enqueue(control::encode({data, {}}));
+    enqueue(control::encode({data}));
     Gem5GuestController controller(GuestM5Ops::instruction, true);
     expect(!controller.take());
     controller.submit(Message{std::byte{9}}, "state");
     controller.submit(data, "state");
     expect(controller.run_next().ok());
-    // Only epoch-zero bootstrap sleeps; the first application reply is ready
-    // immediately, with no polling wait before it can be delivered.
-    expect(waits.size() == 1 && waits[0].duration == Duration(1));
-    expect(waits[0].sent_frames == 2 && waits[0].remaining_frames == 4);
+    // No polling wait before delivering the first application reply.
+    expect(waits.size() == 1 && waits[0].duration == control::bootstrap_delay);
+    expect(waits[0].sent_frames == 2 && waits[0].remaining_frames == 6);
     expect(controller.take() == data);
     expect(controller.take() == Message{});
     expect(!controller.take());
-    expect(received.size() == 2); // One poll per call once bootstrap completes.
+    expect(received.size() == 2);
     expect(controller.run_next().ok());
     expect(waits.size() == 2 && waits[1].duration == Duration(3));
-    expect(waits[1].sent_frames == 4 && waits[1].remaining_frames == 2);
+    expect(waits[1].sent_frames == 6 && waits[1].remaining_frames == 2);
     expect(controller.take() == data);
     expect(!controller.take());
-    expect(sent.size() == 6);
-    expect(control::decode(sent[1], control::Kind::poll).messages.empty());
-    expect(control::decode(sent[3], control::Kind::poll).messages.empty());
-    expect(control::decode(sent[5], control::Kind::poll).messages == control::Batch{data});
+    expect(sent.size() == 8);
+    expect(sent[1] == control::startup_request() && sent[3] == control::startup_request());
+    expect(control::decode(sent[5]) == control::Batch{data});
+    expect(control::decode(sent[7]).empty());
     expect(calls == std::vector<bool>({false, false, false, false,
                                      false, false, false, false,
+                                     true, true, true, true,
                                      true, true, true, true}));
     expect(received.empty());
-    enqueue(control::encode({control::Kind::reply, 1, Duration(1), {}}));
-    expect(!controller.run_next().ok()); // Epoch regression is terminal.
-    expect(waits.size() == 3 && waits[2].duration == Duration(7));
-    expect(waits[2].sent_frames == 6 && waits[2].remaining_frames == 2);
+    // Configuration cannot reappear inside a running data session.
+    enqueue(control::encode_startup(Duration(7)));
+    expect(!controller.run_next().ok());
+    expect(waits.size() == 3 && waits[2].duration == Duration(3));
     const auto failed = calls.size();
     expect(!controller.run_next().ok() && calls.size() == failed);
-    expect(waits.size() == 3); // Terminal failures never wait or poll again.
+    expect(waits.size() == 3);
     bool rejected = false;
     try { controller.submit(data); } catch (const std::runtime_error&) { rejected = true; }
     expect(rejected);
+    // A startup version mismatch fails before any instruction op or batch send.
+    calls.clear();
+    sent.clear();
+    auto old_version = control::encode_startup(Duration(3));
+    old_version[7] = std::byte{'1'};
+    enqueue(std::move(old_version));
+    Gem5GuestController mismatch(GuestM5Ops::instruction, true);
+    mismatch.submit(data);
+    expect(!mismatch.run_next().ok());
+    expect(calls == std::vector<bool>({false, false, false, false}));
+    expect(sent.size() == 2 && sent[1] == control::startup_request());
 }

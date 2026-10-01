@@ -8,7 +8,7 @@ void expect(bool condition, const char* message) {
 template <typename F> void rejects(F operation) {
     bool rejected = false;
     try { operation(); } catch (const std::runtime_error&) { rejected = true; }
-    expect(rejected, "queue overflow was accepted");
+    expect(rejected, "invalid input was accepted");
 }
 Message frame(char route, unsigned value, std::size_t size = 3) {
     Message message(size);
@@ -28,9 +28,39 @@ int main() {
         const auto batch = queue.drain();
         expect(batch == control::Batch({frame('s', 10), frame('s', 2000), frame('c', 4095)}),
                "latest clock or scan FIFO order lost");
-        const auto packet = control::decode(
-            control::encode({control::Kind::reply, 7, Duration(10), batch}), control::Kind::reply);
-        expect(packet.messages == batch, "coalescing changed wire round trip");
+        const auto packet = control::encode(batch);
+        expect(packet.size() == 8 + 8 * batch.size() + control::bytes(batch), "batch contains metadata");
+        expect(control::decode(packet) == batch, "coalescing changed wire round trip");
+        expect(control::decode(control::encode({})).empty(), "empty batch round trip failed");
+        expect(control::decode(control::encode({{}})) == control::Batch{{}}, "empty message round trip failed");
+        expect(control::startup_request().size() == 8, "startup request size changed");
+        expect(control::decode_startup(control::encode_startup(Duration{})) == Duration{}, "pending startup failed");
+        expect(control::decode_startup(control::encode_startup(Duration(3))) == Duration(3), "startup duration lost");
+        auto wrong_version = control::encode_startup(Duration(3));
+        wrong_version[7] = std::byte{'1'};
+        rejects([&] { control::decode_startup(wrong_version); });
+        rejects([&] { control::decode_startup(control::startup_request()); });
+        rejects([&] { control::decode_startup(control::encode_startup(Duration(-1))); });
+        rejects([&] { control::decode_startup(control::encode_startup(std::chrono::hours(1) + Duration(1))); });
+        auto trailing_startup = control::encode_startup(Duration(3));
+        trailing_startup.push_back(std::byte{});
+        rejects([&] { control::decode_startup(trailing_startup); });
+        rejects([&] { control::decode(control::startup_request()); });
+        rejects([&] { control::decode({}); });
+        auto truncated = packet;
+        truncated.pop_back();
+        rejects([&] { control::decode(truncated); });
+        auto trailing = packet;
+        trailing.push_back(std::byte{});
+        rejects([&] { control::decode(trailing); });
+        Message excessive_count;
+        control::put(excessive_count, control::max_messages + 1);
+        rejects([&] { control::decode(excessive_count); });
+        Message excessive_payload;
+        control::put(excessive_payload, 1);
+        control::put(excessive_payload, control::max_bytes + 1);
+        excessive_payload.resize(16 + control::max_bytes + 1);
+        rejects([&] { control::decode(excessive_payload); });
         expect(queue.drain().empty(), "drain did not clear queue");
         for (unsigned i = 0; i < 100; ++i) {
             queue.submit(frame('c', i), "clock");
@@ -100,7 +130,7 @@ int main() {
         queue.swap(detached);
         expect(detached.drain() == control::Batch{frame('c', 2)}, "swap lost new pending update");
         expect(queue.drain().empty(), "swap left messages in pending queue");
-        std::cout << "Coalescing, FIFO, wire compatibility and queue limits passed\n";
+        std::cout << "Batch framing, startup, coalescing and queue limits passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
