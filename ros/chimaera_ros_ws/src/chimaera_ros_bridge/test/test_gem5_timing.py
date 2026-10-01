@@ -20,6 +20,8 @@ class Event(Enum):
 
     @classmethod
     def translate_exit_status(cls, cause):
+        if not isinstance(cause, cls):
+            raise NotImplementedError(f"Exit event '{cause}' not implemented")
         return cause
 
 
@@ -150,6 +152,33 @@ class TimingTest(unittest.TestCase):
         simulator = self.simulator([(Event.FAILED, 10)])
         self.server.serve = Mock()
         with self.assertRaisesRegex(RuntimeError, 'before its bridge was ready'):
+            self.server.run(simulator)
+        self.server.serve.assert_not_called()
+
+    def test_injected_files_preserve_executability_and_use_privileged_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'guest_bridge'
+            source.write_bytes(b'executable')
+            source.chmod(0o755)
+            script = self.module.guest_start_script('/start', [f'/opt/guest_bridge={source}'])
+            self.assertIn('sudo -n tee /opt/guest_bridge >/dev/null', script)
+            self.assertIn('sudo -n chmod 755 /opt/guest_bridge', script)
+            subprocess.run(['bash', '-n'], input=script, text=True, check=True)
+
+    def test_after_boot_hypercall_is_a_boot_boundary(self):
+        simulator = self.simulator([('m5_hypercall instruction encountered', 10),
+                                    (Event.WORKBEGIN, 10)])
+        simulator.get_hypercall_id = Mock(return_value=3)
+        self.server.serve = Mock()
+        self.server.run(simulator)
+        self.assertTrue(self.server.roi_started)
+        self.server.serve.assert_called_once()
+
+    def test_other_hypercalls_are_not_treated_as_boot_boundaries(self):
+        simulator = self.simulator([('m5_hypercall instruction encountered', 10)])
+        simulator.get_hypercall_id = Mock(return_value=7)
+        self.server.serve = Mock()
+        with self.assertRaisesRegex(NotImplementedError, 'not implemented'):
             self.server.run(simulator)
         self.server.serve.assert_not_called()
 

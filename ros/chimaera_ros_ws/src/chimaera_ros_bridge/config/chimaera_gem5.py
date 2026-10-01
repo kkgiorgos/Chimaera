@@ -72,8 +72,12 @@ def guest_start_script(command, files=(), *, preamble=""):
         target = Path(guest_path)
         if not separator or not target.is_absolute() or '..' in target.parts or target == Path('/'):
             raise ValueError("guest files require an absolute GUEST_PATH=HOST_PATH")
-        encoded = base64.b64encode(Path(host_path).read_bytes()).decode("ascii")
-        script += f"printf %s {encoded} | base64 -d > {shlex.quote(guest_path)}\n"
+        source = Path(host_path)
+        encoded = base64.b64encode(source.read_bytes()).decode("ascii")
+        destination = shlex.quote(guest_path)
+        mode = '755' if source.stat().st_mode & 0o111 else '644'
+        script += f"printf %s {encoded} | base64 -d | sudo -n tee {destination} >/dev/null\n"
+        script += f"sudo -n chmod {mode} {destination}\n"
     return script + "exec sudo -n " + shlex.quote(command) + "\n"
 
 
@@ -129,7 +133,14 @@ class TimingServer:
 
     def _run_once(self):
         self.simulator.run()
-        event = ExitEvent.translate_exit_status(self.simulator.get_last_exit_event_cause())
+        cause = self.simulator.get_last_exit_event_cause()
+        # Recent gem5 guest images finish after_boot.sh with hypercall 3.
+        # Simulator handles it, but the legacy cause translator does not know
+        # hypercalls. This is a boot boundary, just like the legacy m5 exit.
+        if cause == "m5_hypercall instruction encountered" and self.simulator.get_hypercall_id() == 3:
+            event = ExitEvent.EXIT
+        else:
+            event = ExitEvent.translate_exit_status(cause)
         if event not in (ExitEvent.EXIT, ExitEvent.WORKBEGIN, ExitEvent.WORKEND, ExitEvent.MAX_TICK):
             self.finished = True
         return event
