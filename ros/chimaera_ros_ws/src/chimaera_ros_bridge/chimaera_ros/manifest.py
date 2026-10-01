@@ -6,7 +6,7 @@ from pathlib import Path
 DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 startup_timeout_s=300, status_bar=True, report_seconds=1.0,
                 timing_socket="/tmp/chimaera_time.sock", max_serialized_bytes=4096, max_pending_messages=128,
-                m5ops="address", timing_backend="gem5",
+                m5ops="address", wait_for_application=False, timing_backend="gem5",
                 gazebo_world="", physics_step_ns=1000000, timing_file="")
 
 
@@ -90,6 +90,8 @@ def load(path):
         raise ValueError("report_seconds must be finite and positive")
     if type(bridge['status_bar']) is not bool or not Path(string(bridge['timing_socket'])).is_absolute():
         raise ValueError("Invalid status_bar or timing_socket")
+    if type(bridge['wait_for_application']) is not bool:
+        raise ValueError("wait_for_application must be boolean")
     if bridge['m5ops'] not in ('address', 'instruction'):
         raise ValueError("m5ops must be address or instruction")
     if bridge['timing_backend'] not in ('gem5', 'gazebo'):

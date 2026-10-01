@@ -81,7 +81,7 @@ colcon --log-base ros/chimaera_ros_ws/log build \
   --base-paths ros/chimaera_ros_ws/src ros/wall_follow_ws/src \
   --build-base ros/chimaera_ros_ws/build \
   --install-base ros/chimaera_ros_ws/install \
-  --cmake-args -DBUILD_TESTING=ON -DBUILD_GAZEBO_BRIDGE=ON
+  --cmake-args -DBUILD_TESTING=ON -DBUILD_GAZEBO_BRIDGE=ON -DCMAKE_BUILD_TYPE=Release
 source ros/chimaera_ros_ws/install/setup.bash
 session="$PWD/ros/wall_follow_ws/src/wall_follow_bridge/config/session.json"
 ros2 run chimaera_ros_bridge chimaera_ros validate "$session"
@@ -285,6 +285,14 @@ and rejects active sessions, foreign-owned files, and non-socket paths. This
 allows retries after forced termination leaves stale sockets behind.
 
 ### Simulated CPU proof of concept
+
+The session enables `wait_for_application`, so the guest bridge waits for the
+robot's scan subscriber and velocity publisher before workbegin. ROS launch and
+application initialization run on KVM; the experiment then switches CPUs and
+starts synchronization. A missing endpoint fails startup instead of silently
+simulating the launcher on a detailed CPU. Use Release builds for the robot and
+bridge. A deployment made before this readiness gate needs to be updated with
+the new bridge, supervisor configuration and application binaries.
 
 Build and **deploy the universal guest runtime** before running the updated config.
 The bridge uses an address-based workbegin marker during KVM boot. Startup

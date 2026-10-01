@@ -41,7 +41,7 @@ class SessionTest(unittest.TestCase):
         self.data['bridge'] = dict(timing_backend='gazebo', gazebo_world='arena',
                                    interval_us=50000, physics_step_ns=1000000,
                                    max_serialized_bytes=131072,
-                                   m5ops='instruction', timing_file='timing.csv')
+                                   m5ops='instruction', wait_for_application=True, timing_file='timing.csv')
         self.data['simulator'] = dict(gem5_root='gem5', config='custom_gem5.py',
                                      args=['--cpu-type', 'o3', '--num-cores', '4',
                                            '--controller-file', '/tmp/controller settings.yaml'])
@@ -53,6 +53,9 @@ class SessionTest(unittest.TestCase):
         self.assertNotIn('m5ops:=instruction', command)
         guest = plan(data, 'guest', '/opt/bridge')['processes'][0]['command']
         self.assertIn('m5ops:=instruction', guest)
+        self.assertIn('wait_for_application:=true', guest)
+        self.assertIn('startup_timeout_s:=300', guest)
+        self.assertNotIn('wait_for_application:=true', command)
         self.assertNotIn('timing_file:=' + str(self.root / 'timing.csv'), guest)
         simulator = host['processes'][-1]['command']
         self.assertIn('--managed-shutdown', simulator)
@@ -66,7 +69,7 @@ class SessionTest(unittest.TestCase):
     def test_invalid_synchronization_and_simulator_configs(self):
         variants = [dict(timing_backend='unknown'), dict(timing_backend='gazebo'),
                     dict(timing_backend='gazebo', gazebo_world='arena', physics_step_ns=3000000),
-                    dict(unknown_bridge_option=True), dict(m5ops='unknown')]
+                    dict(wait_for_application=1), dict(unknown_bridge_option=True), dict(m5ops='unknown')]
         for bridge in variants:
             with self.subTest(bridge=bridge), self.assertRaises(ValueError):
                 self.load(self.data | {'bridge': bridge})

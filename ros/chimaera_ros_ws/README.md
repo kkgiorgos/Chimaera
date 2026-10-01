@@ -22,7 +22,7 @@ source /opt/ros/humble/setup.bash
 colcon --log-base ros/chimaera_ros_ws/log build \
   --base-paths ros/chimaera_ros_ws/src ros/talker_listener_ws/src \
   --build-base ros/chimaera_ros_ws/build \
-  --install-base ros/chimaera_ros_ws/install --cmake-args -DBUILD_TESTING=ON
+  --install-base ros/chimaera_ros_ws/install --cmake-args -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
 source ros/chimaera_ros_ws/install/setup.bash
 session="$PWD/ros/talker_listener_ws/src/talker_listener_bridge/config/session.json"
 ros2 run chimaera_ros_bridge chimaera_ros validate "$session"
@@ -208,7 +208,15 @@ is not transactional and does not remove obsolete application files.
 The image must execute gem5 readfile on boot and permit passwordless root startup
 (or already run readfile as root), because the guest bridge maps m5 memory.
 Bringup passes the generated guest startup path to the selected experiment config,
-boots until workbegin, then the host controls barriers and simulation intervals. Guest
+boots until workbegin, then the host controls barriers and simulation intervals.
+Set `bridge.wait_for_application=true` to hold the guest's workbegin marker until
+all configured local routes have application peers (an application publisher for
+each outgoing route, a subscriber for each incoming route). Both examples enable
+this so ROS launch/imports and DDS discovery finish on the boot CPU before the
+experiment switches to detailed CPUs and resets ROI statistics. This checks topic
+endpoints, not application-internal readiness or completion of every callback.
+Startup is bounded by `startup_timeout_s` and stops on cancellation. The default
+is false for sessions with intentionally optional or later-created routes. Guest
 callbacks run after each poll; host callbacks run at interval boundaries. This does
 not guarantee that arbitrary application callbacks complete within a barrier.
 

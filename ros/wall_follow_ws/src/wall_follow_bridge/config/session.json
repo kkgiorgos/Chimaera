@@ -47,7 +47,8 @@
     "gazebo_world": "wall_arena",
     "physics_step_ns": 1000000,
     "timing_file": "/tmp/wall-follow-session/timing.csv",
-    "m5ops": "instruction"
+    "m5ops": "instruction",
+    "wait_for_application": true
   },
   "simulator": {
     "gem5_root": "../../../../../gem5",
@@ -68,7 +69,8 @@
       "colcon_args": [
         "--cmake-args",
         "-DBUILD_TESTING=ON",
-        "-DBUILD_GAZEBO_BRIDGE=ON"
+        "-DBUILD_GAZEBO_BRIDGE=ON",
+        "-DCMAKE_BUILD_TYPE=Release"
       ]
     }
   ],

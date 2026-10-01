@@ -40,7 +40,8 @@
   "bridge": {
     "interval_us": 100000,
     "poll_us": 10000,
-    "steps": 0
+    "steps": 0,
+    "wait_for_application": true
   },
   "simulator": {
     "gem5_root": "../../../../../gem5",
@@ -60,7 +61,8 @@
       ],
       "colcon_args": [
         "--cmake-args",
-        "-DBUILD_TESTING=ON"
+        "-DBUILD_TESTING=ON",
+        "-DCMAKE_BUILD_TYPE=Release"
       ]
     }
   ],

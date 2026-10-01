@@ -9,6 +9,7 @@
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <set>
+#include <thread>
 #include <chimaera_ros_bridge/config.hpp>
 
 namespace chimaera_ros_bridge
@@ -155,6 +156,37 @@ public:
     }
     return count;
   }
+  bool local_routes_ready() const
+  {
+    for (const auto & subscription : subscriptions_) {
+      if (subscription->get_publisher_count() == 0) { return false; }
+    }
+    for (const auto & publisher : publishers_) {
+      if (publisher.second->get_subscription_count() == 0) { return false; }
+    }
+    return true;
+  }
+
+  void wait_for_local_routes(
+    std::chrono::seconds timeout, const std::function<bool()> & cancelled = {}) const
+  {
+    if (timeout.count() <= 0) {
+      throw std::invalid_argument("application startup timeout must be positive");
+    }
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!local_routes_ready()) {
+      if (cancelled && cancelled()) {
+        throw std::runtime_error("Guest application startup cancelled");
+      }
+      if (std::chrono::steady_clock::now() >= deadline) {
+        throw std::runtime_error("Timed out waiting for guest application ROS endpoints");
+      }
+      // DDS discovers peers independently of the executor. Leave outgoing
+      // messages in bounded ROS queues until the host starts transport polling.
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+  }
+
   std::chrono::steady_clock::time_point last_receive() const { return last_receive_; }
 
   static constexpr std::size_t max_bytes = 4096;

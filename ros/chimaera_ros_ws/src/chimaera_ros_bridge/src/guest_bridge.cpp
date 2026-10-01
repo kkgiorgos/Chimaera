@@ -27,6 +27,13 @@ int main(int argc, char ** argv)
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
+    const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);
+    if (timeout < 1) { throw std::invalid_argument("startup_timeout_s must be positive"); }
+    if (node->declare_parameter<bool>("wait_for_application", false)) {
+      RCLCPP_INFO(node->get_logger(), "Waiting for guest application ROS endpoints before workbegin");
+      node->wait_for_local_routes(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
+      RCLCPP_INFO(node->get_logger(), "Guest application ROS endpoints ready");
+    }
     Mapping mapping;
     const auto ops = node->declare_parameter<std::string>("m5ops", "address");
     if (ops != "address" && ops != "instruction") {

@@ -79,6 +79,9 @@ int main(int argc, char ** argv)
     rejects([&] {Bridge invalid("host", invalid_limits);});
     auto host = std::make_shared<Bridge>("host", options);
     auto guest = std::make_shared<Bridge>("guest", options);
+    require(!guest->local_routes_ready(), "guest was ready before its application existed");
+    rejects([&] {guest->wait_for_local_routes(0s);});
+    rejects([&] {guest->wait_for_local_routes(1s, [] {return true;});});
     auto remapped = options;
     remapped.arguments({"--ros-args", "-r", "/test/host/route1:=/test/host/route0"});
     rejects([&] {Bridge invalid("host", remapped);});
@@ -95,6 +98,16 @@ int main(int argc, char ** argv)
     auto guest_sub = peer->create_subscription<std_msgs::msg::String>(
       "/test/guest/route0", 128,
       [&](std_msgs::msg::String::ConstSharedPtr m) {at_guest.push_back(m->data);});
+    // Two listeners on one route must not hide a missing listener on another.
+    auto extra_sub = peer->create_subscription<std_msgs::msg::String>(
+      "/test/guest/route0", 128, [](std_msgs::msg::String::ConstSharedPtr) {});
+    const auto discovery_deadline = std::chrono::steady_clock::now() + 5s;
+    while (guest->local_listeners() < 2 || guest->local_talkers() < 1) {
+      require(std::chrono::steady_clock::now() < discovery_deadline, "partial discovery timed out");
+      std::this_thread::sleep_for(5ms);
+    }
+    require(!guest->local_routes_ready(), "duplicate peers hid a missing application route");
+    extra_sub.reset();
     auto number_sub = peer->create_subscription<std_msgs::msg::Int32>(
       "/test/guest/number", rclcpp::QoS(7).best_effort(),
       [&](std_msgs::msg::Int32::ConstSharedPtr m) {numbers.push_back(m->data);});
@@ -113,6 +126,8 @@ int main(int argc, char ** argv)
         number_pub->get_subscription_count() == 1 && host_sub->get_publisher_count() == 1 &&
         guest_sub->get_publisher_count() == 1 && number_sub->get_publisher_count() == 1;
     });
+    require(host->local_routes_ready() && guest->local_routes_ready(), "ready routes were rejected");
+    guest->wait_for_local_routes(1s);
     chimaera::Message saved;
     for (const auto & sample : std::vector<std::string>{"", "hello", "γειά σου",
         std::string(Bridge::max_bytes - 9, 'x')})
