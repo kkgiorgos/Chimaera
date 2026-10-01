@@ -105,14 +105,14 @@ python3 scripts/run_gem5_experiments.py \
   --config experiments/timing_extreme_large.json \
   --architecture timing-extreme-poc \
   --gem5-root ../../gem5 --output results/timing-extreme-large \
-  --interval-us 50000 --poll-us 10000 --ratio 1 \
+  --interval-us 50000 --poll-us 10000 \
   --startup-timeout 600 --warmup 0 --keep-going --progress
 
 python3 scripts/run_gem5_experiments.py \
   --config experiments/timing_extreme_tiny.json \
   --architecture timing-extreme-poc \
   --gem5-root ../../gem5 --output results/timing-extreme-tiny \
-  --interval-us 50000 --poll-us 10000 --ratio 1 \
+  --interval-us 50000 --poll-us 10000 \
   --startup-timeout 600 --warmup 0 --keep-going --progress
 ```
 

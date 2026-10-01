@@ -76,6 +76,8 @@ def load_run(path, warmup):
         config['cosimulation'] = {key: arguments[key] for key in
             ('interval_us', 'poll_us', 'ratio', 'physics_step_ns', 'image', 'kernel', 'gem5_root')
             if key in arguments}
+        if 'pacing' in attempt:
+            config['cosimulation']['pacing'] = attempt['pacing']
     timing_error = None
     try:
         timing_metrics = load_metrics(path)

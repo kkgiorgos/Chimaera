@@ -158,12 +158,16 @@ def test_timing_summary_fallback_and_bad_timing_keeps_robot_data(tmp_path):
 
 
 def test_timing_config_separates_pacing_settings(tmp_path):
-    a, b = [create_run(tmp_path/n) for n in ('a','b')]
+    a, b, c = [create_run(tmp_path/n) for n in ('a','b','c')]
     for path, ratio in ((a,1),(b,10)):
         (path/'attempt.json').write_text(json.dumps(dict(status='completed',
             command=['ros2','launch','wall_follow_bridge','bringup.launch.py',f'ratio:={ratio}'])))
         write_timing(path)
-    assert len(load_comparison([a,b],0)[0]) == 2
+    (c/'attempt.json').write_text(json.dumps(dict(status='completed', pacing='none',
+        command=['ros2','launch','wall_follow_bridge','bringup.launch.py'])))
+    write_timing(c)
+    assert load_run(c,0)['config']['cosimulation.pacing'] == 'none'
+    assert len(load_comparison([a,b,c],0)[0]) == 3
 
 
 def test_timing_outputs_for_mixed_runs(tmp_path):

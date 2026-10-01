@@ -105,6 +105,7 @@ def check(binary, config, extra, expected, cancel=False):
                                          'other_wall_seconds', 'pacing_wall_seconds'))
                             assert math.isclose(phases, values['wall_seconds'], abs_tol=1e-8)
                             assert values['other_wall_seconds'] >= .04
+                            assert values['pacing_wall_seconds'] == 0.0
                     thread.join(timeout=2)
                     assert not thread.is_alive(), 'gem5 did not receive QUIT'
                 finally:

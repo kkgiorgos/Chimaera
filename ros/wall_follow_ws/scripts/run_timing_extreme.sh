@@ -91,7 +91,7 @@ run_suite() {
         --config "$workspace/experiments/timing_extreme_${profile}.json" \
         --architecture timing-extreme-poc \
         --gem5-root "$gem5_root" --output "$output/$profile" \
-        --interval-us 50000 --poll-us 10000 --ratio 1 \
+        --interval-us 50000 --poll-us 10000 \
         --startup-timeout 600 --warmup 0 --keep-going --progress --no-plot \
         "${flags[@]}"; then
         status=0

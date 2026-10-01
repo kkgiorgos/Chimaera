@@ -241,7 +241,6 @@ def main():
     parser.add_argument('--kernel', type=Path)
     parser.add_argument('--interval-us', type=int, default=50000)
     parser.add_argument('--poll-us', type=int, default=10000)
-    parser.add_argument('--ratio', type=float, default=1.0, help='Co-simulation pacing target')
     parser.add_argument('--startup-timeout', type=int, default=300)
     parser.add_argument('--resume', action='store_true', help='Skip completed runs; retry failed runs in new attempt directories')
     parser.add_argument('--dry-run', action='store_true', help='Print the validated plan without running or writing anything')
@@ -264,14 +263,14 @@ def main():
                 raise ValueError('--gem5 and --host-only are mutually exclusive')
             if not 0 < args.poll_us < args.interval_us <= 3600000000:
                 raise ValueError('require 0 < poll-us < interval-us <= 3600000000')
-            if not math.isfinite(args.ratio) or args.ratio <= 0 or args.startup_timeout <= 0:
-                raise ValueError('ratio and startup-timeout must be positive and finite')
+            if args.startup_timeout <= 0:
+                raise ValueError('startup-timeout must be positive')
             root = args.gem5_root.expanduser().resolve()
             image = (args.image or root/'resources/x86-ubuntu-22.04-ros-humble.img').expanduser().resolve()
             kernel = (args.kernel or root/'resources/x86-linux-kernel-5.15.180').expanduser().resolve()
             plan['gem5'] = dict(gem5_root=str(root), image=str(image), kernel=str(kernel),
                                 interval_us=args.interval_us, poll_us=args.poll_us,
-                                ratio=args.ratio, startup_timeout_s=args.startup_timeout)
+                                pacing='none', startup_timeout_s=args.startup_timeout)
             for run in plan['runs']:
                 ns = run['parameters']['physics_step'] * 1e9
                 if round(ns) < 1 or not math.isclose(ns, round(ns), rel_tol=0, abs_tol=1e-6) or args.interval_us * 1000 % round(ns):
@@ -333,13 +332,15 @@ def main():
                            output_dir=str(directory), duration=params['duration'], gui=params['gui'], wall_timeout=params['wall_timeout'])
         if args.gem5:
             launch_args.update({k: params[k] for k in HARDWARE_DEFAULTS})
-            launch_args.update(plan['gem5'], outdir=str(directory/'gem5'),
+            launch_args.update({k: v for k, v in plan['gem5'].items() if k != 'pacing'}, outdir=str(directory/'gem5'),
                                timing_socket=str(Path('/tmp/chimaera_time.sock')),
                                physics_step_ns=round(params['physics_step'] * 1e9), status_bar=False)
         command = ['ros2','launch','wall_follow_bridge' if args.gem5 else 'wall_follow_benchmark',
                    'bringup.launch.py' if args.gem5 else 'host.launch.py' if args.host_only else 'benchmark.launch.py'] + [
             f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in launch_args.items()]
         record = dict(command=command, started_unix=time.time(), status='running')
+        if args.gem5:
+            record['pacing'] = plan['gem5']['pacing']
         status_file = directory/'attempt.json'
         status_file.write_text(json.dumps(record, indent=2))
         print(f"[{index}/{len(plan['runs'])}] {run['id']} -> {directory}", flush=True)

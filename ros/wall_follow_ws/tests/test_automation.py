@@ -138,13 +138,15 @@ if sys.argv[2] == 'wall_follow_bridge':
         assert record['command'][2:4] == ['wall_follow_bridge', 'bringup.launch.py']
         assert 'physics_step_ns:=1000000' in record['command']
         assert 'cpu_type:=timing' in record['command']
+        assert not any(arg.startswith('ratio:=') for arg in record['command'])
+        assert record['pacing'] == 'none'
         assert record['gem5_stats']['ipc'] == .5
         assert record['timing']['cosim_realtime_factor'] == 1
         assert record['timing']['gem5_phase_realtime_factor'] == 5
     assert len({next(a for a in r['command'] if a.startswith('outdir:=')) for r in records}) == 4
     subprocess.run(command+['--resume'], env=env, check=True, capture_output=True)
     assert len(list(output.rglob('attempt.json'))) == 4
-    assert subprocess.run(command+['--resume', '--ratio', '2'], env=env, capture_output=True).returncode != 0
+    assert subprocess.run(command+['--resume', '--interval-us', '100000'], env=env, capture_output=True).returncode != 0
 
 
 def test_gem5_requires_timing(suite, tmp_path):

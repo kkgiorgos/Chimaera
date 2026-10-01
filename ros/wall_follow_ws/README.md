@@ -200,9 +200,11 @@ waits for world statistics confirming both the exact iteration count and
 simulation time. A control-service acknowledgement alone is not completion.
 The next interval carries the resulting scans and clock to the guest. This is
 sequential, explicit coupling with boundary latency, not continuous execution.
-The existing gem5 tick-drift compensation and wall-clock pacing are retained.
+The existing gem5 tick-drift compensation is retained. Co-simulation has no
+wall-clock pacing: the next interval starts after both simulators and callback
+settling complete.
 
-Defaults are `interval_us:=50000`, `poll_us:=10000`, `ratio:=1.0`,
+Defaults are `interval_us:=50000`, `poll_us:=10000`,
 `physics_step_ns:=1000000`, and `gazebo_world:=wall_arena`.
 The interval must be an exact multiple of the world's physics step; set
 `physics_step_ns` to match the SDF. Mismatched step sizes, unpaused startup,
@@ -249,7 +251,7 @@ normal benchmark data. The image is used through gem5's copy-on-write disk;
 controller sweeps do not edit the base image. The deployed guest startup script
 must support `CHIMAERA_ROBOT_CONFIG` (as the supplied script does).
 
-`--interval-us` (50000), `--poll-us` (10000), `--ratio` (1), and
+`--interval-us` (50000), `--poll-us` (10000), and
 `--startup-timeout` (300 seconds) control synchronization. The interval must be
 an exact multiple of every swept `physics_step`. Set `wall_timeout` in the suite
 configuration high enough to cover guest boot plus the entire run. Runs remain
@@ -354,9 +356,9 @@ synchronization interval, using a monotonic host clock:
 | `gem5_sim_seconds` | Actual gem5 tick advance, including drift compensation |
 | `gem5_wall_seconds` | Host gem5 step call, including transport and callback polling |
 | `gazebo_wall_seconds` | World-control request through confirmed physics completion statistics |
-| `other_wall_seconds` | Remaining active step time, including both callback settling periods |
-| `pacing_wall_seconds` | Pacer, status updates and callback work after stepping |
-| `wall_seconds` | Entire interval including pacing |
+| `other_wall_seconds` | Remaining step time, including callback settling and status/executor work |
+| `pacing_wall_seconds` | Zero in new runs; retained for reading historical paced runs |
+| `wall_seconds` | Entire interval without deliberate wall-clock pacing |
 | `elapsed_wall_seconds` | Wall time since both simulators became ready |
 | `startup_wall_seconds` | Waiting for guest readiness and initial Gazebo statistics |
 
@@ -365,9 +367,10 @@ The suite aggregates these into `timing_summary.json` and `attempt.json`.
 0.1 means ten wall seconds per simulated second. The corresponding
 `*_wall_seconds_per_sim_second` fields report the slowdown directly. `gem5_phase_realtime_factor`
 and `gazebo_phase_realtime_factor` divide each simulator's progress by its phase
-wall time. `unpaced_realtime_factor` excludes the pacing phase. These are ratios
-of totals, not averages of per-step rates. For throughput experiments increase
-`--ratio` above expected throughput to avoid the default 1x pacing cap.
+wall time. `unpaced_realtime_factor` excludes the historical pacing phase and
+equals the whole-interval rate for new runs. These are ratios of totals, not
+averages of per-step rates. The suite no longer accepts `--ratio`; all new
+co-simulation runs advance without a wall-clock rate cap.
 
 Startup is reported separately. Completed timing intervals include pre-collection
 warmup and may extend beyond the collector's measurement window. Failed/incomplete
@@ -543,8 +546,8 @@ Timing statistics cover all recorded complete synchronization intervals; the
 comparison's `--warmup` and signal time filters do not crop them. Startup remains
 separate. Rates are computed from totals within each run, then aggregated with
 equal weight across repetitions; `n` counts only runs recording that metric.
-Recorded co-simulation pacing and interval settings are included in configuration
-grouping so different timing setups are not pooled.
+Recorded co-simulation pacing policy and interval settings are included in
+configuration grouping so new unpaced runs and historical paced runs are not pooled.
 Runs with different measurement provenance are not pooled.
 Repetitions have equal weight; bands are sample standard deviations, not
 confidence intervals.
