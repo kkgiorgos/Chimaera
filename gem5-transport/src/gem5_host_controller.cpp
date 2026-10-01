@@ -44,16 +44,16 @@ struct Gem5HostController::Impl {
                 control::send(transport, control::encode_startup(ready ? poll : Duration{}));
                 if (ready) break;
             }
-            control::OutgoingQueue detached;
             while (true) {
                 auto request = control::decode(control::receive(transport));
+                control::Batch outgoing_batch;
                 {
                     std::lock_guard lock(mutex);
                     incoming.append(std::move(request));
-                    outgoing.swap(detached);
+                    outgoing_batch = outgoing.drain();
                 }
                 // Assemble the outgoing packet outside the mutex.
-                const auto reply = control::encode(detached.drain());
+                const auto reply = control::encode(outgoing_batch);
                 // A paused guest may be between either pair of transport ops.
                 // Leave this exchange pending until gem5 resumes; never join it
                 // at an interval boundary.

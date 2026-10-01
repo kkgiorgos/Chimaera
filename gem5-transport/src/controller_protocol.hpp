@@ -102,11 +102,6 @@ public:
         bytes_ = count + data.size();
         entries_.push_back({std::move(data), std::move(owned_key)});
     }
-    // Exchange ownership under the host mutex; drain the detached queue outside.
-    void swap(OutgoingQueue& other) noexcept {
-        entries_.swap(other.entries_);
-        std::swap(bytes_, other.bytes_);
-    }
     Batch drain() {
         Batch batch;
         batch.reserve(entries_.size());

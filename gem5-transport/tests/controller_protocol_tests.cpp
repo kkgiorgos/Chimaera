@@ -130,15 +130,6 @@ int main() {
         received.append({frame('c', 2, control::max_bytes)});
         expect(received.take()->size() == control::max_bytes, "drain did not reset byte accounting");
 
-        // Both sides of a queue swap retain independent coalescing/accounting.
-        control::OutgoingQueue detached;
-        queue.submit(frame('c', 1), "clock");
-        queue.swap(detached);
-        queue.submit(frame('c', 2), "clock");
-        expect(detached.drain() == control::Batch{frame('c', 1)}, "swap lost detached update");
-        queue.swap(detached);
-        expect(detached.drain() == control::Batch{frame('c', 2)}, "swap lost new pending update");
-        expect(queue.drain().empty(), "swap left messages in pending queue");
         std::cout << "Batch framing, startup, coalescing and queue limits passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

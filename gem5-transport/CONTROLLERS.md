@@ -154,7 +154,8 @@ The host protects pending incoming and outgoing queues with one mutex. The
 worker appends decoded batches using the same receive queue and limits as the
 guest. At each completed step, the application detaches the pending incoming
 messages under the mutex and appends them to its ready queue outside it. The
-worker similarly detaches outgoing data before assembling and sending packets.
+worker drains the outgoing queue under the mutex, then assembles and sends the
+resulting batch outside it. There is no second outgoing queue for the worker.
 Receive storage grows on demand; the host keeps no preallocated snapshot buffer.
 These operations move payload buffers without copying their bytes. The receive
 cursor avoids shifting every remaining descriptor on each `take()` and reclaims

@@ -113,7 +113,7 @@ int main() {
                     const auto reply = exchange(g2h, h2g, step == 1 ? control::Batch{first, {}}
                                                                               : control::Batch{second});
                     expect(reply == (step == 1 ? control::Batch{second, {}} : control::Batch{first}));
-                    // Another poll must not resend detached data or configuration.
+                    // Another poll must not resend drained data or configuration.
                     expect(exchange(g2h, h2g).empty());
                 }
                 const auto ticks = std::stoull(command.substr(11));
@@ -126,7 +126,7 @@ int main() {
         expect(host.step(Duration(10)).ok());
         expect(!host.take()); // Startup spans the first pause, with no application data.
         expect(host.step(Duration(10)).ok());
-        // The shared outgoing queue accepts fresh data after a detached drain.
+        // The shared outgoing queue accepts fresh data after a drain.
         host.submit(first, "state");
         // Unconsumed data survives the next step and retains order.
         expect(host.step(Duration(10)).ok());
