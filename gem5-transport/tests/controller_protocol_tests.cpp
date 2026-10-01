@@ -120,6 +120,15 @@ int main() {
         expect(received.take()->size() == control::max_bytes, "byte overflow changed queue");
         received.append({{}});
         expect(received.take() == Message{}, "byte count did not reset after take");
+        received.append({frame('s', 1), frame('s', 2), {}});
+        received.take();
+        expect(received.drain() == control::Batch({frame('s', 2), {}}),
+               "drain returned consumed messages or changed FIFO");
+        expect(!received.take() && received.drain().empty(), "drain left stale entries");
+        received.append({frame('c', 1, control::max_bytes)});
+        received.drain();
+        received.append({frame('c', 2, control::max_bytes)});
+        expect(received.take()->size() == control::max_bytes, "drain did not reset byte accounting");
 
         // Both sides of a queue swap retain independent coalescing/accounting.
         control::OutgoingQueue detached;

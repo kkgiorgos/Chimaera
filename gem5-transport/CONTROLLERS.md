@@ -150,12 +150,18 @@ also hold a detached batch in flight; these limits are not one global memory cap
 Submitted data leaves the queue when a packet is prepared. Failure afterward
 does not requeue it automatically.
 
-The host swaps outgoing queues and incoming snapshots under a mutex, then
-assembles packets and merges received data outside it. Preallocated incoming
-descriptors avoid allocation while publishing under the mutex. Payload buffers
-move without copying their bytes. The receive cursor avoids shifting every
-remaining descriptor on each `take()` and reclaims consumed slots on append.
-These choices keep the worker from delaying the application at a boundary.
+The host protects pending incoming and outgoing queues with one mutex. The
+worker appends decoded batches using the same receive queue and limits as the
+guest. At each completed step, the application detaches the pending incoming
+messages under the mutex and appends them to its ready queue outside it. The
+worker similarly detaches outgoing data before assembling and sending packets.
+Receive storage grows on demand; the host keeps no preallocated snapshot buffer.
+These operations move payload buffers without copying their bytes. The receive
+cursor avoids shifting every remaining descriptor on each `take()` and reclaims
+consumed slots on append.
+Public controller calls remain serialized by the application; the mutex only
+coordinates the application with the internal I/O worker. Host queue allocation
+can add wall-clock overhead but does not add modeled guest instructions.
 
 ## Timing and the two clocks
 

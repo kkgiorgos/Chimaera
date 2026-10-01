@@ -66,6 +66,12 @@ public:
         }
         return message;
     }
+    Batch drain() {
+        messages_.erase(messages_.begin(), messages_.begin() + next_);
+        next_ = 0;
+        bytes_ = 0;
+        return std::exchange(messages_, Batch{});
+    }
 };
 // Keys are local queue metadata and never enter the wire protocol.
 class OutgoingQueue {
