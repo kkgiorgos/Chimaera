@@ -9,8 +9,7 @@ from .analysis import summarize, run_label, derive_metrics
 from .gem5_stats import load_metrics as load_gem5_metrics, METRICS as GEM5_METRICS
 from .timing import load_metrics, METRICS as TIMING_METRICS, SCOPE as TIMING_SCOPE
 
-SERIES = ('elapsed', 'gt_error', 'x', 'y', 'compute_ms', 'scan_age', 'dt_wall', 'path_m',
-          'host_scan_age')
+SERIES = ('elapsed', 'gt_error', 'x', 'y', 'path_m')
 
 
 def clean(value):
@@ -39,8 +38,8 @@ def flatten(value, prefix=''):
 def load_run(path, warmup):
     path = Path(path)
     metadata = json.loads((path/'metadata.json').read_text())
-    if metadata.get('schema_version') not in (2, 3):
-        raise ValueError('Unsupported results schema: expected version 2 or 3 raw data')
+    if metadata.get('schema_version') != 3:
+        raise ValueError('Unsupported results schema: expected version 3 host observations')
     experiment_file = path/'experiment.json'
     experiment = json.loads(experiment_file.read_text()) if experiment_file.exists() else {}
     with (path/'samples.csv').open(newline='') as f:
@@ -48,36 +47,22 @@ def load_run(path, warmup):
     if len(rows)<2:
         raise ValueError('requires at least two samples')
     times = [float(row['elapsed']) for row in rows]
-    observed = metadata.get('schema_version') == 3
     if (any(not math.isfinite(t) for t in times)
-            or any(b < a or (b == a and not observed) for a,b in zip(times,times[1:]))
+            or any(b < a for a,b in zip(times,times[1:]))
             or times[-1] <= times[0]):
-        raise ValueError('elapsed times must be finite and increasing (equal receipt times allowed in v3)')
+        raise ValueError('elapsed times must be finite and increasing (equal receipt times allowed)')
     arena = experiment.get('arena', dict(arena_width=12., arena_height=8.))
     with (path/'poses.csv').open(newline='') as f:
         derive_metrics(rows, list(csv.DictReader(f)), arena)
+    sweep = experiment.pop('sweep', {})
     config = {**experiment, 'controller':metadata.get('parameters', {}), 'arena':arena,
               'duration':metadata.get('duration')}
-    # Presentation-only source changes do not split otherwise identical experiments.
-    provenance = {k:metadata[k] for k in ('platform','machine','ros_distro','implementation','compiler') if k in metadata}
-    provenance['source_sha256'] = {k:v for k,v in metadata.get('source_sha256', {}).items()
-                                  if k in ('core.hpp','controller.cpp','controller.hpp','parameters.hpp')}
-    provenance.update(schema_version=metadata['schema_version'],
-                      observation=metadata.get('observation', 'in_process'))
-    if observed:
-        provenance['robot_source_sha256'] = metadata.get('provenance', {})
-        provenance['host_source_sha256'] = metadata.get('host_source_sha256', {})
-        provenance['host'] = metadata.get('host', {})
+    provenance = flatten(dict(robot_source=metadata.get('provenance', {}),
+                              host_source=metadata.get('host_source_sha256', {}),
+                              host=metadata.get('host', {})))
     events = metadata.get('parameter_events', [])
     attempt_file = path/'attempt.json'
     attempt = json.loads(attempt_file.read_text()) if attempt_file.exists() else None
-    if attempt and 'wall_follow_bridge' in attempt.get('command', []):
-        arguments = dict(arg.split(':=', 1) for arg in attempt['command'] if ':=' in arg)
-        config['cosimulation'] = {key: arguments[key] for key in
-            ('interval_us', 'poll_us', 'ratio', 'physics_step_ns', 'image', 'kernel', 'gem5_root')
-            if key in arguments}
-        if 'pacing' in attempt:
-            config['cosimulation']['pacing'] = attempt['pacing']
     timing_error = None
     try:
         timing_metrics = load_metrics(path)
@@ -96,10 +81,16 @@ def load_run(path, warmup):
     # Preserve every raw record for statistics. For plotting, the final command at a
     # repeated clock timestamp is the command held over the following interval.
     series_rows = list({float(row['elapsed']): row for row in rows}.values())
+    task_metrics = summarize(rows,warmup)
+    task_note = None
+    if times[-1] <= warmup:
+        task_note = f'Warmup ({warmup:g}s) excludes the recorded task window ({times[-1]:g}s). Reduce --warmup.'
+    elif task_metrics['rmse_m'] is None:
+        task_note = 'No fresh ground-truth poses in the task window; tracking error is unavailable.'
     return dict(name=run_label(path), path=str(path.resolve()), completed=completed,
-                config=flatten(config), provenance=flatten(provenance), events=events, arena=arena,
+                config=flatten(config), sweep=sweep, provenance=provenance, events=events, arena=arena,
                 final_parameters=metadata.get('final_parameters', {}),
-                metrics={**summarize(rows,warmup,metadata.get('observation')), **timing_metrics, **gem5_metrics},
+                task_note=task_note, metrics={**task_metrics, **timing_metrics, **gem5_metrics},
                 timing_error=timing_error, gem5_error=gem5_error,
                 sample_count=len(rows), series={key:np.array([float(r.get(key,'nan')) for r in series_rows]) for key in SERIES})
 
@@ -112,9 +103,9 @@ def identity(run):
 def metric_statistics(values):
     valid = np.asarray([v for v in values if v is not None and math.isfinite(v)],dtype=float)
     if not len(valid):
-        return dict(mean=None,std=None,median=None,min=None,max=None,n=0)
+        return dict(mean=None,std=None,n=0)
     return dict(mean=float(valid.mean()), std=float(valid.std(ddof=1)) if len(valid)>1 else None,
-                median=float(np.median(valid)),min=float(valid.min()),max=float(valid.max()),n=len(valid))
+                n=len(valid))
 
 
 def aggregate_series(runs, max_points):
@@ -150,20 +141,30 @@ def aggregate_runs(runs, max_points=1500):
         group_id = hashlib.sha256(signature.encode()).hexdigest()[:12]
         config = first['config']
         width,height = first['arena']['arena_width'],first['arena']['arena_height']
-        name = f"{config.get('architecture','unknown')} · {config.get('controller.control_hz','?')} Hz · {width:g}×{height:g} m · {group_id[:6]}"
+        name = f"{config.get('architecture','unknown')} · {config.get('controller.control_hz','?')} Hz · {width:g}×{height:g} m"
         stats = {key:metric_statistics([r['metrics'].get(key) for r in members]) for key in first['metrics']}
         means,stds,counts,interval = aggregate_series(members,max_points)
         groups.append(clean(dict(id=group_id,name=name,count=len(members),path='\n'.join(r['path'] for r in members),
-            completed=first['completed'],config=config,provenance=first['provenance'],events=first['events'],
+            completed=first['completed'],config=config,sweep=next((r['sweep'] for r in members if r.get('sweep')), {}),provenance=first['provenance'],events=first['events'],
             final_parameters=first['final_parameters'],arena=first['arena'],
             sample_count=sum(r['sample_count'] for r in members),
+            task_notes=sorted({r['task_note'] for r in members if r['task_note']}),
             metrics={k:v['mean'] for k,v in stats.items()},metric_stats=stats,
             series=means,series_std=stds,series_n=counts,interval=interval,
-            members=[{k:r[k] for k in ('name','path','metrics','sample_count','completed')} for r in members])))
+            members=[{k:r[k] for k in ('name','path','metrics','sample_count','completed','task_note')} for r in members])))
+    # Labels describe the actual varying settings, across configurations.
+    varying = [k for k in sorted({k for g in groups for k in g['config']})
+               if k != 'architecture' and not k.startswith('source_sha256.')
+               and len({json.dumps(g['config'].get(k), sort_keys=True) for g in groups}) > 1]
+    for g in groups:
+        parts = [str(g['config'].get('architecture', 'unknown'))]
+        parts.extend(f"{k.removeprefix('hardware.').removeprefix('controller.').removeprefix('sensor.')}={g['config'].get(k, 'unknown')}"
+                     for k in varying)
+        g['name'] = ' · '.join(parts)
     return groups
 
 
-def load_comparison(paths, warmup=5., max_points=1500):
+def load_comparison(paths, warmup=0., max_points=1500):
     if not math.isfinite(warmup) or warmup<0 or max_points<2:
         raise ValueError('warmup must be finite and nonnegative; max_points must be at least 2')
     runs, errors = [], []
@@ -200,14 +201,3 @@ def write_summaries(groups, output):
     (output/'per_run_summary.json').write_text(json.dumps(
         [dict(group_id=g['id'],timing_scope=TIMING_SCOPE,**member) for g in groups for member in g['members']],indent=2,allow_nan=False))
     return records
-
-
-def configuration_rows(groups):
-    records = [{**g['config'], **{'provenance.'+k:v for k,v in g['provenance'].items()},
-                'runtime.parameter_events':g['events'], 'runtime.completed':g['completed']} for g in groups]
-    rows = []
-    for key in sorted({key for record in records for key in record}):
-        values = [record.get(key) for record in records]
-        differs = len({json.dumps(v,sort_keys=True) for v in values})>1
-        rows.append(dict(setting=key,differs=differs,**{g['id']:v for g,v in zip(groups,values)}))
-    return rows

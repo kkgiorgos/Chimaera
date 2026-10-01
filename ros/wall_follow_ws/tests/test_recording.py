@@ -24,17 +24,12 @@ def test_host_recording_keeps_only_measured_data(tmp_path):
     assert run['sample_count'] == 4
     assert len(run['series']['elapsed']) == 3
     assert run['metrics']['rmse_m'] == pytest.approx(0., abs=1e-10)
-    for key in ('compute_p95_ms', 'scan_age_p95_s', 'stale_fraction',
-                'actual_control_hz_sim'):
-        assert run['metrics'][key] is None
-    assert run['metrics']['host_scan_age_p95_s'] == pytest.approx(.02)
     rows = list(csv.DictReader((tmp_path/'samples.csv').open()))
     assert not any(key.startswith('reference_') for key in rows[0])
     assert not {'compute_ms', 'scan_age', 'state', 'estimated_distance', 'heading', 'front_clearance'} & rows[0].keys()
     assert float(rows[0]['host_scan_stamp']) == pytest.approx(.98)
-    assert run['metrics']['command_rate_observed_hz_sim'] == pytest.approx(3.)
     groups, errors = load_comparison([tmp_path], 0.)
-    assert not errors and groups[0]['metric_stats']['compute_p95_ms']['n'] == 0
+    assert not errors and groups[0]['metric_stats']['rmse_m']['n'] == 1
     assert not {'cpu_seconds', 'rss_kib'} & rows[0].keys()
     metadata = json.loads((tmp_path/'metadata.json').read_text())
     assert not {'robot_pid', 'resource_scope'} & metadata.keys()

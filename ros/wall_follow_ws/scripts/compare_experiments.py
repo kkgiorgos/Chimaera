@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Discover completed runs in one or more copied suites and generate comparison plots."""
+"""Discover completed runs in one or more copied suites and generate a dashboard and summaries."""
 import argparse
 import json
 import math
 from pathlib import Path
 import sys
 
-from run_experiments import WORKSPACE, eligible
+from run_experiments import eligible
 
 
 def discover(roots, include_incomplete=False):
@@ -28,11 +28,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('roots', nargs='+', type=Path, help='Suite directories or individual run directories')
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--warmup', type=float, default=5.)
-    parser.add_argument('--include-incomplete', action='store_true', help='Also plot partial runs for diagnosis')
+    parser.add_argument('--warmup', type=float, default=0.)
+    parser.add_argument('--max-points', type=int, default=1500, help='Maximum points per aggregate trace')
+    parser.add_argument('--include-incomplete', action='store_true', help='Include partial attempts for diagnosis')
     args = parser.parse_args()
-    if not math.isfinite(args.warmup) or args.warmup < 0:
-        parser.error('warmup must be finite and nonnegative')
+    if not math.isfinite(args.warmup) or args.warmup < 0 or args.max_points < 2:
+        parser.error('warmup must be finite and nonnegative; max-points must be at least 2')
     try:
         runs = discover([r.expanduser() for r in args.roots], args.include_incomplete)
     except ValueError as exc:
@@ -41,13 +42,10 @@ def main():
         parser.error('No eligible runs found')
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output/'included_runs.json').write_text(json.dumps([str(r) for r in runs], indent=2))
-    # Source-local plotting also works on copied results without a sourced ROS installation.
-    sys.path.insert(0, str(WORKSPACE/'benchmarking'))
-    from wall_follow_benchmark.plot import main as plot
-    sys.argv = ['plot', *map(str, runs), '--output', str(args.output), '--warmup', str(args.warmup)]
-    plot()
     from build_dashboard import build_dashboard
-    build_dashboard(runs, args.output/'dashboard.html', warmup=args.warmup)
+    from wall_follow_benchmark.comparison import write_summaries
+    payload = build_dashboard(runs, args.output/'dashboard.html', warmup=args.warmup, max_points=args.max_points)
+    write_summaries(payload['runs'], args.output)
     return 0
 
 

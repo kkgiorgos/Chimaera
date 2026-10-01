@@ -1,0 +1,12 @@
+{
+  "repetitions": 3,
+  "fixed": {"duration": 120.0, "wall_timeout": 7200.0},
+  "sweep": {
+    "l1": [
+      {"l1i_size": "8KiB", "l1d_size": "8KiB"},
+      {"l1i_size": "16KiB", "l1d_size": "16KiB"},
+      {"l1i_size": "32KiB", "l1d_size": "32KiB"}
+    ],
+    "l2_size": ["128KiB", "256KiB", "1MiB"]
+  }
+}

@@ -41,7 +41,7 @@ int main(int argc, char ** argv)
       if (!parent.empty()) { std::filesystem::create_directories(parent); }
       timing_log.open(timing_file);
       if (!timing_log) { throw std::runtime_error("Cannot open timing_file: " + timing_file); }
-      timing_log << "step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,pacing_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n";
+      timing_log << "step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n";
       timing_log << std::setprecision(17);
     }
     using Clock = std::chrono::steady_clock;
@@ -138,7 +138,6 @@ int main(int argc, char ** argv)
                      << (timing.elapsed_ticks() - ticks_before) / 1e12 << ','
                      << timing.gem5_wall_seconds << ',' << timing.gazebo_wall_seconds << ','
                      << std::max(0.0, active - timing.gem5_wall_seconds - timing.gazebo_wall_seconds) << ','
-                     << 0.0 << ','
                      << std::chrono::duration<double>(end - step_begin).count() << ','
                      << std::chrono::duration<double>(end - run_begin).count() << ','
                      << startup_seconds << '\n';

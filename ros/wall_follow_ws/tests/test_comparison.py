@@ -14,17 +14,17 @@ from build_dashboard import build_dashboard
 
 def create_run(path, error=1., rate=20., times=(0.,1.,2.,3.), events=None, missing=False, architecture='test-cpu'):
     path.mkdir(parents=True)
-    metadata=dict(schema_version=2,implementation='cpp',parameters=dict(control_hz=rate,target_distance=.8),duration=4.,completed=True,
+    metadata=dict(schema_version=3,implementation='cpp',parameters=dict(control_hz=rate,target_distance=.8),duration=4.,completed=True,
                   parameter_events=events or [],
-                  compiler='test',source_sha256={'core.hpp':'same-core','controller.cpp':'same-node'})
+                  host={'machine':'test'},provenance={'core.hpp':'same-core','controller.cpp':'same-node'})
     (path/'metadata.json').write_text(json.dumps(metadata))
     (path/'experiment.json').write_text(json.dumps(dict(architecture=architecture,gui=False,sensor=dict(lidar_hz=20.))))
     rows=[]
     for t in times:
         rows.append(dict(elapsed=t,sim_time=t,pose_stamp=float('nan') if missing else t,
                          target_distance=.8,wall_elapsed=t,
-                         compute_ms=1.+error,scan_age=.01,dt_sim=1.,dt_wall=1.,
-                         state='tracking',linear_cmd=.3,x=0.,y=4.-(.8+error)))
+                         dt_sim=1.,dt_wall=1.,
+                         linear_cmd=.3,x=0.,y=4.-(.8+error)))
     with (path/'samples.csv').open('w') as f:
         writer=csv.DictWriter(f,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
     with (path/'poses.csv').open('w') as f:
@@ -52,7 +52,7 @@ def test_grouping_config_provenance_and_runtime_changes(tmp_path):
           create_run(tmp_path/'d',architecture='other-cpu')]
     groups,_=load_comparison(runs,0)
     assert len(groups)==4
-    meta=json.loads((runs[0]/'metadata.json').read_text());meta['source_sha256']['core.hpp']='new'
+    meta=json.loads((runs[0]/'metadata.json').read_text());meta['provenance']['core.hpp']='new'
     e=create_run(tmp_path/'e');(e/'metadata.json').write_text(json.dumps(meta))
     assert len(load_comparison([runs[0],e],0)[0])==2
 
@@ -62,7 +62,7 @@ def test_missing_metrics_and_singleton_uncertainty(tmp_path):
     b=create_run(tmp_path/'b',error=2)
     g=load_comparison([a,b],0)[0][0]
     assert g['count']==2
-    assert g['metric_stats']['rmse_m']==pytest.approx(dict(mean=2.,std=None,median=2.,min=2.,max=2.,n=1))
+    assert g['metric_stats']['rmse_m']==pytest.approx(dict(mean=2.,std=None,n=1))
     assert g['series_n']['gt_error']==[1]*4
     assert g['series_std']['gt_error']==[None]*4
     assert metric_statistics([None,float('nan')])['n']==0
@@ -123,10 +123,10 @@ def test_unsupported_schema_is_rejected(tmp_path):
 
 def write_timing(path, scale=1.):
     header = ('sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,'
-              'other_wall_seconds,pacing_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n')
+              'other_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n')
     (path/'timing.csv').write_text(header +
-        f'1,1,{scale},2,1,1,{scale+4},{scale+4},10\n' +
-        f'2,2,{2*scale},4,2,2,{2*scale+8},{3*scale+12},10\n')
+        f'1,1,{scale},2,1,{scale+3},{scale+3},10\n' +
+        f'2,2,{2*scale},4,2,{2*scale+6},{3*scale+9},10\n')
 
 
 def test_timing_equal_run_weight_missing_and_warmup(tmp_path):
@@ -139,17 +139,14 @@ def test_timing_equal_run_weight_missing_and_warmup(tmp_path):
     assert stats['timing_gem5_phase_realtime_factor']['mean'] == pytest.approx((1+1/3)/2)
     assert stats['timing_gem5_phase_realtime_factor']['n'] == 2
     assert stats['timing_gem5_phase_realtime_factor']['std'] == pytest.approx(np.std([1,1/3],ddof=1))
-    assert stats['timing_sim_seconds']['mean'] == 3  # Warmup does not crop timing intervals.
+    assert stats['timing_gem5_wall_seconds']['mean'] == 6  # Warmup does not crop timing intervals.
     assert stats['timing_startup_wall_seconds']['mean'] == 10
     assert groups[0]['count'] == 3
 
 
-def test_timing_summary_fallback_and_bad_timing_keeps_robot_data(tmp_path):
+def test_bad_timing_keeps_robot_data(tmp_path):
     a, b = [create_run(tmp_path/n) for n in ('a','b')]
-    (a/'timing_summary.json').write_text(json.dumps(dict(schema_version=1,
-        sim_seconds=2, gem5_sim_seconds=2, gem5_wall_seconds=4, elapsed_wall_seconds=10,
-        cosim_realtime_factor=.2)))
-    assert load_run(a,0)['metrics']['timing_cosim_wall_seconds_per_sim_second'] == 5
+    write_timing(a)
     (b/'timing.csv').write_text('sim_seconds\nnan\n')
     groups, errors = load_comparison([a,b],0)
     assert len(errors) == 1 and 'timing unavailable' in errors[0]
@@ -157,35 +154,29 @@ def test_timing_summary_fallback_and_bad_timing_keeps_robot_data(tmp_path):
     assert groups[0]['metric_stats']['timing_cosim_realtime_factor']['n'] == 1
 
 
-def test_timing_config_separates_pacing_settings(tmp_path):
-    a, b, c = [create_run(tmp_path/n) for n in ('a','b','c')]
-    for path, ratio in ((a,1),(b,10)):
-        (path/'attempt.json').write_text(json.dumps(dict(status='completed',
-            command=['ros2','launch','wall_follow_bridge','bringup.launch.py',f'ratio:={ratio}'])))
-        write_timing(path)
-    (c/'attempt.json').write_text(json.dumps(dict(status='completed', pacing='none',
-        command=['ros2','launch','wall_follow_bridge','bringup.launch.py'])))
-    write_timing(c)
-    assert load_run(c,0)['config']['cosimulation.pacing'] == 'none'
-    assert len(load_comparison([a,b,c],0)[0]) == 3
+def test_timing_config_separates_synchronization_settings(tmp_path):
+    runs = [create_run(tmp_path/n) for n in ('a','b')]
+    for run, interval in zip(runs, (50000, 100000)):
+        experiment=json.loads((run/'experiment.json').read_text())
+        experiment['cosimulation'] = dict(interval_us=interval, poll_us=10000)
+        (run/'experiment.json').write_text(json.dumps(experiment))
+        write_timing(run)
+    assert len(load_comparison(runs,0)[0]) == 2
 
 
 def test_timing_outputs_for_mixed_runs(tmp_path):
     from wall_follow_benchmark.comparison import write_summaries
-    from wall_follow_benchmark.plot import timing_plot
     a = create_run(tmp_path/'gem5', architecture='gem5')
     b = create_run(tmp_path/'local', architecture='desktop')
     write_timing(a)
     output = tmp_path/'comparison'
     payload = build_dashboard([a,b], output/'dashboard.html',0)
     write_summaries(payload['runs'],output)
-    timing_plot(payload['runs'],output)
-    assert (output/'timing.png').stat().st_size > 1000
     with (output/'summary.csv').open() as stream:
         rows = list(csv.DictReader(stream))
     assert 'timing_cosim_realtime_factor_mean' in rows[0]
     assert sorted(int(row['timing_cosim_realtime_factor_n']) for row in rows) == [0,1]
-    assert ['timing_cosim_realtime_factor','Overall co-simulation rate (sim s / wall s)'] in payload['timing_metrics']
+    assert ('timing_cosim_realtime_factor','Overall co-simulation rate (sim s / wall s)') in payload['simulation_metrics']
     assert 'warmup' in payload['timing_scope']
     assert 'id="timing-chart"' in (output/'dashboard.html').read_text()
     import shutil
@@ -193,3 +184,58 @@ def test_timing_outputs_for_mixed_runs(tmp_path):
     if shutil.which('node'):
         subprocess.run(['node', str(WORKSPACE/'tests/dashboard_smoke.cjs'),
                         str(output/'dashboard.html')], check=True, capture_output=True, text=True)
+
+
+def test_bundled_dashboard_axes_and_architecture(tmp_path):
+    import shutil
+    import subprocess
+    runs = []
+    for i, (l1, l2) in enumerate((('8KiB','128KiB'), ('8KiB','1MiB'),
+                                 ('32KiB','128KiB'), ('32KiB','1MiB'))):
+        path = create_run(tmp_path/str(i))
+        experiment = json.loads((path/'experiment.json').read_text())
+        experiment['hardware'] = dict(l1i_size=l1, l1d_size=l1, l2_size=l2)
+        experiment['sweep'] = dict(l1=dict(l1i_size=l1,l1d_size=l1),l2_size=dict(l2_size=l2))
+        (path/'experiment.json').write_text(json.dumps(experiment))
+        (path/'gem5').mkdir()
+        (path/'gem5/stats.txt').write_text('Begin Simulation Statistics\nsimInsts 100\nboard.processor.switch0.core.numCycles 200\nEnd Simulation Statistics\n')
+        runs.append(path)
+    output = tmp_path/'dashboard.html'
+    payload = build_dashboard(runs, output, 0)
+    assert len(payload['runs']) == 4
+    assert all('l1i_size=' in g['name'] and 'l2_size=' in g['name'] for g in payload['runs'])
+    assert all(g['metrics']['gem5_ipc'] == .5 for g in payload['runs'])
+    assert all(set(g['sweep']) == {'l1','l2_size'} for g in payload['runs'])
+    if shutil.which('node'):
+        subprocess.run(['node', str(WORKSPACE/'tests/dashboard_smoke.cjs'), str(output)],
+                       check=True, capture_output=True, text=True)
+
+
+def test_comparison_default_generates_dashboard_and_exports(tmp_path):
+    import subprocess
+    run = create_run(tmp_path/'run')
+    output = tmp_path/'comparison'
+    subprocess.run([sys.executable, str(WORKSPACE/'scripts/compare_experiments.py'),
+                    str(run), '--output', str(output), '--warmup', '0'],
+                   check=True, capture_output=True, text=True)
+    assert (output/'dashboard.html').is_file()
+    assert (output/'summary.csv').is_file()
+    assert (output/'per_run_summary.json').is_file()
+    assert not list(output.glob('*.png'))
+
+
+def test_default_warmup_preserves_short_run_and_explains_empty_window(tmp_path):
+    import shutil
+    import subprocess
+    run = create_run(tmp_path/'short', times=(0.,1.,2.,3.,4.9))
+    payload = build_dashboard([run], tmp_path/'default.html')
+    assert payload['warmup'] == 0
+    assert payload['runs'][0]['metric_stats']['rmse_m']['n'] == 1
+    assert not payload['runs'][0]['task_notes']
+    payload = build_dashboard([run], tmp_path/'empty.html', warmup=5)
+    assert payload['runs'][0]['metrics']['path_m'] is None
+    assert 'excludes the recorded task window' in payload['runs'][0]['task_notes'][0]
+    if shutil.which('node'):
+        for name in ('default','empty'):
+            subprocess.run(['node', str(WORKSPACE/'tests/dashboard_smoke.cjs'), str(tmp_path/f'{name}.html')],
+                           check=True, capture_output=True, text=True)

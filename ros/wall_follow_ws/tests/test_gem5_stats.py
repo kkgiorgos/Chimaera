@@ -32,6 +32,9 @@ simInsts 123456
     assert result['l1d_misses'] == 10
     assert result['l2_misses'] == 3
     assert result['l1i_misses'] is None
+    assert result['l1d_mpki'] == pytest.approx(1000 * 10 / 120)
+    assert result['l2_mpki'] == 25
+    assert result['l1i_mpki'] is None
 
 
 def test_no_stats_dump(tmp_path):

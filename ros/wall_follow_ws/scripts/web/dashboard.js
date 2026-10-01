@@ -3,35 +3,36 @@ const data = JSON.parse(document.getElementById('dataset').textContent);
 const $ = id => document.getElementById(id);
 const colors = ['#007d87','#db7130','#6e55b5','#c33a62','#298651','#456ccb','#946e25','#a24b95'];
 data.runs.forEach((r,i) => r.color = i<colors.length ? colors[i] : `hsl(${i*137.5%360} 60% 38%)`);
-const metrics = [
- ['rmse_m','Tracking RMSE (m)'],['mae_m','Tracking MAE (m)'],['max_abs_error_m','Max absolute error (m)'],
- ['gt_coverage','Ground-truth coverage'],['path_m','Distance travelled (m)'],['stopped_fraction','Stopped fraction'],
- ['stale_fraction','Stale-scan fraction'],['compute_p95_ms','Computation p95 (ms)'],['compute_max_ms','Computation max (ms)'],
- ['actual_control_hz_sim','Actual control rate (Hz, sim)'],['timer_interval_p95_wall_ms','Timer interval p95 (ms, wall)'],
- ['scan_age_p95_s','Scan age p95 (s, sim)'],['real_time_factor','Real-time factor'],
- ['command_rate_observed_hz_sim','Observed command rate (Hz, sim)'],
- ['command_interval_p95_host_ms','Command receipt interval p95 (ms, host)'],
- ['host_scan_age_p95_s','Latest host-observed scan age p95 (s, sim)'],
- ['sim_duration_s','Recorded duration (s)']];
-const timingMetrics = data.timing_metrics;
-const signals = [['gt_error','Wall-distance error (m)'],['compute_ms','Control computation (ms, legacy)'],
- ['scan_age','Robot scan age (s, sim, legacy)'],['dt_wall','Observation interval (s, wall)'],
- ['host_scan_age','Latest host-observed scan age (s, sim)'],['path_m','Cumulative distance (m)']];
+const metrics = data.task_metrics;
+const architectureMetrics = data.architecture_metrics;
+const timingMetrics = data.simulation_metrics;
+const signals = [['gt_error','Wall-distance error (m)'],['path_m','Cumulative distance (m)']];
 const hash = new URLSearchParams(location.hash.slice(1));
 let selected = new Set(hash.has('runs') ? hash.get('runs').split(',') : data.runs.map(r=>r.id));
 selected = new Set([...selected].filter(id=>data.runs.some(r=>r.id===id)));
 function elem(tag, text, cls) { const e=document.createElement(tag); if(text!==undefined)e.textContent=text; if(cls)e.className=cls; return e; }
 function finite(v) { return typeof v==='number' && Number.isFinite(v); }
-function fmt(v) { if(v===undefined||v===null)return 'Not recorded'; if(typeof v==='number')return finite(v)?Number(v.toPrecision(5)).toString():'Unavailable'; if(typeof v==='object')return JSON.stringify(v); return String(v); }
+function fmt(v, digits=5) {
+ if(v===undefined||v===null)return 'Not recorded';
+ if(typeof v==='number') {
+  if(!finite(v))return 'Unavailable';
+  if(v!==0&&(Math.abs(v)>=1e5||Math.abs(v)<1e-3))return v.toExponential(digits-1).replace(/\.?0+e/,'e');
+  return Number(v.toPrecision(digits)).toString();
+ }
+ if(typeof v==='object')return JSON.stringify(v);
+ return String(v);
+}
 function active() { return data.runs.filter(r=>selected.has(r.id)); }
 function dot(r) { const e=elem('span',undefined,'dot'); e.style.background=r.color; return e; }
 function setOptions(id, options) { for(const [value,label] of options) { const o=elem('option',label);o.value=value;$(id).append(o); } }
 setOptions('timing-metric',timingMetrics);
+if(!data.runs.some(r=>finite(r.metrics.timing_cosim_realtime_factor)))$('timing-metric').value='real_time_factor';
+setOptions('architecture-metric',architectureMetrics);
 $('timing-scope').textContent=data.timing_scope;
 setOptions('bar-metric',metrics); setOptions('signal',signals);
 $('total').textContent=`(${data.runs.length})`;
 $('context').textContent=`Summary warmup: ${data.warmup} simulation seconds · Built ${new Date(data.generated).toLocaleString()}`;
-$('footer').textContent='Each configuration combines independent repetitions with equal weight per run. Scalar metrics are computed from all original samples in each run before averaging; p95 means the mean of per-run p95s, not a pooled percentile. Bands/error bars show sample standard deviation, not confidence intervals; n=1 has no SD estimate. No outliers are removed. Signal plots interpolate within the common recorded time interval onto a bounded grid; pointwise n may fall when data is missing. Mean trajectories are time-aligned averages, not actual robot paths. Time filters affect charts only. Command timing is host receipt timing; equal clock timestamps remain in raw statistics. Guest internal metrics are unavailable in v3. Host scan age measures the latest scan received by the host, not the scan consumed by the robot. Missing data stays unavailable. Regenerate this offline snapshot to add results or change warmup.';
+$('footer').textContent='Repetitions have equal weight. Error bars and bands show sample standard deviation; n=1 has no SD estimate. Scalar metrics use all recorded samples after warmup. Traces interpolate within the common recorded time interval; mean trajectories are averages, not individual paths. Time filters affect charts only. Missing measurements remain unavailable.';
 if(data.errors.length) { $('errors').hidden=false; $('errors').textContent='Comparison warnings:\n'+data.errors.join('\n'); }
 function visible() { const query=$('search').value.toLowerCase();return data.runs.filter(r=>JSON.stringify([r.name,r.path,r.config]).toLowerCase().includes(query)); }
 function renderLibrary() {
@@ -81,16 +82,17 @@ function renderConfig(runs) {
 const NS='http://www.w3.org/2000/svg';
 function svgElem(tag, attrs={}, text) { const e=document.createElementNS(NS,tag);for(const [key,value] of Object.entries(attrs))e.setAttribute(key,String(value));if(text!==undefined)e.textContent=text;return e; }
 function chart(container, label, w=720,h=320) { const svg=svgElem('svg',{viewBox:`0 0 ${w} ${h}`,role:'img','aria-label':label});svg.append(svgElem('title',{},label));container.replaceChildren(svg);return svg; }
-function domain(values, includeZero=false) { let lo=includeZero?0:Infinity,hi=includeZero?0:-Infinity;for(const v of values)if(finite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}if(!Number.isFinite(lo))return [0,1];if(lo===hi){const pad=Math.max(.01,Math.abs(lo)*.05);lo-=pad;hi+=pad;}return [lo,hi]; }
+function domain(values, includeZero=false) { let lo=includeZero?0:Infinity,hi=includeZero?0:-Infinity;for(const v of values)if(finite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}if(!Number.isFinite(lo))return [0,1];if(lo===hi){const pad=Math.abs(lo)*.05||1;lo-=pad;hi+=pad;}return [lo,hi]; }
 function axes(svg,xd,yd,w=720,h=320) {
  const l=64,t=20,r=w-22,b=h-48;const x=v=>l+(v-xd[0])/(xd[1]-xd[0])*(r-l),y=v=>b-(v-yd[0])/(yd[1]-yd[0])*(b-t);
  for(let i=0;i<=4;i++){const xv=xd[0]+i*(xd[1]-xd[0])/4,yv=yd[0]+i*(yd[1]-yd[0])/4;
- svg.append(svgElem('line',{x1:l,x2:r,y1:y(yv),y2:y(yv),class:'grid'}),svgElem('text',{x:l-8,y:y(yv)+4,'text-anchor':'end'},Number(yv.toPrecision(3))),svgElem('text',{x:x(xv),y:b+22,'text-anchor':'middle'},Number(xv.toPrecision(3))));}
+ svg.append(svgElem('line',{x1:l,x2:r,y1:y(yv),y2:y(yv),class:'grid'}),svgElem('text',{x:l-8,y:y(yv)+4,'text-anchor':'end'},fmt(yv,3)),svgElem('text',{x:x(xv),y:b+22,'text-anchor':'middle'},fmt(xv,3)));}
  return {x,y,l,t,r,b};
 }
-function attachHover(svg, points, w=720,h=320) {
+function attachHover(svg, points) {
  svg.addEventListener('pointermove',event=>{
-  const rect=svg.getBoundingClientRect(),px=(event.clientX-rect.left)/rect.width*w,py=(event.clientY-rect.top)/rect.height*h;
+  const cursor=svg.createSVGPoint();cursor.x=event.clientX;cursor.y=event.clientY;
+  const local=cursor.matrixTransform(svg.getScreenCTM().inverse()),px=local.x,py=local.y;
   let best=null,dist=900;for(const p of points){const d=(p.x-px)**2+(p.y-py)**2;if(d<dist){best=p;dist=d;}}
   if(!best){$('tooltip').hidden=true;return;}
   $('tooltip').textContent=best.text;$('tooltip').hidden=false;
@@ -98,32 +100,93 @@ function attachHover(svg, points, w=720,h=320) {
   $('tooltip').style.top=Math.max(8,Math.min(event.clientY+12,window.innerHeight-120))+'px';
  });svg.addEventListener('pointerleave',()=>{$('tooltip').hidden=true;});
 }
+// Sweep bundles stay one dimension; comparisons also expose varying fixed settings.
+const dimensions = new Map();
+for(const run of data.runs) for(const [name,bundle] of Object.entries(run.sweep??{})) {
+ const keys=Object.keys(bundle).map(k=>Object.keys(run.config).find(p=>p===k||p.endsWith('.'+k))).filter(Boolean);
+ if(keys.length) dimensions.set(name, keys);
+}
+const bundledKeys = new Set([...dimensions.values()].flat());
+for(const key of [...new Set(data.runs.flatMap(r=>Object.keys(r.config)))].sort()) {
+ if(!bundledKeys.has(key)&&!key.startsWith('source_sha256.')&&
+    new Set(data.runs.map(r=>JSON.stringify(r.config[key]))).size>1) dimensions.set(key,[key]);
+}
+function settingLabel(key) { return key.replace(/^(hardware|controller|sensor|arena|cosimulation)\./,'').replaceAll('_',' '); }
+function coordinate(run, name) {
+ const keys=dimensions.get(name)??[];
+ if(!keys.length)return run.name;
+ return keys.length===1?run.config[keys[0]]:keys.map(k=>`${settingLabel(k)}=${fmt(run.config[k])}`).join(', ');
+}
+function axisLabel(name) {
+ const keys=dimensions.get(name)??[];
+ return keys.length===1?settingLabel(keys[0]):name==='configuration'?'Configuration settings':name;
+}
+setOptions('x-axis',[...dimensions.keys()].map(k=>[k,axisLabel(k)]));
+setOptions('x-axis',[['configuration','Configuration settings']]);
+const varyingAxis=[...dimensions.keys()].find(k=>new Set(data.runs.map(r=>JSON.stringify(coordinate(r,k)))).size>1);
+if(varyingAxis)$('x-axis').value=varyingAxis;
+function scalarTable(container,runs,options) {
+ comparisonTable(container,runs,runs.map(r=>Object.fromEntries(options.map(([k])=>{
+  const st=r.metric_stats[k];return [k,st?.n?`${fmt(st.mean)} ± ${st.std===null?'SD unavailable':fmt(st.std)} (n=${st.n})`:'Unavailable (n=0)'];
+ }))),options);
+}
 function renderMetricBars(runs, key, label, container) {
- const svg=chart(container,label,900,270);
- const yd=domain(runs.flatMap(r=>{const st=r.metric_stats[key];return [st.mean,finite(st.mean)?st.mean+(st.std??0):null,finite(st.mean)?st.mean-(st.std??0):null];}),true),left=66,right=880,top=15,bottom=220;
- const y=v=>bottom-(v-yd[0])/(yd[1]-yd[0])*(bottom-top),width=(right-left)/runs.length;
- for(let i=0;i<=4;i++){const val=yd[0]+i*(yd[1]-yd[0])/4;svg.append(svgElem('line',{x1:left,x2:right,y1:y(val),y2:y(val),class:'grid'}),svgElem('text',{x:left-8,y:y(val)+4,'text-anchor':'end'},Number(val.toPrecision(3))));}
- runs.forEach((run,i)=>{const val=run.metrics[key],x=left+width*i+width*.18;
-  if(finite(val)){const rect=svgElem('rect',{x,y:Math.min(y(val),y(0)),width:width*.64,height:Math.max(1,Math.abs(y(val)-y(0))),fill:run.color,rx:3});rect.append(svgElem('title',{},`${run.name}\n${label}: ${fmt(val)} ± ${fmt(run.metric_stats[key].std)}\nn=${run.metric_stats[key].n}`));svg.append(rect);
-   const sd=run.metric_stats[key].std;if(finite(sd)){const cx=left+width*(i+.5);svg.append(svgElem('line',{x1:cx,x2:cx,y1:y(val-sd),y2:y(val+sd),stroke:'#172b40','stroke-width':2}),svgElem('line',{x1:cx-5,x2:cx+5,y1:y(val+sd),y2:y(val+sd),stroke:'#172b40'}),svgElem('line',{x1:cx-5,x2:cx+5,y1:y(val-sd),y2:y(val-sd),stroke:'#172b40'}));}}
-  svg.append(svgElem('text',{x:left+width*(i+.5),y:finite(val)?Math.max(12,y(val+(run.metric_stats[key].std??0))-6):top+16,'text-anchor':'middle'},finite(val)?fmt(val):'Unavailable'),svgElem('text',{x:left+width*(i+.5),y:bottom+23,'text-anchor':'middle'},`Group ${i+1} (n=${run.metric_stats[key].n})`));
+ const xkey=$('x-axis').value;
+ const entries=runs.map(run=>({run,value:run.metrics[key],st:run.metric_stats[key]??{n:0},label:coordinate(run,xkey)}));
+ // Keep related settings adjacent without combining distinct configurations.
+ entries.sort((a,b)=>String(a.label).localeCompare(String(b.label),undefined,{numeric:true}));
+ const svg=chart(container,label,1000,440),left=80,right=970,top=35,bottom=290;
+ svg.style.minWidth=Math.max(700,runs.length*130)+'px';
+ svg.append(svgElem('text',{x:12,y:18},label));
+ const yd=domain(entries.flatMap(e=>[e.value,finite(e.value)?e.value+(e.st.std??0):null,finite(e.value)?e.value-(e.st.std??0):null]),true);
+ const y=v=>bottom-(v-yd[0])/(yd[1]-yd[0])*(bottom-top),width=(right-left)/entries.length,hover=[];
+ for(let i=0;i<=4;i++) {
+  const v=yd[0]+i*(yd[1]-yd[0])/4;
+  svg.append(svgElem('line',{x1:left,x2:right,y1:y(v),y2:y(v),class:'grid'}),svgElem('text',{x:left-8,y:y(v)+4,'text-anchor':'end'},fmt(v,3)));
+ }
+ entries.forEach((e,i)=>{
+  const cx=left+(i+.5)*width;
+  if(finite(e.value)) {
+   const bar=svgElem('rect',{x:cx-width*.3,y:Math.min(y(0),y(e.value)),width:width*.6,height:Math.max(1,Math.abs(y(e.value)-y(0))),fill:e.run.color});
+   const text=`${e.run.name}\n${label}: ${fmt(e.value)} ± ${e.st.std===null?'SD unavailable':fmt(e.st.std)} (n=${e.st.n})`;
+   bar.append(svgElem('title',{},text));svg.append(bar);
+   if(finite(e.st.std))svg.append(svgElem('line',{x1:cx,x2:cx,y1:y(e.value-e.st.std),y2:y(e.value+e.st.std),stroke:'#172b40','stroke-width':2}));
+   svg.append(svgElem('text',{x:cx,y:Math.max(top,y(e.value+(e.st.std??0))-8),'text-anchor':'middle'},fmt(e.value)));
+   hover.push({x:cx,y:y(e.value),text});
+  } else svg.append(svgElem('text',{x:cx,y:top+15,'text-anchor':'middle'},'Unavailable'));
+  const rest=xkey==='configuration'?[]:[...dimensions.keys()].filter(k=>k!==xkey&&new Set(runs.map(r=>fmt(coordinate(r,k)))).size>1)
+     .map(k=>`${axisLabel(k)}=${fmt(coordinate(e.run,k))}`);
+  const text=[fmt(e.label),...rest,`n=${e.st.n}`].join(' · ');
+  const caption=svgElem('text',{x:cx,y:bottom+24,'text-anchor':'end',transform:`rotate(-28 ${cx} ${bottom+24})`}),lines=[];
+  for(const part of text.split(/ · |, /)) {
+   if(lines.length&&lines.at(-1).length+part.length<38)lines[lines.length-1]+=' · '+part;
+   else lines.push(part);
+  }
+  lines.forEach((line,j)=>caption.append(svgElem('tspan',{x:cx,dy:j?14:0},line)));
+  caption.append(svgElem('title',{},text));svg.append(caption);
  });
+ svg.append(svgElem('text',{x:500,y:430,'text-anchor':'middle'},axisLabel(xkey)));
+ attachHover(svg,hover);
 }
 function renderBars(runs) {
  const key=$('bar-metric').value;
  renderMetricBars(runs,key,metrics.find(m=>m[0]===key)[1],$('bar-chart'));
- comparisonTable($('metrics-table'),runs,runs.map(r=>({completed:r.completed,repetitions:r.count,...Object.fromEntries(metrics.map(([k])=>{
-  const st=r.metric_stats[k];return [k,st.n?`${fmt(st.mean)} ± ${st.std===null?'SD unavailable':fmt(st.std)} (n=${st.n})`:'Unavailable (n=0)'];
- }))})),[['completed','Runs completed'],['repetitions','Repetitions'],...metrics]);
+ scalarTable($('metrics-table'),runs,metrics);
+ const notes=runs.flatMap(r=>(r.task_notes??[]).map(note=>`${r.name}: ${note}`));
+ $('task-note').hidden=!notes.length;
+ $('task-note').textContent=[...new Set(notes)].join('\n');
 }
 function renderTiming(runs) {
  const key=$('timing-metric').value;
  renderMetricBars(runs,key,timingMetrics.find(m=>m[0]===key)[1],$('timing-chart'));
  const count=runs.reduce((n,r)=>n+r.metric_stats[key].n,0);
- $('timing-note').textContent=count?`${count} repetition(s) with this metric. Rates are ratios of totals within each run, then averaged across repetitions. Error bars show sample SD.`:'No recorded timing data for the selected configurations. Older and local runs remain available in the performance charts.';
- comparisonTable($('timing-table'),runs,runs.map(r=>Object.fromEntries(timingMetrics.map(([k])=>{
-  const st=r.metric_stats[k];return [k,st.n?`${fmt(st.mean)} ± ${st.std===null?'SD unavailable':fmt(st.std)} (n=${st.n})`:'Not recorded (n=0)'];
- }))),timingMetrics);
+ $('timing-note').textContent=count?`${count} repetition(s) with this metric. Rates are ratios of totals within each run, then averaged across repetitions. Error bars show sample SD.`:'No recorded timing data for the selected configurations. Local runs use collection throughput.';
+ scalarTable($('timing-table'),runs,timingMetrics);
+}
+function renderArchitecture(runs) {
+ const key=$('architecture-metric').value;
+ renderMetricBars(runs,key,architectureMetrics.find(m=>m[0]===key)[1],$('architecture-chart'));
+ scalarTable($('architecture-table'),runs,architectureMetrics);
 }
 function timeRange(runs) {
  const a=Number($('from').value),b=$('to').value===''?Math.max(1,...runs.map(r=>r.series.elapsed.at(-1)).filter(finite)):Number($('to').value);
@@ -155,22 +218,42 @@ function renderTraces(runs) {
   let segment=[];const flush=()=>{if(segment.length)trajectory.append(svgElem('polyline',{points:segment.join(' '),fill:'none',stroke:run.color,'stroke-width':2}));segment=[];};
   for(const p of points){if(!finite(p.x)||!finite(p.y)){flush();continue;}const x=ta.x(p.x),y=ta.y(p.y);segment.push(`${x},${y}`);th.push({x,y,text:`${run.name}\nTime: ${fmt(p.time)} s\nx: ${fmt(p.x)} m · y: ${fmt(p.y)} m`});}flush();}
  attachHover(trajectory,th);
- $('legend').replaceChildren();runs.forEach((r,i)=>{const item=elem('span');item.append(dot(r),document.createTextNode(`Group ${i+1}: ${r.name} (n=${r.count})`));$('legend').append(item);});
+ $('legend').replaceChildren();runs.forEach((r,i)=>{const item=elem('span');item.append(dot(r),document.createTextNode(`${r.name} (n=${r.count})`));$('legend').append(item);});
 }
 function render() {
  const runs=active();renderLibrary();$('headline').textContent=`${runs.length} configuration${runs.length===1?'':'s'} · ${runs.reduce((n,r)=>n+r.count,0)} repetitions`;
  $('empty').hidden=!!runs.length;$('content').hidden=!runs.length;$('export').disabled=!runs.length;
  try{history.replaceState(null,'','#runs='+runs.map(r=>r.id).join(','));}catch(_){}
- $('tooltip').hidden=true;if(!runs.length)return;renderConfig(runs);renderBars(runs);renderTiming(runs);renderTraces(runs);
+ $('tooltip').hidden=true;if(!runs.length)return;renderConfig(runs);renderBars(runs);renderTiming(runs);renderArchitecture(runs);renderTraces(runs);
 }
 $('search').addEventListener('input',renderLibrary);
 $('select-visible').addEventListener('click',()=>{visible().forEach(r=>selected.add(r.id));render();});
 $('clear').addEventListener('click',()=>{selected.clear();render();});
 for(const id of ['differences-only','provenance'])$(id).addEventListener('change',()=>renderConfig(active()));
+$('x-axis').addEventListener('change',()=>{renderBars(active());renderTiming(active());renderArchitecture(active());});
+$('architecture-metric').addEventListener('change',()=>renderArchitecture(active()));
+
 $('timing-metric').addEventListener('change',()=>renderTiming(active()));
 $('bar-metric').addEventListener('change',()=>renderBars(active()));
 for(const id of ['signal','from','to'])$(id).addEventListener('change',()=>renderTraces(active()));
 $('reset-time').addEventListener('click',()=>{$('from').value=0;$('to').value='';renderTraces(active());});
+let expandedId=null, expandedButton=null;
+const chartHomes={'signal-chart':$('signal-panel'),'trajectory-chart':$('trajectory-panel')};
+function maximize(id, button) {
+ expandedId=id;expandedButton=button;
+ $('expanded-title').textContent=id==='signal-chart'?signals.find(([k])=>k===$('signal').value)[1]:'World trajectory (m)';
+ $('expanded-plot').append($(id));$('expanded-chart').append($('tooltip'));
+ document.body.style.overflow='hidden';
+ $('expanded-chart').showModal();
+}
+$('maximize-signal').addEventListener('click',()=>maximize('signal-chart',$('maximize-signal')));
+$('maximize-trajectory').addEventListener('click',()=>maximize('trajectory-chart',$('maximize-trajectory')));
+$('close-expanded').addEventListener('click',()=>$('expanded-chart').close());
+$('expanded-chart').addEventListener('close',()=>{
+ if(expandedId)chartHomes[expandedId].append($(expandedId));
+ expandedId=null;document.body.style.overflow='';document.body.append($('tooltip'));
+ expandedButton?.focus();$('tooltip').hidden=true;
+});
 $('export').addEventListener('click',()=>{
  const rows=active().map(r=>({group_id:r.id,configuration:r.name,repetitions:r.count,members:r.path,completed:r.completed,timing_scope:data.timing_scope,
   ...Object.fromEntries(Object.entries(r.metric_stats).flatMap(([k,stats])=>Object.entries(stats).map(([stat,v])=>[k+'_'+stat,v]))),

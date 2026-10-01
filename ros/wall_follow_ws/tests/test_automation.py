@@ -38,7 +38,7 @@ if os.environ.get('FAKE_FAIL'):
         finish_reason='robot command timeout', sample_count=1,
         collection_status=dict(command_gap_sim_seconds=1.05, command_timeout_sim_seconds=1.))))
     sys.exit(0)  # ros2 launch can exit zero even when its controller failed.
-(d/'metadata.json').write_text(json.dumps(dict(schema_version=2, completed=True, parameters=p)))
+(d/'metadata.json').write_text(json.dumps(dict(schema_version=3, completed=True, parameters=p)))
 (d/'poses.csv').write_text('sim_time,stamp,x,y\\n')
 (d/'samples.csv').write_text('elapsed,sim_time\\n0,0\\n1,0\\n')
 ''')
@@ -60,7 +60,7 @@ runner.prepare_sockets = lambda: []
 sys.exit(runner.main())
 """)
     command = [sys.executable, str(entrypoint), '--config', str(config),
-               '--architecture', 'testcpu', '--output', str(output), '--no-plot']
+               '--architecture', 'testcpu', '--output', str(output), '--collect-only']
     return command, env, output
 
 
@@ -118,7 +118,7 @@ def gem5_args(tmp_path):
     return ['--gem5', '--gem5-root', str(root)]
 
 
-@pytest.mark.parametrize("verbosity", [None, "--progress", "--verbose"])
+@pytest.mark.parametrize("verbosity", [None, "--quiet", "--verbose"])
 def test_gem5_launch_and_resume(suite, tmp_path, verbosity):
     command, env, output = suite
     fake = tmp_path/'ros2'
@@ -126,7 +126,7 @@ def test_gem5_launch_and_resume(suite, tmp_path, verbosity):
 if sys.argv[2] == 'wall_follow_bridge':
     (d/'gem5').mkdir()
     (d/'gem5/stats.txt').write_text('---------- Begin Simulation Statistics ----------\\nsimSeconds 1\\nsimInsts 100\\nboard.processor.switch0.core.numCycles 200\\n---------- End Simulation Statistics ----------\\n')
-    (d/'timing.csv').write_text('step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,pacing_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\\n1,1,1,.2,.3,.1,.4,1,1,2\\n')
+    (d/'timing.csv').write_text('step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\\n1,1,1,.2,.3,.1,1,1,2\\n')
 ''')
     command += gem5_args(tmp_path)
     if verbosity:
@@ -139,7 +139,6 @@ if sys.argv[2] == 'wall_follow_bridge':
         assert 'physics_step_ns:=1000000' in record['command']
         assert 'cpu_type:=timing' in record['command']
         assert not any(arg.startswith('ratio:=') for arg in record['command'])
-        assert record['pacing'] == 'none'
         assert record['gem5_stats']['ipc'] == .5
         assert record['timing']['cosim_realtime_factor'] == 1
         assert record['timing']['gem5_phase_realtime_factor'] == 5
@@ -300,7 +299,7 @@ def test_progress_hides_launch_output_and_preserves_logs(suite, tmp_path):
     fake = tmp_path/'ros2'
     fake.write_text(fake.read_text().replace('p = dict(',
                     "print('child stdout', flush=True)\nprint('child stderr', file=sys.stderr, flush=True)\np = dict(", 1))
-    result = subprocess.run(command + ['--progress'], env=env, check=True,
+    result = subprocess.run(command, env=env, check=True,
                             capture_output=True, text=True)
     assert 'RUNNING | wall' in result.stdout
     assert 'child stdout' not in result.stdout + result.stderr
@@ -314,8 +313,84 @@ def test_progress_hides_launch_output_and_preserves_logs(suite, tmp_path):
 
 def test_verbosity_options_are_exclusive(suite):
     command, env, output = suite
-    result = subprocess.run(command + ['--progress', '--verbose'], env=env,
+    result = subprocess.run(command + ['--quiet', '--verbose'], env=env,
                             capture_output=True, text=True)
     assert result.returncode == 2
     assert 'not allowed with argument' in result.stderr
     assert not output.exists()
+
+
+def test_bundled_sweep_crosses_dimensions_not_bundle_members():
+    config = dict(repetitions=2, sweep=dict(
+        l1=[dict(l1i_size='8KiB', l1d_size='16KiB'),
+            dict(l1i_size='32KiB', l1d_size='64KiB')],
+        l2_size=['128KiB', '1MiB']))
+    plan = make_plan(config, 'timing', gem5=True)
+    assert len(plan['runs']) == 8
+    assert plan['dimensions'] == dict(l1=['l1i_size', 'l1d_size'], l2_size=['l2_size'])
+    cases = {(r['parameters']['l1i_size'], r['parameters']['l1d_size'], r['parameters']['l2_size'])
+             for r in plan['runs']}
+    assert cases == {(i,d,l2) for i,d in [('8KiB','16KiB'),('32KiB','64KiB')]
+                     for l2 in ['128KiB','1MiB']}
+    assert plan['runs'][0]['sweep']['l1'] == config['sweep']['l1'][0]
+
+
+@pytest.mark.parametrize('config', [
+    dict(sweep=dict(l1=[])),
+    dict(sweep=dict(l1=[dict(l1i_size='8KiB'), dict(l1d_size='8KiB')])),
+    dict(sweep=dict(l1=[dict(l1i_size='8KiB'), '16KiB'])),
+    dict(sweep=dict(l1=[{}])),
+    dict(sweep=dict(l1=[dict(unknown=1)])),
+    dict(sweep=dict(l1=[dict(l1i_size='8KiB')], l1i_size=['16KiB'])),
+    dict(fixed=dict(l1i_size='8KiB'), sweep=dict(l1=[dict(l1i_size='16KiB')])),
+])
+def test_invalid_bundled_dimensions(config):
+    with pytest.raises(ValueError):
+        make_plan(config, 'timing', gem5=True)
+
+
+def test_progress_uses_collector_elapsed_and_complete_rows(tmp_path):
+    import io
+    from run_experiments import LiveProgress
+    path = tmp_path/'samples.csv'
+    path.write_text('sim_time,elapsed,wall_elapsed\n102,2,10\n104,4,20')
+    stream = io.StringIO()
+    display = LiveProgress(None, stream, duration=10, samples_path=path)
+    display.refresh()
+    assert display.sim_seconds == 2
+    assert 'task 20%' in stream.getvalue()
+    assert 'ETA ~40s' in stream.getvalue()
+    with path.open('a') as f:
+        f.write('\n')
+    display.last_report = 0
+    display.refresh()
+    assert display.sim_seconds == 4
+    assert 'task 40%' in stream.getvalue()
+    display.close()
+
+
+def test_default_progress_and_quiet(suite):
+    command, env, output = suite
+    result = subprocess.run(command, env=env, check=True, capture_output=True, text=True)
+    assert 'RUNNING | wall' in result.stdout
+    assert 'control_hz=10' in result.stdout
+    assert json.loads((output/'runs/case_001_rep_01/attempt_001/experiment.json').read_text())['sweep'] == {'control_hz': {'control_hz': 10}}
+    # A separate suite uses the inferred architecture and summary-only reporting.
+    quiet = command[:]
+    quiet[quiet.index('--output')+1] = str(output.parent/'quiet')
+    arch_index = quiet.index('--architecture')
+    del quiet[arch_index:arch_index+2]
+    result = subprocess.run(quiet+['--quiet'], env=env, check=True, capture_output=True, text=True)
+    assert 'RUNNING | wall' not in result.stdout
+    assert json.loads((output.parent/'quiet/suite.json').read_text())['architecture'] == 'local'
+
+
+def test_extreme_preset_uses_one_grouped_suite():
+    config = json.loads((WORKSPACE/'experiments/timing_extreme.json').read_text())
+    plan = make_plan(config, 'timing-extreme', gem5=True)
+    assert len(plan['runs']) == 4
+    assert set(plan['dimensions']) == {'cpu_clock', 'cache_profile'}
+    settings = {(r['parameters']['cpu_clock'], r['parameters']['l1i_size'],
+                 r['parameters']['l1d_size'], r['parameters']['l2_size']) for r in plan['runs']}
+    assert settings == {(clock,i,d,l2) for clock in ('3GHz','100MHz')
+                        for i,d,l2 in (('64KiB','64KiB','2MiB'),('1KiB','1KiB','4KiB'))}

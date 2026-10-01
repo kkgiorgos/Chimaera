@@ -14,22 +14,26 @@
 <div class="toolbar"><div><strong id="headline"></strong><p id="context" class="muted"></p></div><button id="export">Export group summaries</button></div>
 <div id="empty" class="empty" hidden>Select at least one configuration from the library to start comparing.</div>
 <div id="content">
-<section><div class="section-heading"><div><h2>Configuration differences</h2><p>Identical experiments are grouped as repetitions. Highlighted rows differ between selected configurations.</p></div>
-<div class="checks"><label><input id="differences-only" type="checkbox" checked> Differences only</label><label><input id="provenance" type="checkbox"> Include software / hardware details</label></div></div>
-<div id="config-note" class="hint" aria-live="polite"></div><div id="config-table" class="table-wrap"></div><div id="events"></div></section>
-<section><div class="section-heading"><div><h2>Performance</h2><p>Equal-weight repetition means ± sample standard deviation; inspect counts and coverage too.</p></div><label>Chart metric <select id="bar-metric"></select></label></div>
-<div id="bar-chart" class="chart"></div><div id="metrics-table" class="table-wrap"></div></section>
-<section><div class="section-heading"><div><h2>Co-simulation timing</h2><p id="timing-scope"></p></div>
+
+<section><div class="section-heading"><div><h2>Sweep comparison</h2><p>Bars show each configuration's mean and sample standard deviation. Labels include the swept settings.</p></div><label>Group bars by <select id="x-axis"></select></label></div></section>
+<section><div class="section-heading"><div><h2>Robot task</h2><p>Equal-weight repetition means ± sample standard deviation; inspect counts and coverage too.</p></div><label>Chart metric <select id="bar-metric"></select></label></div>
+<p id="task-note" class="notice" hidden></p><div id="bar-chart" class="chart"></div><div id="metrics-table" class="table-wrap"></div></section>
+<section><div class="section-heading"><div><h2>Architecture</h2><p>Statistics from the gem5 workload region.</p></div><label>Metric <select id="architecture-metric"></select></label></div><div id="architecture-chart" class="chart"></div><div id="architecture-table" class="table-wrap"></div></section>
+<section><div class="section-heading"><div><h2>Simulation performance</h2><p id="timing-scope"></p></div>
 <label>Timing metric <select id="timing-metric"></select></label></div>
 <p id="timing-note" class="hint"></p><div id="timing-chart" class="chart"></div>
 <div id="timing-table" class="table-wrap"></div></section>
 <section><div class="section-heading"><div><h2>Signals & trajectory</h2><p>Mean traces with ± SD bands, aligned by elapsed simulation time. Time limits affect charts only.</p></div>
 <div class="time-controls"><label>From (s)<input id="from" type="number" min="0" step="1" value="0"></label><label>To (s)<input id="to" type="number" min="0" step="1"></label><button id="reset-time">Reset</button></div></div>
 <div id="time-error" class="notice" hidden>Enter a finite time range with 0 ≤ From &lt; To.</div>
-<div class="chart-grid"><div><label>Signal <select id="signal"></select></label><div id="signal-chart" class="chart"></div></div><div><h3>Mean world trajectory (m)</h3><div id="trajectory-chart" class="chart"></div></div></div>
+<div class="chart-grid"><div id="signal-panel"><div class="plot-heading"><label>Signal <select id="signal"></select></label><button id="maximize-signal" aria-label="Maximize signal chart">Maximize</button></div><div id="signal-chart" class="chart"></div></div><div id="trajectory-panel"><div class="plot-heading"><h3>Mean world trajectory (m)</h3><button id="maximize-trajectory" aria-label="Maximize trajectory chart">Maximize</button></div><div id="trajectory-chart" class="chart"></div></div></div>
 <div id="legend" class="legend"></div></section>
+<section><div class="section-heading"><div><h2>Configuration differences</h2><p>Identical experiments are grouped as repetitions. Highlighted rows differ between selected configurations.</p></div>
+<div class="checks"><label><input id="differences-only" type="checkbox" checked> Differences only</label><label><input id="provenance" type="checkbox"> Include software / hardware details</label></div></div>
+<div id="config-note" class="hint" aria-live="polite"></div><div id="config-table" class="table-wrap"></div><div id="events"></div></section>
 </div>
 <footer id="footer"></footer>
 </main></div><div id="tooltip" role="status" hidden></div>
+<dialog id="expanded-chart" aria-labelledby="expanded-title"><div class="plot-heading"><h2 id="expanded-title"></h2><button id="close-expanded">Close</button></div><div id="expanded-plot"></div></dialog>
 <script id="dataset" type="application/json">__DATA__</script><script>__SCRIPT__</script>
 </body></html>

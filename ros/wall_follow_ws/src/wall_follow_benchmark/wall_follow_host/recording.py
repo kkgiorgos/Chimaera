@@ -40,8 +40,7 @@ class Recorder:
             host=dict(platform=platform.platform(), machine=platform.machine()),
             provenance=provenance or {},
             host_source_sha256={p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-                                for p in Path(__file__).parent.glob('*.py')},
-            unavailable=['guest_compute_ms', 'guest_scan_age', 'guest_internal_state'])
+                                for p in Path(__file__).parent.glob('*.py')})
         self.save_metadata()
 
     def save_metadata(self):

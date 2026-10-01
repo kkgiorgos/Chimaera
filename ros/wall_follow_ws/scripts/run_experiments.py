@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a sequential Cartesian parameter sweep, retaining every attempt."""
+"""Run a parameter sweep with bundled dimensions, retaining every attempt."""
 import argparse
 import csv
 import fcntl
@@ -40,16 +40,30 @@ def make_plan(config, architecture, gem5=False):
         raise ValueError('repetitions must be a positive integer')
     if not isinstance(fixed, dict) or not isinstance(sweep, dict):
         raise ValueError('fixed and sweep must be objects')
-    if set(fixed) & set(sweep):
-        raise ValueError('A parameter cannot appear in both fixed and sweep')
-    if (set(fixed) | set(sweep)) - set(defaults):
-        raise ValueError('Unknown launch parameter in fixed or sweep')
-    if any(not isinstance(v, list) or not v for v in sweep.values()):
-        raise ValueError('Each sweep parameter requires a nonempty list')
+    if set(fixed) - set(defaults):
+        raise ValueError('Unknown launch parameter in fixed')
+    dimensions = {}
+    used = set(fixed)
+    for name, choices in sweep.items():
+        if not isinstance(choices, list) or not choices:
+            raise ValueError('Each sweep dimension requires a nonempty list')
+        bundled = isinstance(choices[0], dict)
+        bundles = choices if bundled else [{name: value} for value in choices]
+        keys = set(bundles[0])
+        if not keys or any(not isinstance(v, dict) or set(v) != keys for v in bundles):
+            raise ValueError(f'{name}: all bundles must set the same nonempty parameter set')
+        if keys - set(defaults):
+            raise ValueError(f'{name}: unknown launch parameter')
+        if used & keys:
+            raise ValueError('A parameter cannot appear in both fixed and sweep or in multiple dimensions')
+        used.update(keys)
+        dimensions[name] = bundles
     runs = []
-    for case, values in enumerate(itertools.product(*sweep.values()), 1):
+    for case, values in enumerate(itertools.product(*dimensions.values()), 1):
         params = dict(defaults, **fixed)
-        params.update(zip(sweep, values))
+        coordinates = dict(zip(dimensions, values))
+        for bundle in values:
+            params.update(bundle)
         for key, default in defaults.items():
             value = params[key]
             if type(default) is bool:
@@ -72,14 +86,15 @@ def make_plan(config, architecture, gem5=False):
         if params['duration'] <= 0 or params['wall_timeout'] <= 0:
             raise ValueError('duration and wall_timeout must be positive')
         for rep in range(1, repetitions+1):
-            runs.append(dict(id=f'case_{case:03d}_rep_{rep:02d}', parameters=params.copy()))
-    return dict(version=1, architecture=architecture, runs=runs)
+            runs.append(dict(id=f'case_{case:03d}_rep_{rep:02d}', parameters=params.copy(),
+                             sweep=coordinates, repetition=rep))
+    return dict(version=2, architecture=architecture, dimensions={k: list(v[0]) for k,v in dimensions.items()}, runs=runs)
 
 
 def completed(path):
     try:
         metadata = json.loads((path/'metadata.json').read_text())
-        return (metadata.get('schema_version') in (2, 3) and metadata.get('completed') is True
+        return (metadata.get('schema_version') == 3 and metadata.get('completed') is True
                 and (path/'poses.csv').is_file()
                 and (path/'samples.csv').is_file()
                 and len((path/'samples.csv').read_text().splitlines()) >= 3)
@@ -118,13 +133,17 @@ def stop_process(process):
 
 class LiveProgress:
     """Render completed co-simulation intervals; never guess unfinished tick progress."""
-    def __init__(self, timing_path, stream=None):
+    def __init__(self, timing_path, stream=None, duration=None, samples_path=None):
         self.timing_path = timing_path
+        self.duration = duration
+        self.samples_path = samples_path
         self.stream = stream if stream is not None else sys.stdout
         self.terminal = self.stream.isatty() and os.environ.get('TERM') != 'dumb'
         self.started = self.updated = time.monotonic()
         self.last_report = 0.
         self.sim_seconds = 0.
+        self.task_seconds = 0.
+        self.task_wall_seconds = 0.
         self.step = 0
         self.row = None
         self.timing = None
@@ -168,12 +187,32 @@ class LiveProgress:
                     self.sim_seconds += simulated
                     self.row = (simulated, gem5_wall)
                     self.updated = time.monotonic()
+        if self.samples_path is not None:
+            try:
+                # Tail complete rows only; use collector elapsed time, not absolute sim time.
+                with self.samples_path.open('rb') as samples:
+                    header = next(csv.reader([samples.readline().decode()]))
+                    samples.seek(0, 2)
+                    size = samples.tell()
+                    samples.seek(max(0, size - 4096))
+                    tail = samples.read().decode(errors='replace')
+                    lines = tail[:tail.rfind('\n')].splitlines() if '\n' in tail else []
+                if lines:
+                    row = dict(zip(header, next(csv.reader([lines[-1]]))))
+                    elapsed = float(row['elapsed'])
+                    if math.isfinite(elapsed) and elapsed >= 0:
+                        self.task_seconds = elapsed
+                        self.task_wall_seconds = float(row.get('wall_elapsed', 0))
+                        if self.timing_path is None:
+                            self.sim_seconds = elapsed
+            except (OSError, ValueError, IndexError, KeyError):
+                pass
         now = time.monotonic()
         if not self.terminal and now - self.last_report < 1.:
             return
         self.last_report = now
         if self.timing_path is None:
-            text = f' RUNNING | wall {now - self.started:.0f}s'
+            text = f' RUNNING | wall {now - self.started:.0f}s | sim {self.sim_seconds:.2f}s'
         elif self.row is None:
             text = f' CHIMAERA | BOOT / FIRST STEP | wall {now - self.started:.0f}s'
         else:
@@ -182,6 +221,14 @@ class LiveProgress:
             text = (f' CHIMAERA | sim {self.sim_seconds:.2f}s | step {self.step}'
                     f' | gem5 {rate:.3f}x | wall {now - self.started:.0f}s'
                     f' | last completed step {now - self.updated:.0f}s ago')
+        if self.duration and self.task_seconds > 0:
+            fraction = min(1., self.task_seconds / self.duration)
+            task_status = f'task {fraction:.0%}'
+            if math.isfinite(self.task_wall_seconds) and self.task_wall_seconds > 0:
+                eta = max(0., self.duration - self.task_seconds) * self.task_wall_seconds / self.task_seconds
+                task_status += f' | ETA ~{eta:.0f}s'
+            prefix, rest = text.split(' | ', 1)
+            text = f'{prefix} | {task_status} | {rest}'
         if self.terminal:
             width = shutil.get_terminal_size(fallback=(120, 24)).columns
             self.stream.write('\r\033[2K' + text[:max(1, width - 1)])
@@ -195,9 +242,9 @@ class LiveProgress:
             self.timing.close()
 
 
-def wait_verbose(process, log_path, timing_path, timeout, stream_logs=True):
+def wait_verbose(process, log_path, timing_path, timeout, stream_logs=True, duration=None, samples_path=None):
     """Show progress and optionally tail logs, retaining normal timeout semantics."""
-    display = LiveProgress(timing_path)
+    display = LiveProgress(timing_path, duration=duration, samples_path=samples_path)
     deadline = time.monotonic() + timeout
     pending = ''
     with log_path.open(errors='replace') as reader:
@@ -233,7 +280,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=WORKSPACE/'experiments/demo.json')
     parser.add_argument('--output', type=Path, required=True, help='New suite directory (or matching suite with --resume)')
-    parser.add_argument('--architecture', required=True)
+    parser.add_argument('--architecture', default=None, help='Result label (default: gem5 or local)')
     parser.add_argument('--host-only', action='store_true', help='Launch host.launch.py; start the robot separately with controller.yaml')
     parser.add_argument('--gem5', action='store_true', help='Run each attempt with gem5 and paused Gazebo')
     parser.add_argument('--gem5-root', type=Path, default=WORKSPACE/'../../gem5')
@@ -246,11 +293,12 @@ def main():
     parser.add_argument('--dry-run', action='store_true', help='Print the validated plan without running or writing anything')
     parser.add_argument('--keep-going', action='store_true', help='Continue after a failed run; still return failure')
     verbosity = parser.add_mutually_exclusive_group()
-    verbosity.add_argument('--progress', action='store_true', help='Show live simulation status only; keep launch output in launch.log')
+    verbosity.add_argument('--quiet', action='store_true', help='Print attempt summaries only')
     verbosity.add_argument('--verbose', action='store_true', help='Stream launch output and show live simulation progress; retain launch.log')
-    parser.add_argument('--no-plot', action='store_true')
-    parser.add_argument('--warmup', type=float, default=5.)
+    parser.add_argument('--collect-only', action='store_true', help='Skip report generation')
+    parser.add_argument('--warmup', type=float, default=0.)
     args = parser.parse_args()
+    args.architecture = args.architecture or ('gem5' if args.gem5 else 'local')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+', args.architecture):
         parser.error('architecture must contain only letters, digits, underscores, dots or hyphens')
     if not math.isfinite(args.warmup) or args.warmup < 0:
@@ -270,7 +318,7 @@ def main():
             kernel = (args.kernel or root/'resources/x86-linux-kernel-5.15.180').expanduser().resolve()
             plan['gem5'] = dict(gem5_root=str(root), image=str(image), kernel=str(kernel),
                                 interval_us=args.interval_us, poll_us=args.poll_us,
-                                pacing='none', startup_timeout_s=args.startup_timeout)
+                                startup_timeout_s=args.startup_timeout)
             for run in plan['runs']:
                 ns = run['parameters']['physics_step'] * 1e9
                 if round(ns) < 1 or not math.isclose(ns, round(ns), rel_tol=0, abs_tol=1e-6) or args.interval_us * 1000 % round(ns):
@@ -323,6 +371,7 @@ def main():
         (directory/'experiment.json').write_text(json.dumps(dict(sensor=sensor, arena=arena,
             architecture=args.architecture, gui=params['gui'],
             hardware={k: params[k] for k in HARDWARE_DEFAULTS} if args.gem5 else None,
+            sweep=run['sweep'], cosimulation=plan.get('gem5'),
             source_sha256={str(p.relative_to(WORKSPACE/'src/wall_follow_robot')):
                 hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted((WORKSPACE/'src/wall_follow_robot').rglob('*')) if p.suffix in ('.hpp', '.cpp')}), indent=2))
@@ -332,18 +381,18 @@ def main():
                            output_dir=str(directory), duration=params['duration'], gui=params['gui'], wall_timeout=params['wall_timeout'])
         if args.gem5:
             launch_args.update({k: params[k] for k in HARDWARE_DEFAULTS})
-            launch_args.update({k: v for k, v in plan['gem5'].items() if k != 'pacing'}, outdir=str(directory/'gem5'),
+            launch_args.update({k: v for k, v in plan['gem5'].items()}, outdir=str(directory/'gem5'),
                                timing_socket=str(Path('/tmp/chimaera_time.sock')),
                                physics_step_ns=round(params['physics_step'] * 1e9), status_bar=False)
         command = ['ros2','launch','wall_follow_bridge' if args.gem5 else 'wall_follow_benchmark',
                    'bringup.launch.py' if args.gem5 else 'host.launch.py' if args.host_only else 'benchmark.launch.py'] + [
             f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in launch_args.items()]
         record = dict(command=command, started_unix=time.time(), status='running')
-        if args.gem5:
-            record['pacing'] = plan['gem5']['pacing']
         status_file = directory/'attempt.json'
         status_file.write_text(json.dumps(record, indent=2))
-        print(f"[{index}/{len(plan['runs'])}] {run['id']} -> {directory}", flush=True)
+        label = ' · '.join(f'{k}=' + ', '.join(f'{p}={v}' for p,v in bundle.items())
+                           for k,bundle in run['sweep'].items()) or 'fixed settings'
+        print(f"[{index}/{len(plan['runs'])}] {label} · repetition {run['repetition']} -> {directory}", flush=True)
         process = None
         interrupted = False
         try:
@@ -358,8 +407,9 @@ def main():
                 timeout = run['parameters']['wall_timeout'] + 30
                 code = (wait_verbose(process, directory/'launch.log',
                                      directory/'timing.csv' if args.gem5 else None, timeout,
-                                     stream_logs=args.verbose)
-                        if args.progress or args.verbose else process.wait(timeout=timeout))
+                                     stream_logs=args.verbose, duration=params['duration'],
+                                     samples_path=directory/'samples.csv')
+                        if not args.quiet else process.wait(timeout=timeout))
             record.update(returncode=code, status='completed' if code == 0 and completed(directory) else 'failed')
         except subprocess.TimeoutExpired:
             stop_process(process)
@@ -375,7 +425,6 @@ def main():
         if args.gem5:
             try:
                 timing = summarize(directory/'timing.csv')
-                (directory/'timing_summary.json').write_text(json.dumps(timing, indent=2))
                 record['timing'] = timing
                 print(f"  Co-simulation: {timing['cosim_realtime_factor']:.3f} simulated s/wall s", flush=True)
             except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -385,7 +434,6 @@ def main():
         if args.gem5:
             try:
                 stats = summarize_gem5(directory/'gem5/stats.txt')
-                (directory/'gem5_summary.json').write_text(json.dumps(stats, indent=2))
                 record['gem5_stats'] = stats
             except (OSError, ValueError) as exc:
                 record['gem5_stats_error'] = str(exc)
@@ -415,7 +463,7 @@ def main():
             failures += 1
             if not args.keep_going:
                 break
-    if not args.no_plot:
+    if not args.collect_only:
         code = subprocess.call([sys.executable, str(WORKSPACE/'scripts/compare_experiments.py'),
                                 str(output), '--output', str(output/'comparison'), '--warmup', str(args.warmup)])
         if code:
