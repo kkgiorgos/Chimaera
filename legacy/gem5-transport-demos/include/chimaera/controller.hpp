@@ -50,7 +50,7 @@ public:
 class GuestController : public DataController {
 public:
     virtual ~GuestController() = default;
-    // Wait for the previous reply's polling duration, then exchange one poll.
+    // Perform one poll exchange and sleep for the configured guest duration.
     // Startup polls stay inside this call until the first host epoch arrives.
     // External scheduling pauses this call along with all other guest code.
     [[nodiscard]] virtual ControllerResult run_next() = 0;

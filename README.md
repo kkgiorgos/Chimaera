@@ -38,6 +38,7 @@ Simulation time and the real time spent running an experiment are different.
 | [queue-manager](queue-manager/README.md) | Bounded message queues that share one transport. |
 | `gem5/` | Modified gem5 source, including Chimaera's guest-to-host operations. |
 | `docs/` | Architecture material, [custom gem5 operations](docs/gem5ops.md), and an [efficiency audit](docs/gem5-cosimulation-efficiency-audit.md). |
+| [legacy/gem5-transport-demos](legacy/gem5-transport-demos/README.md) | Frozen raw transport and controller demos with their build dependencies. |
 | `legacy/`, `ros/franka_ws/` | Earlier implementations and additional robot integration work. |
 
 ## Start here

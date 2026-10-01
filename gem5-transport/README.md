@@ -1,165 +1,121 @@
 # gem5 transport
 
-`chimaera::HostTransport` and `chimaera::GuestTransport` implement the local
-[`chimaera::Transport`](include/chimaera/transport.hpp) interface. This directory
-contains its own interface, result types, libraries, and interactive examples.
-It builds independently of other transport implementations. The host library
-uses Unix sockets; the guest library calls the existing
-`m5_chimaera_send_addr` and `m5_chimaera_recv_addr` operations from the custom
-`libm5`.
+This package exchanges messages between a host application and an x86 Linux
+application running inside the modified gem5 simulator. It provides synchronous
+raw transports and buffered controllers for applications that advance simulation
+in intervals. Applications supply their own producers, consumers, and run loops.
 
-For buffered exchange at synchronization intervals and socket-driven gem5
-stepping and separate application processes attached to message channels, see
-[the controller guide](CONTROLLERS.md). Controller builds also embed the sibling
-`queue-manager` library; the raw transport API remains unchanged.
+Read [CONTROLLERS.md](CONTROLLERS.md) for controller integration, the execution
+sequence, timing, and protocol design. The ROS integrations are in
+[wall-follow](../ros/wall_follow_ws/README.md) and
+[talker/listener](../ros/talker_listener_ws/README.md).
+Interactive demos, local channel IPC, and image deployment helpers live in the
+[self-contained legacy archive](../legacy/gem5-transport-demos/README.md).
 
-## Build
+## Build and link
 
-From the repository root:
+Requires Linux, CMake 3.21+, Make, and a C++20 compiler:
 
 ```sh
 make -C gem5-transport
+# Build just the guest libraries:
+make -C gem5-transport guest
+# Host libraries and tests without libm5:
+make -C gem5-transport BUILD_DIR=build-host CMAKE_ARGS=-DGEM5_TRANSPORT_BUILD_GUEST=OFF
 ```
 
-Inside `gem5-transport`, use `make` to build everything, `make guest` to build
-only the guest executable, or `make clean` to remove the build directory.
-Override settings as needed, for example `make JOBS=8 BUILD_TYPE=Release`.
-`BUILD_DIR`, `GEM5_ROOT`, and additional `CMAKE_ARGS` are also configurable.
-
-The guest build requires the custom x86 `libm5.a` at
-`gem5/util/m5/build/x86/out/`. If needed, build it from `gem5/util/m5` using
-`scons build/x86/out/m5`. Set `GEM5_ROOT` to use another custom gem5 tree, or
-`GEM5_M5_LIBRARY` to point to its library. The guest executable must also be
-compatible with the guest OS's C++ runtime.
-
-For a host-only build without gem5 headers or libm5, configure with
-`make CMAKE_ARGS=-DGEM5_TRANSPORT_BUILD_GUEST=OFF`. To enable the guest again
-in that build directory, pass `CMAKE_ARGS=-DGEM5_TRANSPORT_BUILD_GUEST=ON`.
-
-## Deploy to the guest image
-
-Shut down any gem5 or QEMU process using the image, then run:
-
-```sh
-make -C gem5-transport deploy
-```
-
-This builds the guest executable, requests sudo for mounting, and installs it
-as `/usr/local/bin/gem5_transport_guest` in partition 2 of
-`gem5/resources/x86-ubuntu-22.04-ros-humble.img`. The image must be an offline
-raw disk image. The script creates a temporary mount point and unmounts and
-detaches its loop device on exit, including on copy failure.
-
-To use a different image or destination:
-
-```sh
-make -C gem5-transport deploy IMAGE=/path/to/disk.img PARTITION=2 GUEST_PATH=/home/gem5/gem5_transport_guest
-```
-
-The helper is `scripts/edit_disk.sh`; it can also be invoked directly with
-`bash scripts/edit_disk.sh IMAGE EXECUTABLE PARTITION /GUEST/DESTINATION`.
-
-## Interactive examples
-
-Start this on the host **before any guest transfers**:
-
-```sh
-./gem5-transport/build/gem5_transport_host
-```
-
-After deploying, run this inside the simulated x86 Linux guest:
-
-```sh
-sudo /usr/local/bin/gem5_transport_guest
-```
-
-The guest example maps the m5 address region at `0xFFFF0000`, using libm5's
-`map_m5_mem()`, and unmaps it on exit. Access through `/dev/mem` normally needs
-root; the gem5 bridge device can provide access without it. This executable
-must run inside the modified gem5 simulation, not directly on the host.
-
-Choose `send` on one side and `receive` on the other. Type a line on the
-sending side. Each operation returns to the menu; `quit` exits. Empty lines,
-spaces, and direction changes are supported. Both receives and host sends
-block waiting for the corresponding guest operation. Two receives will wait
-indefinitely. The simulator must be advancing for guest operations to run.
-
-The host opens both `/tmp/chimaera_g2h.sock` and `/tmp/chimaera_h2g.sock` when
-constructed, matching `gem5/src/chimaera/util.hh`. Do not run the legacy host
-bridges on these paths at the same time. Existing socket paths are never
-unlinked during startup; owned paths are removed on normal destruction.
-After a forced kill, remove stale sockets only after their owner has stopped.
-Use `ss -xapn | grep chimaera` to check for active sockets. If neither path is
-in use, remove `/tmp/chimaera_g2h.sock` and `/tmp/chimaera_h2g.sock` and restart
-the host. Quit through the menu with `q` for normal cleanup; Ctrl+C can leave
-the socket files behind. Restarting is required because startup failures are
-stored by the transport instance.
-Alternate constructor paths require matching changes to the socket constants
-in gem5.
-
-## Linking and mapping ownership
+`BUILD_DIR`, `BUILD_TYPE` (default Debug), `JOBS`, `GEM5_ROOT`, and `CMAKE_ARGS`
+are configurable. Use `BUILD_TYPE=Release` for simulation workloads.
+The guest libraries require the custom x86 `libm5.a` from
+`gem5/util/m5/build/x86/out/`; build it with `scons build/x86/out/m5` from
+`gem5/util/m5`. Point `GEM5_ROOT` at another compatible tree or set the CMake
+cache variable `GEM5_M5_LIBRARY` to its library. Guest binaries must be compatible
+with the simulated OS's C++ runtime.
 
 ```cmake
 add_subdirectory(path/to/gem5-transport)
-target_link_libraries(your_host PRIVATE chimaera::host)
-target_link_libraries(your_guest PRIVATE chimaera::guest)
+target_link_libraries(your_host PRIVATE chimaera::host_controller)
+target_link_libraries(your_guest PRIVATE chimaera::guest_controller)
 ```
 
-Include `chimaera/host_transport.hpp` or
-`chimaera/guest_transport.hpp` and pass the concrete object as a
-`chimaera::Transport&`. Libraries propagate the C++20 requirement and interface
-headers. The guest target links libm5 and propagates `-no-pie` for its x86 code.
-Applications that manage the address mapping must add
-`${GEM5_ROOT}/util/m5/src` to their include paths for `m5_mmap.h`.
+| Target | Interface | Purpose |
+| --- | --- | --- |
+| `chimaera::transport` | `chimaera/transport.hpp` | Raw message contracts and result types |
+| `chimaera::host` | `chimaera/host_transport.hpp` | Synchronous host socket transport |
+| `chimaera::guest` | `chimaera/guest_transport.hpp` | Synchronous guest m5op transport |
+| `chimaera::host_controller` | `chimaera/gem5_controller.hpp` | Buffered host exchange and timing; wall-clock pacing |
+| `chimaera::guest_controller` | `chimaera/gem5_controller.hpp` | Buffered guest polling |
 
-The application owns the process-global libm5 mapping: call `map_m5_mem()`
-once before using the guest transport and `unmap_m5_mem()` after all operations
-finish. The transport does not unmap another component's mapping. An unmapped
-guest operation returns `invalid_argument`. Use one sequential transport
-session per simulator; concurrent transfers or multiple clients are unsupported.
+Targets propagate interface headers and C++20. The guest target links libm5 and
+propagates `-no-pie` for its x86 assembly. Applications using `m5_mmap.h` or
+`gem5/m5ops.h` directly must add `${GEM5_MMAP_INCLUDE}` or `${GEM5_OP_INCLUDE}`
+to their own include paths.
 
-## Wire protocol and errors
+```sh
+ctest --test-dir gem5-transport/build --output-on-failure
+```
 
-Each message uses an eight-byte unsigned big-endian payload length, followed
-by its payload. The length and nonempty payload are **separate m5 calls**.
-Thus empty messages need one call, and other messages need two. Zero-length
-m5 calls are avoided because the existing handlers index the first and last
-bytes of their buffers. The maximum message size is 64 MiB.
+The tests exercise host exchanges against a socket peer, controller queues and
+encoding, and guest operations against fake m5ops. They do not boot gem5.
 
-Each m5 call opens a separate Unix connection:
+## Raw transport contract
 
-- Guest to host: gem5 adds its existing native `uint64_t` packet-length
-  envelope before the call's bytes. The host validates and strips this
-  envelope before interpreting the message header or payload.
-- Host to guest: the host sends exactly the bytes requested by that call;
-  no extra envelope is added. Receiving the header first tells the guest
-  how many payload bytes to request next.
+Include the host or guest header and use the concrete object through
+`chimaera::Transport&`. `send(span)` transfers one complete message;
+`receive()` blocks for one message and returns owned bytes. Check `result.ok()`
+and inspect `result.error` / `result.message` on failure. An empty message is
+valid and differs from a failed receive. Operations on an instance must be
+serialized; use one transport session per simulator.
 
-No changes to the existing gem5 operations or their ABI are required. Both
-ends must use this new backend's framing; the legacy random-byte examples
-use different connection/framing conventions.
+Construct `HostTransport` before any guest transfer. It immediately opens
+`/tmp/chimaera_g2h.sock` and `/tmp/chimaera_h2g.sock`, matching
+[gem5's constants](../gem5/src/chimaera/util.hh). Alternate paths require matching
+simulator changes. Host sends wait for guest receives, and host receives wait for
+guest sends. The simulator must be running to execute guest calls. Two receives
+wait indefinitely; the raw transport supplies no timeout or liveness protocol.
 
-Host socket failures, malformed frames, allocation failures, and short m5
-returns produce result errors. After a transfer failure the instance stores
-the error and rejects further operations, avoiding reuse of a partial message.
-An oversized local send is rejected without poisoning the session. Recreate
-both ends together after a failed transfer.
+The application owns libm5's process-global address mapping. Set
+`m5op_addr = 0xFFFF0000`, call `map_m5_mem()` once before address-mode transfers,
+and `unmap_m5_mem()` after all users finish. The transport never unmaps it.
+Mapping uses `/dev/gem5_bridge` or `/dev/mem`; the latter normally requires root.
+An unmapped address-mode operation returns `invalid_argument`.
 
-The existing simulator handlers panic on socket failures instead of returning
-an error code. Those failures still terminate gem5 and cannot be converted to
-a guest `TransportError` by this adapter. Likewise libm5's mapping helper may
-exit on setup failure. There is no timeout or peer-liveness channel while
-waiting for a new connection, and a successful send is not an application-level
-acknowledgment. Transfers do not add modeled communication latency.
+`GuestM5Ops::address` is the default and supports KVM. Choose
+`GuestM5Ops::instruction` for a simulated x86 CPU such as TimingSimpleCPU or O3;
+it requires no mapping. Instruction ops must never execute on the host or under
+KVM. For a KVM-to-simulated-CPU transition, see the controller bootstrap contract.
 
-### Guest m5op backends
+## Framing and its reason
 
-`GuestTransport` and `Gem5GuestController` default to `GuestM5Ops::address`,
-retaining KVM compatibility and the application-owned libm5 mapping. Pass
-`GuestM5Ops::instruction` for a simulated x86 CPU: send/receive use instruction
-m5ops and require no mapping. Never execute instruction ops on the host or KVM.
-For KVM boot followed by a workbegin CPU switch, pass `address_bootstrap=true`
-to the guest controller and keep the mapping alive: bootstrap exchanges use
-address ops until a nonzero host epoch confirms the switched simulator is ready.
-The wall follower demonstrates this path with TimingSimpleCPU by default.
-Framing and the host transport remain identical across backends.
+A message is an eight-byte unsigned big-endian payload length followed by the
+payload, capped at 64 MiB. Header and nonempty payload use separate m5 calls.
+The guest first learns the length, then requests exactly that many bytes.
+Empty messages use just the header: zero-length m5 calls are avoided because
+the simulator handlers index the first and last buffer bytes.
+
+Each m5 call opens a fresh Unix connection. Guest-to-host operations add a
+native host `uint64_t` envelope around each call's bytes; the host validates and
+strips it. Host-to-guest operations send exactly the bytes the guest requested,
+without that envelope. The native envelope comes from gem5 on the same host;
+the message length remains big-endian. This adapts the existing pseudo-op ABI.
+Transfers add no modeled communication latency.
+
+## Failures and lifetime
+
+Oversized local sends and missing guest mappings are rejected before transfer
+without poisoning the raw transport. Socket failures, malformed incoming frames,
+allocation failures, and short m5 returns store a permanent failure; further
+operations return it. Restart both ends together after a partial transfer.
+A successful send acknowledges transport completion, not application handling.
+
+`HostTransport::cancel()` is the only operation allowed from another thread.
+It permanently wakes blocked I/O. Join the I/O thread before destroying the
+transport. Owned sockets are removed on normal destruction only if their file
+identity still matches. Existing paths are never unlinked at startup. After a
+forced kill, use `ss -xapn` to check ownership before removing stale paths.
+Startup failures are stored too, so recreate a failed instance.
+
+The simulator's m5 handlers panic on socket failures; the adapter cannot turn
+those panics into guest result errors. The libm5 mapping helper can also exit
+on setup failure. Controller shutdown and failure behavior are documented
+separately in [CONTROLLERS.md](CONTROLLERS.md).

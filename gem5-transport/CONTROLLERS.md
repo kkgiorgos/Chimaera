@@ -1,332 +1,232 @@
 # gem5 controllers
 
-The self-contained `chimaera` controller interface is in
-[`include/chimaera/controller.hpp`](include/chimaera/controller.hpp).
-It provides application-driven data queues, timing, and host/guest controller contracts.
-The implementation uses the real gem5 transport and has no build or runtime
-dependency on `mock-sim`. Gazebo is not connected yet.
+Controllers buffer application messages while gem5 advances in synchronization
+intervals. They do not own application callbacks or a Gazebo connection.
+The [wall-follow integration](../ros/wall_follow_ws/src/wall_follow_bridge/include/wall_follow_bridge/timing_controller.hpp)
+coordinates gem5 with Gazebo outside this package.
 
-## Build, deploy, and run
+## Application integration
 
-From the repository root:
+Include `chimaera/gem5_controller.hpp` and link the appropriate controller target
+from [the build guide](README.md). The `DataController`, `HostController`,
+`GuestController`, and `TimingController` interfaces define the extension contracts.
+Applications serialize controller calls and own all message producers and consumers.
 
-```sh
-make -C gem5-transport
-# With gem5/QEMU stopped:
-make -C gem5-transport deploy-controller
-```
-
-Deployment uses the same `IMAGE` and `PARTITION` settings as `make deploy` and
-installs `/usr/local/bin/gem5_controller_guest`. The original raw transport
-examples and `make deploy` remain available separately.
-
-Start the host first, in one terminal:
-
-```sh
-./gem5-transport/build/gem5_controller_host --ratio 1 --interval-us 100000 --poll-us 10000
-```
-
-In another terminal:
-
-```sh
-gem5/build/X86/gem5.opt --outdir=m5out-controller \
-    gem5/configs/custom/x86-ubuntu-socket-server.py --boot-to-controller
-```
-
-This boots the guest, launches the deployed controller through the image's
-readfile startup script, and pauses at its `m5_work_begin_addr` marker. At that
-marker it resets statistics but keeps running on KVM. Both boot and controller
-intervals use KVM, with perf counters disabled. If the guest asks for a sudo
-password, connect to its serial console (normally port 3456) and use the guest's
-credentials. The controller needs access to the m5 mapping device or `/dev/mem`.
-The host waits for the timing socket, then advances automatically. No manual
-`step` commands are needed. Its default startup timeout is 300 wall seconds;
-change it with `--startup-timeout N` if boot or authentication takes longer.
-
-`--ratio R` means **simulated seconds per wall-clock second**: `1` targets real
-time, `0.5` targets half speed, and `2` targets twice real time. `--interval-us`
-is the nominal simulated sync interval in microseconds and `--poll-us` is the guest polling
-interval, also in microseconds. Both retain the tick-drift compensation described below.
-
-The controller console handles `status` and `quit`; timing advances automatically.
-Application messages use separate client processes. Start as many client terminals
-as needed on the host, selecting channel 1 or 2:
-
-```sh
-./gem5-transport/build/gem5_controller_host --channel 1 /tmp/chimaera_host_channels.sock
-./gem5-transport/build/gem5_controller_host --channel 2 /tmp/chimaera_host_channels.sock
-```
-
-The guest uses a **single controller process and console** for both channels.
-`--boot-to-controller` launches it as before; no additional guest shells or client
-processes are needed. At its serial console, use:
-
-```text
-send 1 hello from the guest
-send 2 another message
-send 1
-```
-
-`send CHANNEL` sends an empty message. Incoming data on both channels appears
-automatically with a `[channel 1]` or `[channel 2]` prefix, including while a send
-command is partially typed. Console reads never wait for a complete line, so guest
-polling continues. EOF disables guest input but receiving and polling continue.
-Shut down the simulation with `quit` on the host controller console.
-The guest no longer opens a local channel socket or supports the `--channel` /
-`--channels` modes; redeploy with `make -C gem5-transport deploy-controller`.
-
-On the host, each `--channel` command starts an independent client process.
-A host channel-1 send appears on guest channel 1, and a guest channel-1 send is
-received by a host channel-1 client. Host client commands are `send TEXT`, `send`
-(empty message), and `quit`. Incoming messages appear automatically; clients
-check every 20 ms while idle. EOF exits a host client. Multiple host consumers
-on one channel compete for messages rather than receiving broadcast copies.
-
-Outgoing demo queues hold 128 messages per channel and messages are capped at
-4096 bytes. A full outgoing queue reports `Queue full; retry`. The guest drains
-each received bundle directly to its console. Host incoming queues still apply
-backpressure when clients do not drain them, which can delay timing. Host sockets
-are same-user (mode 0600); override the host service path with `--channels PATH`
-and pass that path to its clients. Existing socket paths are never removed at
-startup. After a forced shutdown, check that the owner has stopped before removing
-its stale channel socket.
-
-EOF disables the host controller console without stopping automatic execution.
-Use `--steps N` for a bounded run, or `quit` / Ctrl+C to stop. A stop signal is
-handled after the current simulation interval completes.
-
-`quit` shuts down gem5 through its timing socket without executing another
-guest instruction. It then cancels and joins the host I/O worker. Exit normally
-to remove socket files; stale paths after forced termination must be checked
-and removed as described in the transport README. Do not run raw transport
-examples or legacy bridges on the same socket paths concurrently.
-
-Without `--boot-to-controller`, gem5 opens the timing socket at tick zero and
-waits for steps; boot time is then included in those steps. This mode also
-supports timing-only use. The host controller does not require a guest handshake
-before advancing, and queued messages remain buffered until a guest polls.
-
-## Wall-clock pacing and achieved rate
-
-The host measures elapsed wall time with `std::chrono::steady_clock`, starting
-after gem5 is ready. Boot/startup is excluded when using `--boot-to-controller`.
-Rate measurements use the **actual tick progress** returned by gem5, not the
-number of requested intervals. They include socket, application, console, and
-pacing overhead during the measured run.
-
-When ahead of the target ratio, the host waits until
-`wall_elapsed >= actual_simulated_seconds / ratio`. This is a cumulative
-schedule, so oversleep does not accumulate as additional per-step delay.
-When behind, it runs the next interval immediately. It preserves sync interval
-sizes and cannot force gem5 to run faster than the hardware allows. KVM remains
-the only CPU model. Pacing controls the average rate; execution still happens
-in interval-sized bursts, so smaller intervals improve smoothness at the cost
-of additional overhead.
-
-The host refreshes a fixed bottom status bar every wall second by default
-(`--report-seconds S`). Messages and console input stay above it; updates do
-not add lines to the message history. Redirected output and terminals without
-ANSI support omit periodic reports; `status` and the final summary still print.
-
-```text
-Rate: target=1x achieved=0.98x average=0.99x sim=9.9s wall=10s
-```
-
-`achieved` measures actual simulated seconds / wall second since the preceding
-report; `average` covers the whole run. The bar is removed on exit, and a final report prints the overall rate
-before shutdown. Reports and console input are serviced while pacing and at
-interval boundaries. If a gem5 step itself takes a long time, the next report
-arrives when that step completes. A requested rate that cannot be reached is
-therefore visible in the achieved/average values, rather than reported as met.
-
-For example, run 50 nominal 20 ms intervals at half speed:
-
-```sh
-./gem5-transport/build/gem5_controller_host --ratio 0.5 \
-    --interval-us 20000 --poll-us 2000 --report-seconds 0.5 --steps 50
-```
-
-## Application interface
-
-Include `chimaera/gem5_controller.hpp`. Link host code to
-`chimaera::host_controller` and guest code to `chimaera::guest_controller`.
+A host loop constructs the listeners before starting the guest, waits for the
+paused timing server, and exchanges application data around each step:
 
 ```cpp
 chimaera::Gem5TimingController timing("/tmp/chimaera_time.sock");
-chimaera::Gem5HostController host(timing);
-host.submit(message); // application producer queues an outgoing message
-auto result = host.step(std::chrono::microseconds(100000),
-                        std::chrono::microseconds(10000));
-while (auto message = host.take()) {
-    // Application consumer handles the received message.
+chimaera::Gem5HostController host(timing); // timing must outlive host
+try {
+    timing.wait_until_ready();
+    for (int i = 0; i < 10; ++i) {
+        host.submit(chimaera::Message{}); // example application message
+        const auto result = host.step(std::chrono::milliseconds(100),
+                                      std::chrono::milliseconds(10));
+        if (!result.ok()) throw std::runtime_error(result.message);
+        while (auto message = host.take()) {
+            // Deliver *message to your application.
+        }
+    }
+} catch (...) {
+    (void)host.stop(); // best effort; a failed timing session may need external termination
+    throw;
 }
-// Check result.state / result.message; call host.stop() for explicit shutdown.
+const auto stopped = host.stop();
+if (stopped.state == chimaera::ControllerState::failed)
+    throw std::runtime_error(stopped.message);
 ```
 
-Applications implementing their own run loop can call
-`timing.wait_until_ready()` before pacing, use `timing.elapsed_ticks()` for
-actual progress, and use `chimaera::WallClockPacer` from
-`chimaera/wall_clock_pacer.hpp` (also in `chimaera::host_controller`). Its
-`delay(ticks)` returns a bounded remaining wait; recheck it after sleeping or
-servicing input. `report(ticks)` returns recent and overall achieved rates.
-Construct the pacer after startup and before the first step. The existing
-`step()` interface remains available for applications that schedule it themselves.
+Include `<stdexcept>` for this example. The simulator configuration owns the
+timing server; [the wall-follow configuration](../ros/wall_follow_ws/src/wall_follow_bridge/config/gem5_wall_follow.py)
+is an existing implementation. With workbegin startup it boots first and opens
+the timing socket after pausing at the application's marker. The host data
+listeners must already exist because bootstrap can execute guest m5 calls.
 
-`Gem5GuestController()` owns a `GuestTransport`. After mapping libm5 and issuing
-`m5_work_begin_addr(0, 0)` for boot-to-controller startup, the application loop
-queues outgoing messages with `submit()`, calls `run_next()`, then drains received
-messages with `take()`. Each `run_next()` waits for the previous reply's
-host-configured guest polling duration before performing one poll exchange.
-The first application poll has no preceding wait. Received messages are ready
-when the call returns, so the application can deliver them and service callbacks
-before the next polling wait. It returns completed for a poll,
-rather than waiting for an interval change. Startup polls remain inside the call
-until a nonzero host epoch is observed; submitted data is retained during startup.
-External scheduling pauses all guest execution, including a pending call or sleep.
-Shutdown terminates the simulator, so the guest cannot observe a stopped return.
+An address-mode guest initializes the mapping and marker before polling:
 
-Both controllers implement `DataController`. Applications own their producers and
-consumers and call the controller; controllers hold no application handler references
-and invoke no application callbacks. Serialize calls to each controller. `take()`
-returns `nullopt` when empty; an engaged optional can hold an empty message.
+```cpp
+m5op_addr = 0xFFFF0000;
+map_m5_mem();
+try {
+    chimaera::Gem5GuestController guest;
+    m5_work_begin_addr(0, 0); // use with a config that pauses at workbegin
+    while (true) {
+        // Queue application output with guest.submit(message).
+        const auto result = guest.run_next();
+        if (!result.ok()) throw std::runtime_error(result.message);
+        while (auto message = guest.take()) {
+            // Deliver *message and service application callbacks.
+        }
+    }
+} catch (...) {
+    unmap_m5_mem();
+    throw;
+}
+```
 
-`submit(message, key)` copies an optional coalescing key. Empty keys preserve FIFO
-order, including duplicate messages. Nonempty keys replace pending messages with
-the same key, placing the new update after other retained messages. Queue overflow
-throws without changing the queue. Coalescing cannot replace messages already
-in flight. Keys are local metadata and leave packet framing unchanged.
+Include `m5_mmap.h`, `gem5/m5ops.h`, and `<stdexcept>` in addition to the
+controller header. Successful host shutdown terminates gem5, so the guest loop
+does not receive a stopped result or execute cleanup on that path.
 
-## Buffering and pause boundaries
+For KVM boot followed by a workbegin switch to a simulated CPU, construct
+`Gem5GuestController(GuestM5Ops::instruction, true)`. It uses address ops during
+bootstrap and instruction ops after the first nonzero host epoch. Keep the
+mapping alive throughout polling. A nonzero epoch is meaningful only when the
+simulator configuration guarantees that the CPU switch precedes host stepping.
+Pure simulated-CPU operation can use instruction mode without address bootstrap.
 
-The underlying m5 operations are synchronous and open a fresh host socket per
-call. The host therefore services them on a worker thread while the caller
-waits for gem5 to finish its interval. A guest poll sends a batch and receives
-a reply containing host data, an interval number, and the polling duration.
-An empty batch is a valid no-data reply, so polling never waits for application
-data. Guest sleeps use the simulated guest OS clock rather than host wall time.
-The effective poll spacing includes guest scheduling and application execution.
+`submit(message, key)` queues outgoing data. An empty key preserves FIFO,
+including duplicates. A nonempty key replaces pending updates with that key,
+putting the newest update after other retained messages. The key is copied,
+remains local metadata, and cannot replace data already in flight. Overflow
+throws without changing the queue. `take()` returns `nullopt` when empty;
+an engaged optional can contain an empty message.
 
-Startup polls carry no application data until the first host interval is
-observed. This also covers the small window in which KVM executes past the
-workbegin marker while gem5 handles the global exit; no application data is sent
-during that bootstrap window.
+## Why there is an I/O worker
 
-The application submits host data for future polls. After the timing server
-confirms the pause, `step()` makes the current snapshot of fully decoded guest
-batches available through `take()`. A transfer can span a pause: partially transferred or not-yet-decoded batches remain pending and
-become available at a subsequent boundary. No partial application message is
-delivered, and the controller never resumes gem5 just to finish a transfer.
-An already prepared poll reply may contain the previous interval number; the
-guest picks up updated settings on a later poll. Keep polling intervals smaller
-than synchronization intervals to reduce this delay.
+Guest m5 calls synchronously wait for host socket I/O. Meanwhile, the host's
+application thread must wait for the simulator to finish its interval. Servicing
+both waits on that thread would deadlock. The host controller therefore owns an
+I/O worker that handles guest polls independently of the timing wait.
 
-Each queued direction and each packet batch is limited to 1024 messages and
-32 MiB of payload. Overflow reports failure instead of silently dropping data.
-The host detaches outgoing queues and incoming snapshots by swapping storage
-under its mutex. Batch assembly and merging into the application receive queue
-happen after releasing it. Incoming snapshot storage is preallocated and reused;
-received messages use a read cursor, reclaiming consumed slots on append.
-Outgoing descriptor storage grows geometrically, and queue operations move
-payload buffers without copying their bytes.
+```mermaid
+sequenceDiagram
+    participant App as Host application
+    participant Time as gem5 timing server
+    participant Guest as Guest application
+    participant IO as Host I/O worker
+    App->>Time: STEP_TICKS budget
+    Note over Time: Resume guest execution
+    Guest->>IO: Poll with outgoing batch
+    IO-->>Guest: Reply with host batch, epoch, poll duration
+    Note over Guest: Deliver messages; next call waits on guest OS clock
+    Note over Time: Pause when interval ends
+    Time-->>App: OK start_tick end_tick
+    Note over App: Snapshot decoded guest batches; take() delivers them
+```
 
-An additional batch can be in flight in the worker. Submitted data is removed
-when a packet is prepared; a later transport failure does not automatically
-requeue it. Unconsumed received data counts toward queue limits. Protocol and
-transport failures make the controller unusable for further steps.
+A guest `run_next()` performs one exchange. Before the next exchange it sleeps
+for the previous reply's polling duration, using the simulated guest OS clock.
+Returning before that sleep lets the application deliver received messages and
+run callbacks promptly. Actual spacing also includes guest scheduling and
+application work; the duration is not a guarantee of a fixed poll count.
 
-`HostTransport::cancel()` is the only transport method safe to call concurrently
-with send/receive. It wakes blocked socket operations permanently. The controller
-uses it to join its worker even if gem5 is paused halfway through a transfer.
-Destroying a host controller only tears down local I/O; use `stop()` first to
-terminate gem5 cleanly. On a failed timing connection, simulation state may be
-unknown; terminate/restart the session rather than retrying an interval.
+An empty reply is valid, so polling never waits for application data. Before the
+first host step, replies carry epoch zero and no application data. The guest
+keeps bootstrap polls inside `run_next()` until a nonzero epoch arrives, retaining
+submitted data. This protects the window in which KVM executes beyond workbegin
+before gem5 services its global exit.
 
-## Timing socket
+## What an interval boundary guarantees
 
-The Python configuration is the server. `Gem5TimingController::start()` connects
-and writes a command, then returns without waiting for the simulation to finish.
-`wait()` reads and validates the completion response. Only one request can be
-outstanding. There is no busy polling and no Gazebo request. The default wall
-timeout is 300 seconds, configurable in the timing controller constructor.
+After gem5 confirms its pause, `step()` exposes the current snapshot of fully
+decoded guest batches through `take()`. A transfer or worker decoding can cross
+the pause. Such data becomes available at a later boundary; no partial message
+is delivered. The controller never resumes gem5 just to finish a transfer and
+never joins its I/O worker at a boundary.
 
-The protocol is ASCII, one newline-terminated command per connection:
+A prepared reply can carry the preceding epoch or polling settings. The guest
+picks up new settings on a later poll. Poll more frequently than the synchronization
+interval to reduce that delay. An interval is a simulation pause and receive
+snapshot, not an acknowledgment that every queued message reached its application.
+
+Each controller queue and packet batch is capped at 1024 messages and 32 MiB of
+payload. Unconsumed received data counts toward the queue limits. The worker can
+also hold a detached batch in flight; these limits are not one global memory cap.
+Submitted data leaves the queue when a packet is prepared. Failure afterward
+does not requeue it automatically.
+
+The host swaps outgoing queues and incoming snapshots under a mutex, then
+assembles packets and merges received data outside it. Preallocated incoming
+descriptors avoid allocation while publishing under the mutex. Payload buffers
+move without copying their bytes. The receive cursor avoids shifting every
+remaining descriptor on each `take()` and reclaims consumed slots on append.
+These choices keep the worker from delaying the application at a boundary.
+
+## Timing and the two clocks
+
+`Gem5TimingController::start(interval)` sends a command and returns;
+`wait()` reads completion once the simulator pauses. Only one timing request may
+be outstanding, and only this timing session may advance that simulator.
+Intervals must be positive and at most one simulated hour. Host `step()` also
+requires `0 < poll <= interval` and at most 100000 nominal polls per interval.
+
+The simulator uses a fixed 1 THz tick frequency: one nanosecond equals 1000 ticks.
+The controller anchors an ideal cumulative target at the first step's start tick.
+Each subsequent interval adds to that target, then requests
+`max(0, target_tick - last_actual_tick)`. If a nominal 100 ms step advances 103 ms,
+the next 100 ms interval requests 97 ms. Large overshoots can require zero-tick
+steps while the ideal target catches up. Requests are capped at one simulated
+hour; remaining undershoot carries forward. Integer tick accounting preserves
+sub-nanosecond drift. This corrects cumulative progress, not the precision of
+individual pause boundaries.
+
+`WallClockPacer` addresses a separate problem: limiting simulation progress per
+real second. Construct it after startup, pass actual `timing.elapsed_ticks()` to
+`delay()`, and sleep or service input before checking again. The delay is capped
+at one wall second. `report()` returns recent and overall achieved ratios.
+A ratio of 1 targets real time; 0.5 targets half speed; 2 targets twice real time.
+Cumulative pacing avoids accumulating oversleep. When behind, it requests no
+wait; it cannot make the simulator run faster. See the
+[talker/listener host loop](../ros/talker_listener_ws/src/talker_listener_bridge/src/host_bridge.cpp)
+for integration.
+
+## Protocols
+
+The timing protocol is ASCII, with one newline-terminated command per connection:
 
 | Command | Response |
 | --- | --- |
-| `STEP_US n` | `OK actual_start_tick actual_end_tick` after requesting n microseconds |
-| `STEP_NS n` | `OK actual_start_tick actual_end_tick` after requesting n nanoseconds |
-| `STEP_TICKS n` | `OK actual_start_tick actual_end_tick` after requesting n ticks (zero keeps gem5 paused) |
+| `STEP_TICKS n` | `OK actual_start_tick actual_end_tick`; zero keeps gem5 paused |
+| `STEP_NS n` / `STEP_US n` | Same response, after scaling the positive duration to ticks |
 | `STATUS` | `PAUSED tick` or `DONE tick` |
-| `QUIT` | `BYE`, followed by simulator shutdown |
+| `QUIT` | `BYE`, then simulator shutdown without resuming the guest |
 
-The configuration fixes the tick frequency at 1 THz. Nominal intervals must be
-positive and at most one simulated hour. Raw `STEP_TICKS` also accepts zero.
-Invalid commands return `ERROR text`.
-Workend or another terminating event returns `DONE tick`; C++ `wait()` treats
-early termination as an incomplete interval. Intermediate boot exits/workbegin
-events do not reset the requested budget. The server reports the actual start
-and end ticks, even when KVM runs longer or shorter than requested.
+Invalid commands return `ERROR text`; terminating simulation events return
+`DONE tick`. Intermediate startup exits do not reset the step budget. The server
+runs simulation on its main thread, so neither STATUS nor QUIT interrupts a step.
+Disconnecting does not undo a command. The C++ constructor's wall timeout defaults
+to 300 seconds. `wait_until_ready()` has a separate startup timeout and an optional
+cancellation callback while retrying an unavailable endpoint.
 
-The C++ timing controller maintains an ideal cumulative target, anchored at the
-first response's start tick. Each `start(interval)` adds the nominal interval to
-that target and requests `max(0, target - last_actual_tick)` ticks. For example,
-if a 100 ms interval advances 103 ms, the next nominal 100 ms interval requests
-97 ms; an advance of 98 ms would instead produce a 102 ms request next time.
-Accounting is in integer ticks, so fractional-nanosecond drift is preserved.
-If an overshoot spans multiple intervals, zero-tick steps let the ideal timeline
-catch up without advancing gem5. Requests remain capped at one simulated hour;
-any remaining lag carries forward. This corrects cumulative drift, not individual
-boundary precision, and does not assume KVM can hit every requested tick.
-Only this timing controller may advance its simulator during a session.
+Controller packets travel inside the [raw transport framing](README.md).
+[src/controller_protocol.hpp](src/controller_protocol.hpp) defines their current
+format: five big-endian uint64 fields followed by length-prefixed messages.
 
-The server runs simulation on its main thread and replies only once it is
-paused. Another request, including `STATUS` or `QUIT`, cannot interrupt a
-currently executing step. Socket disconnects or timeouts do not undo a step.
-The previously advertised JSON/ADVANCE commands are replaced by this explicit
-protocol; the legacy ROS time bridge is not its client.
+| Field | Poll request | Host reply |
+| --- | --- | --- |
+| Magic | `CHIMCTR1` | `CHIMCTR1` |
+| Kind | 1 | 2 |
+| Epoch | Last observed epoch, initially zero; currently ignored by host | Host interval number; zero means bootstrap |
+| Poll duration | Zero; currently ignored by host | Guest waiting duration in nanoseconds |
+| Message count | Number of outgoing messages | Number of outgoing messages |
 
-For another timing path, pass `--socket-path PATH` to gem5 and `PATH` to
-`gem5_controller_host`. Data socket paths still match the constants in gem5's
-existing pseudo-ops. Those pseudo-ops still panic on socket errors; this layer
-cannot turn such a simulator panic into a recoverable guest result.
+Each message has an eight-byte big-endian length followed by its bytes.
+Decoding rejects mismatched magic/kind, truncation, trailing bytes, excessive
+counts/payload, and polling durations above one hour. The guest also rejects
+nonpositive reply durations, epoch regression, and application data in bootstrap
+replies. This documents the existing protocol; directional packet refactoring
+is deferred.
 
-Simulation intervals and guest polling accept integer microseconds (minimum
-1 us), for example `--interval-us 100 --poll-us 10`. Internal durations remain
-nanoseconds and gem5 requests remain integer ticks to preserve drift correction
-precision. Console pacing uses microsecond waits rather than rounding up to
-milliseconds. OS scheduling and KVM exits can still overshoot these intervals.
-Wall-clock startup timeouts and reporting cadence remain in seconds.
+## Shutdown and failures
 
-## Queue-manager integration
+Call `host.stop()` to send QUIT while paused, then cancel and join local I/O.
+The timing controller must outlive the host controller. Destruction alone
+cancels local I/O; it does not stop or advance gem5.
 
-Link `chimaera::channels` and include `chimaera/channel_service.hpp`. Construct a
-`ChannelService(socket_path, channels)`. Call `service.exchange(controller)` from
-the application loop before and after host steps to push serialized queue-manager
-snapshots into the controller and pull received bundles for demultiplexing.
-Both peers must configure matching channel IDs. Queue depths may differ; the
-service limits total configured depth to 4096. The host demo uses this service;
-the guest demo calls `GuestChannels::exchange(controller)` between polls to read
-console input and display incoming channel data without local IPC.
+| Outcome | What the caller does |
+| --- | --- |
+| `step()` / `run_next()` returns completed | Drain received data and continue |
+| Invalid `step()` duration | Correct it and retry; this validation does not poison the controller |
+| `submit()` overflows | Drain or reduce pending output, then retry |
+| Protocol, transport, or receive-queue failure | Treat the controller as permanently failed; restart the session |
+| `stop()` returns stopped | Shutdown succeeded; `ControllerResult::ok()` is false because it means completed |
+| Timing failure or timeout | Simulator state may be unknown; arrange external termination if stop fails |
 
-The channel service owns an IPC worker so clients can drain incoming queues while
-application delivery applies backpressure. Call `close()` from another thread to
-interrupt blocked delivery before joining the application thread; destruction
-requires all service calls to have finished. Timing must outlive the host controller.
-
-`ChannelClient(socket_path, channel_id)` exposes `send(bytes)` and `receive()` for
-application processes. `send` returns false on capacity exhaustion; `receive`
-returns nullopt when empty. Invalid channels, oversized messages, and IPC failures
-throw. A successful send means local enqueue, not peer delivery. Do not blindly
-retry after an IPC failure because acceptance may be unknown.
-
-Build and run the local IPC integration test without launching gem5:
-
-```sh
-cmake -S gem5-transport -B gem5-transport/build
-cmake --build gem5-transport/build -j4
-ctest --test-dir gem5-transport/build --output-on-failure
-```
-
-The test starts a separate client process and checks channel isolation, FIFO,
-empty messages, reverse delivery, capacity, reconnection, invalid IDs, socket
-ownership, and cancellation of blocked publication.
+Guest controller failures are permanent, including transport errors encountered
+during polling. Pending m5 operations can outlive a failed timing wait, so the
+host retains its I/O worker until stop or destruction. Timing shutdown cannot
+interrupt a running interval. The simulator's pseudo-ops can panic on socket
+failure, and successful sends do not acknowledge application delivery.

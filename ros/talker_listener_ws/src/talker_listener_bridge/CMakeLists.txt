@@ -12,7 +12,6 @@ set(GEM5_TRANSPORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../gem5-transport"
     CACHE PATH "Chimaera gem5-transport source directory")
 option(BUILD_GUEST_BRIDGE "Build the libm5 guest node" ON)
 set(GEM5_TRANSPORT_BUILD_GUEST ${BUILD_GUEST_BRIDGE} CACHE BOOL "" FORCE)
-set(GEM5_TRANSPORT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GEM5_TRANSPORT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${GEM5_TRANSPORT_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/gem5-transport")
 

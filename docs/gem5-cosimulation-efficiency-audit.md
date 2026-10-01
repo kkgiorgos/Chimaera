@@ -158,35 +158,35 @@ as benchmarks of the current implementation.
     [timing output](../ros/wall_follow_ws/src/wall_follow_bridge/src/host_bridge.cpp#L147),
     [command gateway](../ros/wall_follow_ws/src/wall_follow_benchmark/wall_follow_host/collector.py#L79).
 
-14. **Medium, channel-service mode — One full channel can stall the whole cosimulation.**
+14. **Medium, archived channel-service mode — One full channel can stall the whole cosimulation.**
 
     Deserialization waits for queue space while holding the bundle's
     deserialization lock. Because submission runs synchronously at the host
     boundary, an undrained channel blocks later channels and the next simulation
     interval. Per-channel admission or credits could isolate backpressure while
-    preserving the configured delivery guarantees. This finding applies to
+    preserving the configured delivery guarantees. This finding applies to the archived
     `ChannelService`; the ROS bridges use their own queues.
 
     Sources: [blocking insertion](../queue-manager/src/queue_manager.cpp#L171),
-    [channel submission](../gem5-transport/src/channel_service.cpp#L118),
+    [channel submission](../legacy/gem5-transport-demos/src/channel_service.cpp#L118),
     [host callback delivery](../gem5-transport/src/gem5_host_controller.cpp#L85).
 
-15. **Lower, channel clients — Local IPC repeats the connection and polling overhead.**
+15. **Lower, archived channel clients — Local IPC repeats the connection and polling overhead.**
 
     Every send or receive request creates a new socket, while idle clients poll
     every 20 ms. Persistent connections with data-ready notifications would
     reduce empty requests and receive latency.
 
-    Sources: [client requests](../gem5-transport/src/channel_service.cpp#L122),
-    [client polling](../gem5-transport/examples/channel_console.hpp#L34).
+    Sources: [client requests](../legacy/gem5-transport-demos/src/channel_service.cpp#L122),
+    [client polling](../legacy/gem5-transport-demos/examples/channel_console.hpp#L34).
 
-16. **Lower, standalone examples — The transport build defaults to unoptimized Debug.**
+16. **Lower, archived standalone examples — The transport build defaults to unoptimized Debug.**
 
     The standalone build currently uses `-g` without optimization. Release
     builds would reduce bridge execution costs and simulated guest instruction
     overhead. This finding applies to the standalone transport examples; the
     inspected wall-follow build uses Release.
 
-    Sources: [build default](../gem5-transport/Makefile#L2),
-    `gem5-transport/build/CMakeFiles/gem5_guest_controller.dir/flags.make`,
+    Sources: [build default](../legacy/gem5-transport-demos/Makefile#L2),
+    `legacy/gem5-transport-demos/build/CMakeFiles/gem5_guest_controller.dir/flags.make`,
     `ros/wall_follow_ws/build/wall_follow_bridge/CMakeCache.txt`.

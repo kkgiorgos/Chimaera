@@ -26,7 +26,6 @@ int main(int argc, char** argv) {
             const auto result = controller.run_next();
             require(result);
             channels.exchange(controller);
-            if (result.state == ControllerState::stopped) break;
         }
     } catch (const std::exception& error) {
         std::cerr << "Guest controller: " << error.what() << '\n';

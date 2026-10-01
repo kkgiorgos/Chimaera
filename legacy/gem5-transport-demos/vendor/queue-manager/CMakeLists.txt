@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.21)
+project(ChimaeraQueueManager LANGUAGES CXX)
+
+find_package(Threads REQUIRED)
+add_library(chimaera_queue_manager src/queue_manager.cpp)
+add_library(chimaera::queue_manager ALIAS chimaera_queue_manager)
+target_compile_features(chimaera_queue_manager PUBLIC cxx_std_20)
+target_include_directories(chimaera_queue_manager PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(chimaera_queue_manager PUBLIC Threads::Threads)
+
+option(QUEUE_MANAGER_BUILD_TESTS "Build queue manager tests" ${PROJECT_IS_TOP_LEVEL})
+if(QUEUE_MANAGER_BUILD_TESTS)
+    enable_testing()
+    add_executable(queue_manager_tests tests/queue_manager_tests.cpp)
+    target_link_libraries(queue_manager_tests PRIVATE chimaera::queue_manager)
+    add_test(NAME queue_manager_tests COMMAND queue_manager_tests)
+    set_tests_properties(queue_manager_tests PROPERTIES TIMEOUT 30)
+endif()

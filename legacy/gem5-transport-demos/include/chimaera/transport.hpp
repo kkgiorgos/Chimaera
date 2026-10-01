@@ -9,6 +9,7 @@ namespace chimaera {
 
 enum class TransportError {
     none,
+    not_implemented,
     invalid_argument,
     disconnected,
     io_error,
