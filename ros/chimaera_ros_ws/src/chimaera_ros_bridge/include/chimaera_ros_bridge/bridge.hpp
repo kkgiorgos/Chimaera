@@ -1,15 +1,15 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
-#include <chimaera_ros_bridge/config.hpp>
-#include <rclcpp/generic_publisher.hpp>
-#include <rclcpp/generic_subscription.hpp>
 #include <cstdint>
 #include <cstring>
 #include <deque>
 #include <functional>
 #include <map>
+#include <rclcpp/generic_publisher.hpp>
+#include <rclcpp/generic_subscription.hpp>
 #include <set>
+#include <chimaera_ros_bridge/config.hpp>
 
 namespace chimaera_ros_bridge
 {
@@ -18,20 +18,21 @@ namespace chimaera_ros_bridge
 class Bridge : public rclcpp::Node
 {
 public:
-  explicit Bridge(const std::string & side, const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
+  explicit Bridge(
+    const std::string & side, const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
   : Node(side + "_bridge", options)
   {
-    if (side != "host" && side != "guest") {throw std::invalid_argument("invalid bridge side");}
+    if (side != "host" && side != "guest") {
+      throw std::invalid_argument("invalid bridge side");
+    }
     auto path = declare_parameter<std::string>("config_file", "");
     if (path.empty()) {
       throw std::invalid_argument("config_file is required");
     }
     const auto byte_limit = declare_parameter<int64_t>("max_serialized_bytes", max_bytes);
     const auto queue_limit = declare_parameter<int64_t>("max_pending_messages", max_messages);
-    // Leave room for the largest accepted route identity in the 64 MiB transport frame.
     if (byte_limit < 4 || byte_limit > 64 * 1024 * 1024 - 2056 ||
-      queue_limit < 1 || queue_limit > 1000000)
-    {
+      queue_limit < 1 || queue_limit > 1000000) {
       throw std::invalid_argument("invalid serialized byte or pending message limit");
     }
     byte_limit_ = static_cast<std::size_t>(byte_limit);
@@ -53,8 +54,9 @@ public:
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
           [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
-            if (message->size() > byte_limit_ || outgoing_.size() >= queue_limit_) {
-              throw std::runtime_error("bridge outgoing queue or serialized message limit exceeded");
+            if (message->size() > byte_limit_) {
+              throw std::runtime_error(
+                "bridge outgoing queue or serialized message limit exceeded");
             }
             chimaera::Message bytes(8 + key.size() + message->size());
             std::memcpy(bytes.data(), "CBR1", 4);
@@ -63,21 +65,29 @@ public:
               bytes[4 + i] = static_cast<std::byte>(length >> (24 - 8 * i));
             }
             std::memcpy(bytes.data() + 8, key.data(), key.size());
-            std::memcpy(bytes.data() + 8 + key.size(),
-              message->get_rcl_serialized_message().buffer, message->size());
+            std::memcpy(
+              bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
+              message->size());
+            if (outgoing_.size() >= queue_limit_) {
+              throw std::runtime_error(
+                "bridge outgoing queue or serialized message limit exceeded");
+            }
             outgoing_.push_back(std::move(bytes));
           }));
       } else {
         publishers_.emplace(route.key, create_generic_publisher(topic, route.type, route.qos));
       }
-      RCLCPP_INFO(get_logger(), "%s %s [%s] (%s)", outgoing ? "Send" : "Receive",
-        topic.c_str(), route.type.c_str(), route.direction.c_str());
+      RCLCPP_INFO(
+        get_logger(), "%s %s [%s] (%s)", outgoing ? "Send" : "Receive", topic.c_str(),
+        route.type.c_str(), route.direction.c_str());
     }
   }
 
   std::optional<chimaera::Message> take()
   {
-    if (outgoing_.empty()) {return std::nullopt;}
+    if (outgoing_.empty()) {
+      return std::nullopt;
+    }
     auto bytes = std::move(outgoing_.front());
     outgoing_.pop_front();
     ++transmitted_;
@@ -90,14 +100,17 @@ public:
       throw std::runtime_error("invalid bridge frame/version");
     }
     std::uint32_t length = 0;
-    for (unsigned i = 0; i < 4; ++i) {length = (length << 8) | std::to_integer<std::uint32_t>(bytes[4 + i]);}
+    for (unsigned i = 0; i < 4; ++i) {
+      length = (length << 8) | std::to_integer<std::uint32_t>(bytes[4 + i]);
+    }
     if (length > 2048 || length > bytes.size() - 8) {
       throw std::runtime_error("invalid bridge route header length");
     }
     const std::string key(reinterpret_cast<const char *>(bytes.data() + 8), length);
     const auto publisher = publishers_.find(key);
     if (publisher == publishers_.end()) {
-      throw std::runtime_error("unknown incoming route/direction or mismatched bridge configuration");
+      throw std::runtime_error(
+        "unknown incoming route/direction or mismatched bridge configuration");
     }
     const auto size = bytes.size() - 8 - length;
     if (size < 4 || size > byte_limit_) {
@@ -123,22 +136,26 @@ public:
     }
   }
 
-  std::uint64_t transmitted() const {return transmitted_;}
-  std::uint64_t received() const {return received_;}
-  std::size_t pending() const {return outgoing_.size();}
+  std::uint64_t transmitted() const { return transmitted_; }
+  std::uint64_t received() const { return received_; }
+  std::size_t pending() const { return outgoing_.size(); }
   std::size_t local_talkers() const
   {
     std::size_t count = 0;
-    for (const auto & subscription : subscriptions_) {count += subscription->get_publisher_count();}
+    for (const auto & subscription : subscriptions_) {
+      count += subscription->get_publisher_count();
+    }
     return count;
   }
   std::size_t local_listeners() const
   {
     std::size_t count = 0;
-    for (const auto & publisher : publishers_) {count += publisher.second->get_subscription_count();}
+    for (const auto & publisher : publishers_) {
+      count += publisher.second->get_subscription_count();
+    }
     return count;
   }
-  std::chrono::steady_clock::time_point last_receive() const {return last_receive_;}
+  std::chrono::steady_clock::time_point last_receive() const { return last_receive_; }
 
   static constexpr std::size_t max_bytes = 4096;
   static constexpr std::size_t max_messages = 128;

@@ -5,7 +5,9 @@ from pathlib import Path
 
 DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 startup_timeout_s=300, status_bar=True, report_seconds=1.0,
-                timing_socket="/tmp/chimaera_time.sock", max_serialized_bytes=4096, max_pending_messages=128)
+                timing_socket="/tmp/chimaera_time.sock", max_serialized_bytes=4096, max_pending_messages=128,
+                m5ops="address", timing_backend="gem5",
+                gazebo_world="", physics_step_ns=1000000, timing_file="")
 
 
 def fields(value, allowed, required=()):
@@ -88,11 +90,33 @@ def load(path):
         raise ValueError("report_seconds must be finite and positive")
     if type(bridge['status_bar']) is not bool or not Path(string(bridge['timing_socket'])).is_absolute():
         raise ValueError("Invalid status_bar or timing_socket")
+    if bridge['m5ops'] not in ('address', 'instruction'):
+        raise ValueError("m5ops must be address or instruction")
+    if bridge['timing_backend'] not in ('gem5', 'gazebo'):
+        raise ValueError("timing_backend must be gem5 or gazebo")
+    integer(bridge['physics_step_ns'], 1, 3600000000000)
+    if bridge['timing_backend'] == 'gazebo':
+        string(bridge['gazebo_world'])
+        if bridge['interval_us'] * 1000 % bridge['physics_step_ns']:
+            raise ValueError("interval_us must contain an integral number of physics steps")
+    elif not isinstance(bridge['gazebo_world'], str):
+        raise ValueError("gazebo_world must be a string")
+    if not isinstance(bridge['timing_file'], str) or '\0' in bridge['timing_file']:
+        raise ValueError("timing_file must be a path string")
+    if bridge['timing_file']:
+        bridge['timing_file'] = local(bridge['timing_file'])
     if 'simulator' in data:
         sim = data['simulator']
-        fields(sim, {'gem5_root', 'image', 'kernel', 'outdir'}, {'gem5_root'})
-        for key in sim:
-            sim[key] = local(sim[key])
+        fields(sim, {'gem5_root', 'config', 'args', 'outdir'}, {'gem5_root', 'config'})
+        for key in ('gem5_root', 'config', 'outdir'):
+            if key in sim:
+                sim[key] = local(sim[key])
+        sim['args'] = strings(sim.get('args', []))
+        # Transport flags belong to the session runner. Hardware/workload arguments
+        # are otherwise opaque and interpreted by the experiment's gem5 config.
+        reserved = {'--gem5-root', '--socket-path', '--guest-command', '--managed-shutdown'}
+        if any(arg.split('=', 1)[0] in reserved for arg in sim['args']):
+            raise ValueError("Simulator args cannot override session transport/startup flags")
     deploy = data.setdefault('deploy', {})
     fields(deploy, {'guest_root', 'install_trees'})
     deploy.setdefault('guest_root', '/opt/chimaera/session')

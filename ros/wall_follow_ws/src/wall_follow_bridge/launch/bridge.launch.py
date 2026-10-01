@@ -14,6 +14,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     defaults = {
+        "max_serialized_bytes": "131072", "max_pending_messages": "128",
         "interval_us": "50000", "poll_us": "10000", "steps": "0",
         "gazebo_world": "wall_arena", "physics_step_ns": "1000000",
         "startup_timeout_s": "300",
@@ -28,7 +29,7 @@ def generate_launch_description():
         for name in defaults
     }
     nodes = [
-        Node(package="wall_follow_bridge", executable="host_bridge",
+        Node(package="chimaera_ros_bridge", executable="gazebo_host_bridge",
              parameters=[parameters], output="screen",
              additional_env={"CHIMAERA_STATUS_TTY": "1" if sys.stdout.isatty() else "0"}),
     ]

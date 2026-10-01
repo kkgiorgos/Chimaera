@@ -35,8 +35,10 @@ The guest starts `/opt/chimaera/session/guest_start`; the application overlay is
 installed at `/opt/chimaera/session/app`. Guest output appears in gem5's serial log.
 
 For a bounded run, edit `bridge.steps` in a copy of the session and adjust its
-relative host paths, or use an absolute-path configuration. Set `simulator.image`
-and `simulator.kernel` to override the defaults under `gem5/resources`.
+relative host paths, or use an absolute-path configuration. Add `--image PATH` and `--kernel PATH` to `simulator.args` to override the
+resources under `gem5/resources`. Its `simulator.config` selects the
+[experiment gem5 script](src/talker_listener_bridge/config/gem5_talker_listener.py),
+which imports the universal Chimaera timing module and owns its KVM board setup.
 
 To adapt another application, supply its host/guest launch commands and setup
 files, list only the topics crossing the boundary, and configure its build/install

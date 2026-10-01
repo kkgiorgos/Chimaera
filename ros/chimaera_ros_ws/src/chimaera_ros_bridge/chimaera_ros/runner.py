@@ -26,8 +26,16 @@ def plan(data, side, package_prefix=None, simulate=False):
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
                   ('max_serialized_bytes', 'max_pending_messages')}}
     if side == 'host':
-        parameters.update(data['bridge'])
-    args = [str(package_prefix / 'lib/chimaera_ros_bridge' / (side + '_bridge')), '--ros-args']
+        parameters.update({key: data['bridge'][key] for key in
+                           ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',
+                            'timing_socket', 'status_bar', 'report_seconds')})
+        if data['bridge']['timing_backend'] == 'gazebo':
+            parameters.update({key: data['bridge'][key] for key in
+                               ('gazebo_world', 'physics_step_ns', 'timing_file')})
+    else:
+        parameters['m5ops'] = data['bridge']['m5ops']
+    executable = 'gazebo_host_bridge' if side == 'host' and data['bridge']['timing_backend'] == 'gazebo' else side + '_bridge'
+    args = [str(package_prefix / 'lib/chimaera_ros_bridge' / executable), '--ros-args']
     for key, value in parameters.items():
         args += ['-p', f'{key}:={str(value).lower() if isinstance(value, bool) else value}']
     processes = [{'name': side + '_bridge', 'command': args}, *config['processes']]
@@ -38,12 +46,11 @@ def plan(data, side, package_prefix=None, simulate=False):
         root = Path(sim['gem5_root'])
         command = [str(root / 'build/X86/gem5.opt'),
                    '--outdir=' + sim.get('outdir', str(Path.cwd() / 'm5out-chimaera')),
-                   str(package_prefix / 'share/chimaera_ros_bridge/config/gem5_ros.py'),
+                   '-p', str(package_prefix / 'share/chimaera_ros_bridge/config'),
+                   sim['config'],
                    '--gem5-root', str(root), '--socket-path', data['bridge']['timing_socket'],
-                   '--guest-command', data['deploy']['guest_root'] + '/guest_start']
-        for key in ('image', 'kernel'):
-            if key in sim:
-                command += ['--' + key, sim[key]]
+                   '--guest-command', data['deploy']['guest_root'] + '/guest_start', '--managed-shutdown']
+        command += sim.get('args', [])
         processes.append({'name': 'gem5', 'command': command})
     return dict(side=side, setup=config['setup'], env=env, processes=processes)
 

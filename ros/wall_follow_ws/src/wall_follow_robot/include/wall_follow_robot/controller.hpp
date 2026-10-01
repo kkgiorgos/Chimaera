@@ -1,6 +1,6 @@
 #pragma once
 #include <geometry_msgs/msg/twist.hpp>
-#include <rclcpp/create_timer.hpp>
+#include <chrono>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
@@ -20,7 +20,10 @@ public:
     pub_ = create_publisher<geometry_msgs::msg::Twist>("cmd_vel", 10);
     scan_sub_ = create_subscription<sensor_msgs::msg::LaserScan>(
       "scan", rclcpp::SensorDataQoS(),
-      [this](sensor_msgs::msg::LaserScan::ConstSharedPtr s) { scan_ = s; });
+      [this](sensor_msgs::msg::LaserScan::ConstSharedPtr s) {
+        scan_ = s;
+        scan_received_ = std::chrono::steady_clock::now();
+      });
     reset_timer();
     callback_ =
       add_on_set_parameters_callback([this](const std::vector<rclcpp::Parameter> & values) {
@@ -62,16 +65,18 @@ private:
   void reset_timer()
   {
     if (timer_) timer_->cancel();
-    timer_ = rclcpp::create_timer(
-      this, get_clock(), std::chrono::nanoseconds(static_cast<int64_t>(1e9 / p_.control_hz)),
-      [this] { step(now().seconds()); });
+    timer_ = create_wall_timer(
+      std::chrono::nanoseconds(static_cast<int64_t>(1e9 / p_.control_hz)),
+      [this] { step(); });
   }
-  void step(double sim)
+  void step()
   {
     wall_follow::Command c;
-    double age = wall_follow::nan;
     if (scan_) {
-      age = sim - rclcpp::Time(scan_->header.stamp).seconds();
+      // Host sensor stamps describe the Gazebo time domain. Freshness here is
+      // measured from receipt using the robot computer's own monotonic clock.
+      const double age = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - scan_received_).count();
       if (age >= 0 && age <= p_.scan_timeout)
         c = wall_follow::command(
           scan_->ranges, scan_->angle_min, scan_->angle_increment, scan_->range_min,
@@ -88,6 +93,7 @@ private:
 private:
   Parameters p_;
   sensor_msgs::msg::LaserScan::ConstSharedPtr scan_;
+  std::chrono::steady_clock::time_point scan_received_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
   rclcpp::TimerBase::SharedPtr timer_;

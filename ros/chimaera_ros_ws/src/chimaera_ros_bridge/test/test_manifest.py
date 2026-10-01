@@ -37,6 +37,57 @@ class SessionTest(unittest.TestCase):
         self.assertFalse(any(arg.startswith('ratio:=')
                              for arg in host['processes'][0]['command']))
 
+    def test_gazebo_and_detailed_cpu_plan(self):
+        self.data['bridge'] = dict(timing_backend='gazebo', gazebo_world='arena',
+                                   interval_us=50000, physics_step_ns=1000000,
+                                   max_serialized_bytes=131072,
+                                   m5ops='instruction', timing_file='timing.csv')
+        self.data['simulator'] = dict(gem5_root='gem5', config='custom_gem5.py',
+                                     args=['--cpu-type', 'o3', '--num-cores', '4',
+                                           '--controller-file', '/tmp/controller settings.yaml'])
+        data = self.load()
+        host = plan(data, 'host', '/opt/bridge', simulate=True)
+        command = host['processes'][0]['command']
+        self.assertEqual(command[0], '/opt/bridge/lib/chimaera_ros_bridge/gazebo_host_bridge')
+        self.assertIn('physics_step_ns:=1000000', command)
+        self.assertNotIn('m5ops:=instruction', command)
+        guest = plan(data, 'guest', '/opt/bridge')['processes'][0]['command']
+        self.assertIn('m5ops:=instruction', guest)
+        self.assertNotIn('timing_file:=' + str(self.root / 'timing.csv'), guest)
+        simulator = host['processes'][-1]['command']
+        self.assertIn('--managed-shutdown', simulator)
+        self.assertEqual(simulator[simulator.index('--cpu-type') + 1], 'o3')
+        self.assertEqual(simulator[simulator.index('--num-cores') + 1], '4')
+        self.assertIn(str(self.root / 'custom_gem5.py'), simulator)
+        self.assertEqual(simulator[simulator.index('-p') + 1],
+                         '/opt/bridge/share/chimaera_ros_bridge/config')
+        self.assertIn('/tmp/controller settings.yaml', simulator)
+
+    def test_invalid_synchronization_and_simulator_configs(self):
+        variants = [dict(timing_backend='unknown'), dict(timing_backend='gazebo'),
+                    dict(timing_backend='gazebo', gazebo_world='arena', physics_step_ns=3000000),
+                    dict(unknown_bridge_option=True), dict(m5ops='unknown')]
+        for bridge in variants:
+            with self.subTest(bridge=bridge), self.assertRaises(ValueError):
+                self.load(self.data | {'bridge': bridge})
+        for simulator in [
+            dict(gem5_root='gem5'),
+            dict(gem5_root='gem5', config='config.py', cpu_type='timing'),
+            dict(gem5_root='gem5', config='config.py', args='--option'),
+            dict(gem5_root='gem5', config='config.py', args=['--socket-path=/tmp/other.sock']),
+            dict(gem5_root='gem5', config='config.py', args=['--guest-command', '/other/start']),
+        ]:
+            with self.subTest(simulator=simulator), self.assertRaises(ValueError):
+                self.load(self.data | dict(simulator=simulator))
+
+    def test_experiment_arguments_are_opaque(self):
+        self.data['simulator'] = dict(gem5_root='gem5', config='riscv_experiment.py',
+                                     args=['--custom-architecture', 'RISC-V', '--memory', '8GiB'])
+        data = self.load()
+        command = plan(data, 'host', '/opt/bridge', simulate=True)['processes'][-1]['command']
+        self.assertEqual(command[-4:], self.data['simulator']['args'])
+        self.assertIn(str(self.root / 'riscv_experiment.py'), command)
+
     def test_invalid_config(self):
         variants = []
         for key, value in [('poll_us', 100000), ('steps', True),

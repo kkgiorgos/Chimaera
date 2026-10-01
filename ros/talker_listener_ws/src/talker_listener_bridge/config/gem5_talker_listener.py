@@ -24,13 +24,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""Wall-follow experiment: KVM boot, configurable CPU/cache ROI, and robot settings.
-
-Imports the universal Chimaera timing integration via gem5's -p MODULE_DIRECTORY.
-"""
+"""Talker/listener experiment: two KVM cores and an x86 ROS Humble image."""
 
 import argparse
-import re
 from pathlib import Path
 
 import m5
@@ -40,7 +36,6 @@ from gem5.components.boards.x86_board import X86Board
 from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import MESITwoLevelCacheHierarchy
 from gem5.components.memory.single_channel import SingleChannelDDR3_1600
 from gem5.components.processors.cpu_types import CPUTypes
-from gem5.components.processors.simple_switchable_processor import SimpleSwitchableProcessor
 from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import DiskImageResource, KernelResource
@@ -51,28 +46,12 @@ from chimaera_gem5 import TimingServer, add_chimaera_arguments, configure_ticks,
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--gem5-root", required=True)
-parser.add_argument("--cpu-type", choices=("kvm", "timing", "o3"), default="timing")
-parser.add_argument("--cpu-clock", default="3GHz")
-parser.add_argument("--num-cores", type=int, default=2)
-parser.add_argument("--l1d-size", default="16KiB")
-parser.add_argument("--l1i-size", default="16KiB")
-parser.add_argument("--l2-size", default="256KiB")
-parser.add_argument("--l1-assoc", type=int, default=8)
-parser.add_argument("--l2-assoc", type=int, default=16)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
-parser.add_argument("--controller-file", help="Inject this run's controller YAML into the guest")
-add_chimaera_arguments(parser, guest_command="/opt/chimaera/wall_follow/guest_start")
+add_chimaera_arguments(parser)
 args = parser.parse_args()
-if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
-    parser.error("core count and cache associativity must be positive")
-files = list(args.guest_file)
-if args.controller_file:
-    files.append("/tmp/chimaera-controller.yaml=" + args.controller_file)
-boot_script = guest_start_script(
-    args.guest_command, files,
-    preamble='printf "CHIMAERA_ONLINE_CPUS=%s\\n" "$(getconf _NPROCESSORS_ONLN)"\n')
 configure_ticks()
+boot_script = guest_start_script(args.guest_command, args.guest_file)
 
 requires(
     coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL,
@@ -81,29 +60,24 @@ requires(
 
 
 cache_hierarchy = MESITwoLevelCacheHierarchy(
-    l1d_size=args.l1d_size,
-    l1d_assoc=args.l1_assoc,
-    l1i_size=args.l1i_size,
-    l1i_assoc=args.l1_assoc,
-    l2_size=args.l2_size,
-    l2_assoc=args.l2_assoc,
+    l1d_size="16KiB",
+    l1d_assoc=8,
+    l1i_size="16KiB",
+    l1i_assoc=8,
+    l2_size="256KiB",
+    l2_assoc=16,
     num_l2_banks=1,
 )
 
 memory = SingleChannelDDR3_1600(size="3GiB")
 
-processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=args.num_cores) if args.cpu_type == "kvm" else SimpleSwitchableProcessor(
-    starting_core_type=CPUTypes.KVM,
-    switch_core_type={"timing": CPUTypes.TIMING, "o3": CPUTypes.O3}[args.cpu_type],
-    isa=ISA.X86,
-    num_cores=args.num_cores,
-)
+processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=2)
 
 for core in processor.get_cores():
     core.get_simobject().usePerf = False
 
 board = X86Board(
-    clk_freq=args.cpu_clock,
+    clk_freq="3GHz",
     processor=processor,
     memory=memory,
     cache_hierarchy=cache_hierarchy,
@@ -123,27 +97,6 @@ board.set_kernel_disk_workload(
     readfile_contents=boot_script,
 )
 
-def verify_online_cpus():
-    # The serial output is flushed as it is written. Read the boot script's
-    # guest count before switching CPUs or spending time on the measured ROI.
-    serial = Path(m5.options.outdir) / "board.pc.com_1.device"
-    counts = re.findall(r"^CHIMAERA_ONLINE_CPUS=(\d+)\r?$",
-                        serial.read_text(errors="replace"), re.MULTILINE)
-    if not counts:
-        raise RuntimeError(f"Guest online CPU count missing from {serial}")
-    online = int(counts[-1])
-    if online != args.num_cores:
-        raise RuntimeError(f"Guest has {online} online CPUs; requested {args.num_cores}. "
-                           f"Check the SMP boot errors in {serial}")
-    print(f"[host] Verified {online} guest CPUs online", flush=True)
-
-
-def prepare_roi():
-    verify_online_cpus()
-    if args.cpu_type != "kvm":
-        processor.switch()
-
-
-timing = TimingServer(on_ready=prepare_roi)
+timing = TimingServer()
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

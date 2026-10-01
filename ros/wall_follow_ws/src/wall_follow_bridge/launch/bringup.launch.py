@@ -15,9 +15,11 @@ def start(context):
     root = Path(LaunchConfiguration("gem5_root").perform(context)).resolve()
     command = [str(root / "build/X86/gem5.opt"),
                "--outdir=" + LaunchConfiguration("outdir").perform(context),
+               "-p", str(Path(get_package_share_directory("chimaera_ros_bridge")) / "config"),
                str(share / "config/gem5_wall_follow.py"), "--gem5-root", str(root),
                "--socket-path", LaunchConfiguration("timing_socket").perform(context)]
-    command.extend(["--managed-shutdown", "--controller-file", LaunchConfiguration("parameters_file").perform(context)])
+    command.extend(["--managed-shutdown", "--guest-command", "/opt/chimaera/wall_follow/guest_start",
+                    "--controller-file", LaunchConfiguration("parameters_file").perform(context)])
     for name in ("cpu_type", "cpu_clock", "num_cores", "l1d_size", "l1i_size",
                  "l2_size", "l1_assoc", "l2_assoc"):
         command.extend(["--" + name.replace("_", "-"), LaunchConfiguration(name).perform(context)])

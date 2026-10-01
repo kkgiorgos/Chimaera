@@ -10,5 +10,7 @@
   <depend>libjson-c-dev</depend><build_depend>pkg-config</build_depend>
   <exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
   <test_depend>std_msgs</test_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <test_depend>geometry_msgs</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

@@ -138,8 +138,8 @@ and C/C++ runtime. These scripts copy native builds; they do not cross-compile
 or install missing shared libraries in the image. A matching Ubuntu 22.04 build
 environment is especially important when the host uses a newer distribution.
 
-You can keep the artifacts elsewhere: set `simulator.image` and
-`simulator.kernel` in the talker/listener session JSON, or pass `image:=...` and
+You can keep the artifacts elsewhere: add `--image PATH` and
+`--kernel PATH` to `simulator.args` in the talker/listener session JSON, or pass `image:=...` and
 `kernel:=...` to wall-follow bringup (`--image`/`--kernel` for its suite runner).
 
 ### Build, deploy, then launch an example

@@ -1,5 +1,5 @@
 {
-  "repetitions": 3,
+  "repetitions": 1,
   "fixed": {
     "target_distance": 0.8,
     "speed": 0.7,
@@ -23,7 +23,7 @@
     "arena_height": 4.0
   },
   "sweep": {
-    "control_hz": [5.0, 10.0],
+    "control_hz": [10.0],
     "lidar_hz": [5.0, 10.0]
   }
 }

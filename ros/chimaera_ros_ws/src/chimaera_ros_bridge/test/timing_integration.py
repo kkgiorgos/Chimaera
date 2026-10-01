@@ -68,7 +68,7 @@ def check(binary, config, extra, expected, cancel=False):
                     command = [
                         binary, '--ros-args', '-p', f'timing_socket:={endpoint}',
                         '-p', f'steps:={0 if cancel else 3}', '-p', 'startup_timeout_s:=10',
-                        '-p', 'status_bar:=false', '-p', f'timing_file:={timing_file}', '-p', f'config_file:={config}', *extra,
+                        '-p', 'gazebo_world:=wall_arena', '-p', 'status_bar:=false', '-p', f'timing_file:={timing_file}', '-p', f'config_file:={config}', *extra,
                     ]
                     if cancel:
                         process = subprocess.Popen(command, env=env, text=True,

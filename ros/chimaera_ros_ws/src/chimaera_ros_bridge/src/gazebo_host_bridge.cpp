@@ -6,16 +6,16 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
-#include <wall_follow_bridge/bridge.hpp>
-#include <wall_follow_bridge/status_bar.hpp>
-#include <wall_follow_bridge/timing_controller.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/status_bar.hpp>
+#include <chimaera_ros_bridge/gazebo_timing_controller.hpp>
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   int status = 0;
   try {
-    auto node = std::make_shared<wall_follow_bridge::Bridge>("host");
+    auto node = std::make_shared<chimaera_ros_bridge::Bridge>("host");
     const auto interval = node->declare_parameter<int64_t>("interval_us", 100000);
     const auto poll = node->declare_parameter<int64_t>("poll_us", 10000);
     const auto steps = node->declare_parameter<int64_t>("steps", 0);
@@ -33,7 +33,7 @@ int main(int argc, char ** argv)
     if (!std::isfinite(report_seconds) || report_seconds <= 0) {
       throw std::invalid_argument("report_seconds must be finite and positive");
     }
-    wall_follow_bridge::StatusBar bar(node->declare_parameter<bool>("status_bar", true));
+    chimaera_ros_bridge::StatusBar bar(node->declare_parameter<bool>("status_bar", true));
     std::ofstream timing_log;
     const auto timing_file = node->declare_parameter<std::string>("timing_file", "");
     if (!timing_file.empty()) {
@@ -59,9 +59,9 @@ int main(int argc, char ** argv)
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
-    wall_follow_bridge::TimingController timing(
+    chimaera_ros_bridge::TimingController timing(
       socket, std::chrono::seconds(timeout), *node,
-      node->declare_parameter<std::string>("gazebo_world", "wall_arena"),
+      node->declare_parameter<std::string>("gazebo_world", ""),
       std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)),
       std::chrono::microseconds(poll));
     timing.pump = node->pump;
@@ -170,11 +170,6 @@ int main(int argc, char ** argv)
       node->get_logger(), "gem5 disconnected; TX %llu, RX %llu",
       static_cast<unsigned long long>(node->transmitted()),
       static_cast<unsigned long long>(node->received()));
-    RCLCPP_INFO(
-      node->get_logger(), "Clock callbacks %llu; superseded in bridge queue %llu "
-      "(batch and transport queues also coalesce clocks)",
-      static_cast<unsigned long long>(node->clock_updates_received()),
-      static_cast<unsigned long long>(node->clock_updates_coalesced()));
   } catch (const std::exception & error) {
     std::cerr << "Host bridge: " << error.what() << '\n';
     status = 1;

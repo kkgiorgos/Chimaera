@@ -28,7 +28,13 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
     Mapping mapping;
-    chimaera::Gem5GuestController controller;
+    const auto ops = node->declare_parameter<std::string>("m5ops", "address");
+    if (ops != "address" && ops != "instruction") {
+      throw std::invalid_argument("m5ops must be address or instruction");
+    }
+    chimaera::Gem5GuestController controller(
+      ops == "instruction" ? chimaera::GuestM5Ops::instruction : chimaera::GuestM5Ops::address,
+      ops == "instruction");
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
     m5_work_begin_addr(0, 0);
     while (rclcpp::ok()) {

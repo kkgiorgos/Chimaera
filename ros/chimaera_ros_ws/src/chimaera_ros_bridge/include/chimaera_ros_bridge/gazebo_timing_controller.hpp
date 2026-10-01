@@ -5,7 +5,7 @@
 #include <ignition/msgs/world_stats.pb.h>
 
 #include <chimaera/gem5_controller.hpp>
-#include <wall_follow_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
 #include <condition_variable>
 #include <ignition/transport/Node.hh>
 #include <limits>
@@ -13,7 +13,7 @@
 #include <memory>
 #include <thread>
 
-namespace wall_follow_bridge
+namespace chimaera_ros_bridge
 {
 // Serial, explicit coupling: guest consumes the previous Gazebo boundary;
 // its returned commands are delivered before advancing the next physics interval.
@@ -201,4 +201,4 @@ private:
   std::chrono::steady_clock::time_point gazebo_begin_;
   ignition::transport::Node gazebo_;
 };
-}  // namespace wall_follow_bridge
+}  // namespace chimaera_ros_bridge

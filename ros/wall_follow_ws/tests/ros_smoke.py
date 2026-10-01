@@ -22,6 +22,63 @@ from rosgraph_msgs.msg import Clock
 from ament_index_python.packages import get_package_prefix
 
 
+def run_clockless():
+    """Check robot scheduling and scan timeout without publishing a ROS clock."""
+    with tempfile.TemporaryDirectory(prefix='wall-follow-clockless-') as directory:
+        root = Path(directory)
+        executable = Path(get_package_prefix('wall_follow_robot'))/'lib/wall_follow_robot/controller'
+        with (root/'robot.log').open('w') as log:
+            robot = subprocess.Popen([str(executable), '--ros-args',
+                '-p', 'use_sim_time:=false', '-p', 'scan_timeout:=0.1',
+                '-r', 'scan:=/clockless/scan', '-r', 'cmd_vel:=/clockless/cmd_vel'],
+                stdout=log, stderr=subprocess.STDOUT)
+            node = rclpy.create_node('clockless_smoke_driver')
+            scans = node.create_publisher(LaserScan, '/clockless/scan', 10)
+            commands = []
+            node.create_subscription(Twist, '/clockless/cmd_vel', lambda m: commands.append(m), 10)
+            def wait_for(predicate, timeout=5):
+                deadline = time.monotonic()+timeout
+                while not predicate():
+                    assert robot.poll() is None, 'Robot exited during clockless test'
+                    assert time.monotonic()<deadline, 'Clockless robot check timed out'
+                    rclpy.spin_once(node, timeout_sec=.01)
+            try:
+                wait_for(lambda: scans.get_subscription_count()==1 and bool(commands))
+                assert commands[-1].linear.x == 0.0, 'Missing scan did not stop translation'
+                wait_for(lambda: ('wall_follower', '/') in node.get_node_names_and_namespaces())
+                subscriptions = dict(node.get_subscriber_names_and_types_by_node('wall_follower', '/'))
+                assert '/clock' not in subscriptions, 'Robot subscribed to ROS clock'
+                scan = LaserScan()
+                scan.angle_min = -math.pi
+                scan.angle_increment = 2*math.pi/719
+                scan.range_min, scan.range_max = .05, 20.
+                scan.ranges = [.8/-math.sin(scan.angle_min+i*scan.angle_increment)
+                    if math.sin(scan.angle_min+i*scan.angle_increment)<-1e-6 else math.inf
+                    for i in range(720)]
+                # Both stamps deliberately differ from the machine's local epoch.
+                for seconds in (0, 2_000_000_000):
+                    scan.header.stamp.sec = seconds
+                    commands.clear()
+                    scans.publish(scan)
+                    wait_for(lambda: any(command.linear.x>0 for command in commands))
+                    moving_count = len(commands)
+                    wait_for(lambda: len(commands)>moving_count and commands[-1].linear.x==0.0)
+                    assert commands[-1].angular.z == 0.0, 'Stale scan did not stop rotation'
+                print('clockless: steady control timer, foreign scan stamps and receipt timeout passed')
+            except BaseException:
+                print((root/'robot.log').read_text())
+                raise
+            finally:
+                node.destroy_node()
+                if robot.poll() is None:
+                    robot.send_signal(signal.SIGINT)
+                try:
+                    robot.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    robot.kill()
+                    robot.wait()
+
+
 def run(mode):
     with tempfile.TemporaryDirectory(prefix='wall-follow-split-') as temporary:
         root = Path(temporary)
@@ -33,7 +90,7 @@ def run(mode):
         collector_executable = Path(get_package_prefix('wall_follow_benchmark'))/'lib/wall_follow_benchmark/collector'
         with (root/'robot.log').open('w') as robot_log, (root/'host.log').open('w') as host_log:
             robot = subprocess.Popen([str(robot_executable), '--ros-args', '--params-file', str(config),
-                '-p', 'use_sim_time:=true', '-r', 'scan:=/robot/scan', '-r', 'cmd_vel:=/robot/cmd_vel'],
+                '-p', 'use_sim_time:=false', '-r', 'scan:=/robot/scan', '-r', 'cmd_vel:=/robot/cmd_vel'],
                 cwd=robot_cwd, stdout=robot_log, stderr=subprocess.STDOUT)
             host = subprocess.Popen([sys.executable, str(collector_executable), '--ros-args',
                 '-p', f'parameters_file:={config}', '-p', f'output_dir:={root / "result"}',
@@ -48,7 +105,7 @@ def run(mode):
             parameters = node.create_client(SetParameters, '/wall_follower/set_parameters')
             try:
                 deadline = time.monotonic()+10
-                while clock.get_subscription_count()<2 or scan_pub.get_subscription_count()<2:
+                while clock.get_subscription_count()<1 or scan_pub.get_subscription_count()<2:
                     assert time.monotonic()<deadline, 'ROS discovery timed out'
                     assert robot.poll() is None and host.poll() is None
                     rclpy.spin_once(node, timeout_sec=.05)
@@ -102,6 +159,7 @@ def run(mode):
                     assert changed.done() and changed.result().results[0].successful
                     assert metadata['final_parameters']['target_distance'] == .9
                     subscriptions = node.get_subscriber_names_and_types_by_node('wall_follower', '/')
+                    assert '/clock' not in dict(subscriptions)
                     assert '/ground_truth' not in dict(subscriptions)
                     assert '/robot/scan' in dict(subscriptions)
                     assert metadata['parameter_events']
@@ -125,6 +183,7 @@ def run(mode):
 if __name__ == '__main__':
     rclpy.init()
     try:
+        run_clockless()
         for mode in ('complete', 'timeout', 'rewind'):
             run(mode)
     finally:

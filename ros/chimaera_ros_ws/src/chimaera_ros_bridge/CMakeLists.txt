@@ -30,6 +30,17 @@ foreach(side host guest)
   ament_target_dependencies(${side}_bridge PUBLIC rclcpp)
   install(TARGETS ${side}_bridge DESTINATION lib/${PROJECT_NAME})
 endforeach()
+option(BUILD_GAZEBO_BRIDGE "Build synchronized Gazebo Fortress host integration" OFF)
+if(BUILD_GAZEBO_BRIDGE)
+  find_package(ignition-transport11 REQUIRED)
+  find_package(ignition-msgs8 REQUIRED)
+  add_executable(gazebo_host_bridge src/gazebo_host_bridge.cpp)
+  target_link_libraries(gazebo_host_bridge PRIVATE bridge chimaera::host_controller
+    ignition-transport11::core ignition-msgs8::core)
+  ament_target_dependencies(gazebo_host_bridge PUBLIC rclcpp)
+  target_compile_options(gazebo_host_bridge PRIVATE -Wall -Wextra -Wpedantic)
+  install(TARGETS gazebo_host_bridge DESTINATION lib/${PROJECT_NAME})
+endif()
 if(BUILD_GUEST_BRIDGE)
   target_include_directories(guest_bridge PRIVATE ${GEM5_OP_INCLUDE} ${GEM5_MMAP_INCLUDE})
   target_link_libraries(guest_bridge PRIVATE ${GEM5_M5_LIBRARY})
@@ -50,6 +61,25 @@ if(BUILD_TESTING)
   add_test(NAME bridge_test COMMAND bridge_test)
   set_tests_properties(bridge_test PROPERTIES TIMEOUT 20
     ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=197;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
+  if(BUILD_GAZEBO_BRIDGE)
+    find_package(sensor_msgs REQUIRED)
+    add_executable(sensor_bridge_test test/sensor_bridge_test.cpp)
+    target_link_libraries(sensor_bridge_test PRIVATE bridge)
+    target_include_directories(sensor_bridge_test PRIVATE "${GEM5_TRANSPORT_ROOT}/src")
+    ament_target_dependencies(sensor_bridge_test PUBLIC rclcpp std_msgs sensor_msgs)
+    target_compile_definitions(sensor_bridge_test PRIVATE
+      WALL_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_routes.json"
+      TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_test_routes.json")
+    add_test(NAME sensor_bridge_test COMMAND sensor_bridge_test)
+    set_tests_properties(sensor_bridge_test PROPERTIES TIMEOUT 30
+      ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=195;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
+    add_test(NAME timing_integration COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/timing_integration.py $<TARGET_FILE:gazebo_host_bridge>
+      ${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_routes.json)
+    set_tests_properties(timing_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+  endif()
+  add_test(NAME gem5_timing_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
+    -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_gem5_timing.py)
   add_test(NAME manifest_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_manifest.py)
   set_tests_properties(manifest_test PROPERTIES ENVIRONMENT

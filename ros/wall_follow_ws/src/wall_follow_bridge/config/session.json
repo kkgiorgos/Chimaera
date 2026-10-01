@@ -13,8 +13,8 @@
         "command": [
           "ros2",
           "launch",
-          "talker_listener_bridge",
-          "host.launch.py"
+          "wall_follow_bridge",
+          "host_application.launch.py"
         ]
       }
     ]
@@ -23,7 +23,7 @@
     "domain_id": 42,
     "setup": [
       "/opt/ros/humble/setup.bash",
-      "/opt/chimaera/session/app/local_setup.bash"
+      "/opt/chimaera/wall_follow/app/local_setup.bash"
     ],
     "processes": [
       {
@@ -31,28 +31,35 @@
         "command": [
           "ros2",
           "launch",
-          "talker_listener_bridge",
+          "wall_follow_bridge",
           "guest.launch.py"
         ]
       }
     ]
   },
   "bridge": {
-    "interval_us": 100000,
+    "interval_us": 50000,
     "poll_us": 10000,
-    "steps": 0
+    "steps": 0,
+    "max_serialized_bytes": 131072,
+    "max_pending_messages": 128,
+    "timing_backend": "gazebo",
+    "gazebo_world": "wall_arena",
+    "physics_step_ns": 1000000,
+    "timing_file": "/tmp/wall-follow-session/timing.csv",
+    "m5ops": "instruction"
   },
   "simulator": {
     "gem5_root": "../../../../../gem5",
-    "outdir": "../../../../chimaera_ros_ws/m5out-talker-listener",
-    "config": "gem5_talker_listener.py",
+    "outdir": "../../../../chimaera_ros_ws/m5out-wall-follow",
+    "config": "gem5_wall_follow.py",
     "args": []
   },
   "builds": [
     {
       "sources": [
         "../../../../chimaera_ros_ws/src",
-        ".."
+        "../.."
       ],
       "output": "../../../../chimaera_ros_ws",
       "setup": [
@@ -60,12 +67,13 @@
       ],
       "colcon_args": [
         "--cmake-args",
-        "-DBUILD_TESTING=ON"
+        "-DBUILD_TESTING=ON",
+        "-DBUILD_GAZEBO_BRIDGE=ON"
       ]
     }
   ],
   "deploy": {
-    "guest_root": "/opt/chimaera/session",
+    "guest_root": "/opt/chimaera/wall_follow",
     "install_trees": [
       {
         "source": "../../../../chimaera_ros_ws/install",

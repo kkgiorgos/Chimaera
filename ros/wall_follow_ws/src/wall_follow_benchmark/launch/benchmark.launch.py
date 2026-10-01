@@ -14,7 +14,7 @@ def start(context):
     get = lambda key: LaunchConfiguration(key).perform(context)
     # Same robot executable and interface as robot.launch.py, with no benchmark parameters.
     robot = Node(package='wall_follow_robot', executable='controller', output='screen',
-        parameters=[get('parameters_file'), {'use_sim_time': True}],
+        parameters=[get('parameters_file'), {'use_sim_time': False}],
         remappings=[('scan', '/robot/scan'), ('cmd_vel', '/robot/cmd_vel')])
     host = Path(get_package_share_directory('wall_follow_benchmark')) / 'launch/host.launch.py'
 
