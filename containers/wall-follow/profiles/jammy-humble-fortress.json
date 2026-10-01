@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "jammy-humble-fortress",
+  "platform": "linux/amd64",
+  "base_image": "ubuntu:22.04@sha256:281c5745f657873d78e5531fc5ba8575f46ab7769b94550ac99543f122679986",
+  "ubuntu_codename": "jammy",
+  "ros_distro": "humble",
+  "gazebo_distribution": "fortress",
+  "ros_apt_source": {
+    "url": "https://github.com/ros-infrastructure/ros-apt-source/releases/download/1.3.0/ros2-apt-source_1.3.0.jammy_all.deb",
+    "sha256": "110b9a462d55252decb8b7c816f61c2ba0d9890ce5fb93ac504e97cae5860d76"
+  },
+  "gazebo_key": {
+    "url": "https://packages.osrfoundation.org/gazebo.gpg",
+    "sha256": "15d0300460e0c9c0efb21fa9770c0bf228988a07d71c4fac985c2161954a25a4"
+  },
+  "gem5": {
+    "version": "25.1.0.1",
+    "build_target": "X86",
+    "protocol": "MESI_Two_Level",
+    "kvm_required": true
+  },
+  "guest": {
+    "base_resource": "x86-ubuntu-22.04-img",
+    "base_resource_version": "2.0.0",
+    "image_filename": "x86-ubuntu-22.04-ros-humble.img",
+    "kernel_resource": "x86-linux-kernel-5.15.180",
+    "root_partition": 2,
+    "ros_distro": "humble"
+  },
+  "build_packages": [
+    "build-essential",
+    "cmake",
+    "git",
+    "libgoogle-perftools-dev",
+    "libignition-msgs8-dev",
+    "libignition-transport11-dev",
+    "libjson-c-dev",
+    "libpng-dev",
+    "libprotobuf-dev",
+    "m4",
+    "pkg-config",
+    "protobuf-compiler",
+    "python3-colcon-common-extensions",
+    "python3-dev",
+    "python3-yaml",
+    "ros-humble-ament-cmake",
+    "ros-humble-ament-cmake-python",
+    "ros-humble-ament-index-cpp",
+    "ros-humble-geometry-msgs",
+    "ros-humble-launch-ros",
+    "ros-humble-nav-msgs",
+    "ros-humble-rcl-interfaces",
+    "ros-humble-rclcpp",
+    "ros-humble-rclpy",
+    "ros-humble-ros-gz-bridge",
+    "ros-humble-ros-gz-sim",
+    "ros-humble-ros2launch",
+    "ros-humble-ros2pkg",
+    "ros-humble-rosgraph-msgs",
+    "ros-humble-sensor-msgs",
+    "ros-humble-std-msgs",
+    "scons",
+    "zlib1g-dev"
+  ]
+}

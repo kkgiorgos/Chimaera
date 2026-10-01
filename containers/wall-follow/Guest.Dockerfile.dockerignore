@@ -1,0 +1,10 @@
+**
+!Guest.Dockerfile
+!profiles/
+!profiles/*.json
+!scripts/
+!scripts/stage-guest.py
+!scripts/guest_session.py
+!scripts/install-runtime.py
+!scripts/guest-init.sh
+!scripts/build-guest-disk.py

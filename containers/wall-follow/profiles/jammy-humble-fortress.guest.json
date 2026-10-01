@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "construction": "ubuntu-docker-rootfs",
+  "root_size_mib": 2048,
+  "disk_identifier": "4348494d",
+  "filesystem_uuid": "4348494d-4145-5241-8000-000000000002",
+  "ros_packages": [
+    "ament-index-cpp",
+    "geometry-msgs",
+    "rclcpp",
+    "rmw-fastrtps-cpp",
+    "rosgraph-msgs",
+    "sensor-msgs",
+    "std-msgs",
+    "launch-ros",
+    "ros2launch",
+    "ros2pkg",
+    "rclpy"
+  ],
+  "runtime_packages": [
+    "python3",
+    "python3-yaml"
+  ],
+  "kernel": {
+    "resource": "x86-linux-kernel-5.15.180",
+    "version": "1.0.0",
+    "url": "https://dist.gem5.org/dist/develop/kernels/x86/static/x86-linux-kernel-5.15.180",
+    "sha256": "c4a4a9a46725d600d2ec324aced3613bbff2c6a13ca64c81669cb65367f05ccd",
+    "upstream_md5": "77862361249ad1c5abc6d55f3a5de552"
+  }
+}
