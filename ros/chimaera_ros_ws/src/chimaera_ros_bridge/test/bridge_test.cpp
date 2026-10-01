@@ -4,12 +4,12 @@
 #include <iostream>
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/int32.hpp>
-#include <talker_listener_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
 #include <thread>
 #include <unistd.h>
 
 using namespace std::chrono_literals;
-using talker_listener_bridge::Bridge;
+using chimaera_ros_bridge::Bridge;
 void require(bool condition, const char * message)
 {
   if (!condition) {throw std::runtime_error(message);}
@@ -44,7 +44,7 @@ int main(int argc, char ** argv)
   int status = 0;
   const std::string temporary = "/tmp/chimaera-config-test-" + std::to_string(getpid()) + ".json";
   try {
-    const auto config = talker_listener_bridge::load_config(TEST_CONFIG);
+    const auto config = chimaera_ros_bridge::load_config(TEST_CONFIG);
     require(config.size() == 3, "route count mismatch");
     require(config[2].qos.depth() == 7 &&
       config[2].qos.reliability() == rclcpp::ReliabilityPolicy::BestEffort, "QoS mismatch");
@@ -53,7 +53,7 @@ int main(int argc, char ** argv)
     auto write = [&](const std::string & text) {std::ofstream(temporary) << text;};
     for (const auto & bad : {std::string("{"), std::string("{}"), valid + "garbage"}) {
       write(bad);
-      rejects([&] {talker_listener_bridge::load_config(temporary);});
+      rejects([&] {chimaera_ros_bridge::load_config(temporary);});
     }
     for (const auto & change : std::vector<std::pair<std::string, std::string>>{
         {"keep_last", "keep_all"}, {"host_to_guest", "both"}, {"reliable", "system_default"},
@@ -64,15 +64,19 @@ int main(int argc, char ** argv)
       auto bad = valid;
       bad.replace(bad.find(change.first), change.first.size(), change.second);
       write(bad);
-      rejects([&] {talker_listener_bridge::load_config(temporary);});
+      rejects([&] {chimaera_ros_bridge::load_config(temporary);});
     }
     auto transient = valid;
     transient.replace(transient.find("volatile"), 8, "transient_local");
     write(transient);
-    require(talker_listener_bridge::load_config(temporary)[0].qos.durability() ==
+    require(chimaera_ros_bridge::load_config(temporary)[0].qos.durability() ==
       rclcpp::DurabilityPolicy::TransientLocal, "transient local QoS mismatch");
     rclcpp::NodeOptions options;
     options.parameter_overrides({rclcpp::Parameter("config_file", TEST_CONFIG)});
+    rejects([&] {Bridge missing("host");});
+    auto invalid_limits = options;
+    invalid_limits.append_parameter_override("max_serialized_bytes", int64_t(64 * 1024 * 1024));
+    rejects([&] {Bridge invalid("host", invalid_limits);});
     auto host = std::make_shared<Bridge>("host", options);
     auto guest = std::make_shared<Bridge>("guest", options);
     auto remapped = options;
@@ -190,6 +194,34 @@ int main(int argc, char ** argv)
     guest->exchange(incoming_controller);
     require(delivery_pumps == 1 && incoming_controller.incoming.empty(), "receive exchange did not pump once");
     guest->pump = [&] {executor.spin_some();};
+    // Larger application messages use configurable bounds without rebuilding.
+    executor.remove_node(host); executor.remove_node(guest);
+    host.reset(); guest.reset();
+    auto large_options = options;
+    large_options.append_parameter_override("max_serialized_bytes", int64_t(16384));
+    large_options.append_parameter_override("max_pending_messages", int64_t(2));
+    host = std::make_shared<Bridge>("host", large_options);
+    guest = std::make_shared<Bridge>("guest", large_options);
+    executor.add_node(host); executor.add_node(guest);
+    until([&] {return host_pub->get_subscription_count() == 1 &&
+        guest_sub->get_publisher_count() == 1;});
+    std_msgs::msg::String large; large.data.assign(12000, 'L');
+    const auto before_large = at_guest.size();
+    host_pub->publish(large);
+    until([&] {executor.spin_some(); wire = host->take(); return wire.has_value();});
+    guest->submit(std::move(*wire));
+    until([&] {executor.spin_some(); return at_guest.size() > before_large;});
+    require(at_guest.back() == large.data, "configured large payload round trip failed");
+    for (std::size_t i = 0; i < 2; ++i) {
+      host_pub->publish(large);
+      until([&] {executor.spin_some(); return host->pending() == i + 1;});
+    }
+    host_pub->publish(large);
+    rejected = false;
+    until([&] {
+      try {executor.spin_some();} catch (const std::runtime_error &) {rejected = true;}
+      return rejected;
+    });
     std::cout << "Config validation, bidirectional generic routing, QoS, frame/queue limits and echo isolation passed\n";
   } catch (const std::exception & error) {
     std::cerr << error.what() << '\n'; status = 1;

@@ -3,7 +3,7 @@
 
 #include <chimaera/gem5_controller.hpp>
 #include <iostream>
-#include <talker_listener_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
 
 namespace
 {
@@ -23,7 +23,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   int status = 0;
   try {
-    auto node = std::make_shared<talker_listener_bridge::Bridge>("guest");
+    auto node = std::make_shared<chimaera_ros_bridge::Bridge>("guest");
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };

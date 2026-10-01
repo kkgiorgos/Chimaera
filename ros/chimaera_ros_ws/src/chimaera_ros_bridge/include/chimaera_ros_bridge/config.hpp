@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace talker_listener_bridge
+namespace chimaera_ros_bridge
 {
 struct Route
 {
@@ -127,4 +127,4 @@ inline std::vector<Route> load_config(const std::string & path)
   }
   return routes;
 }
-}  // namespace talker_listener_bridge
+}  // namespace chimaera_ros_bridge

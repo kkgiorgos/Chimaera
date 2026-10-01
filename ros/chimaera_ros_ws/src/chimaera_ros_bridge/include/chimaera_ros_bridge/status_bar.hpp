@@ -9,7 +9,7 @@
 #include <string>
 #include <string_view>
 
-namespace talker_listener_bridge
+namespace chimaera_ros_bridge
 {
 // Like the transport demo, reserve the last row and preserve the log history.
 // ros2 launch captures stdout in a pipe: when its own output is a terminal it
@@ -88,4 +88,4 @@ private:
   int fd_{-1};
   unsigned rows_{};
 };
-}  // namespace talker_listener_bridge
+}  // namespace chimaera_ros_bridge

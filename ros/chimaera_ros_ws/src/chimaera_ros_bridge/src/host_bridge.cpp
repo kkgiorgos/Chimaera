@@ -5,8 +5,8 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <talker_listener_bridge/bridge.hpp>
-#include <talker_listener_bridge/status_bar.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/status_bar.hpp>
 #include <thread>
 
 int main(int argc, char ** argv)
@@ -14,7 +14,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   int status = 0;
   try {
-    auto node = std::make_shared<talker_listener_bridge::Bridge>("host");
+    auto node = std::make_shared<chimaera_ros_bridge::Bridge>("host");
     const auto interval = node->declare_parameter<int64_t>("interval_us", 100000);
     const auto poll = node->declare_parameter<int64_t>("poll_us", 10000);
     const auto steps = node->declare_parameter<int64_t>("steps", 0);
@@ -33,7 +33,7 @@ int main(int argc, char ** argv)
     if (!std::isfinite(report_seconds) || report_seconds <= 0) {
       throw std::invalid_argument("report_seconds must be finite and positive");
     }
-    talker_listener_bridge::StatusBar bar(node->declare_parameter<bool>("status_bar", true));
+    chimaera_ros_bridge::StatusBar bar(node->declare_parameter<bool>("status_bar", true));
     using Clock = std::chrono::steady_clock;
     auto last_report = Clock::time_point::min();
     auto refresh_due = [&] {

@@ -1,12 +1,12 @@
 #include <mock_sim/mock_controller.hpp>
-#include <talker_listener_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
 #include <iostream>
 
 // Keep the production bridge unchanged; adapt the identical application handler
 // interfaces to mock-sim's separate namespace for this integration test.
 struct Adapter : mock_sim::DataProducer, mock_sim::DataConsumer
 {
-  explicit Adapter(talker_listener_bridge::Bridge & bridge) : bridge(bridge) {}
+  explicit Adapter(chimaera_ros_bridge::Bridge & bridge) : bridge(bridge) {}
   std::optional<mock_sim::Message> take() override
   {
     // mock-sim retains its callback API: pump once when collection starts.
@@ -19,7 +19,7 @@ struct Adapter : mock_sim::DataProducer, mock_sim::DataConsumer
     return message;
   }
   void submit(mock_sim::Message message) override {bridge.submit(std::move(message));}
-  talker_listener_bridge::Bridge & bridge;
+  chimaera_ros_bridge::Bridge & bridge;
   bool collecting{false};
 };
 int main(int argc, char ** argv)
@@ -29,7 +29,7 @@ int main(int argc, char ** argv)
   rclcpp::init(argc, argv);
   int status = 0;
   try {
-    auto bridge = std::make_shared<talker_listener_bridge::Bridge>(side);
+    auto bridge = std::make_shared<chimaera_ros_bridge::Bridge>(side);
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(bridge);
     bridge->pump = [&] {executor.spin_some();};

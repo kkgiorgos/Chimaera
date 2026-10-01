@@ -1,8 +1,7 @@
 #pragma once
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <chimaera/controller.hpp>
-#include <talker_listener_bridge/config.hpp>
+#include <chimaera_ros_bridge/config.hpp>
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <cstdint>
@@ -12,7 +11,7 @@
 #include <map>
 #include <set>
 
-namespace talker_listener_bridge
+namespace chimaera_ros_bridge
 {
 // ROS and controller callbacks share one thread. Each transport frame contains
 // a versioned route identity followed by one unchanged ROS serialized message.
@@ -25,9 +24,18 @@ public:
     if (side != "host" && side != "guest") {throw std::invalid_argument("invalid bridge side");}
     auto path = declare_parameter<std::string>("config_file", "");
     if (path.empty()) {
-      path = ament_index_cpp::get_package_share_directory("talker_listener_bridge") +
-        "/config/bridge.json";
+      throw std::invalid_argument("config_file is required");
     }
+    const auto byte_limit = declare_parameter<int64_t>("max_serialized_bytes", max_bytes);
+    const auto queue_limit = declare_parameter<int64_t>("max_pending_messages", max_messages);
+    // Leave room for the largest accepted route identity in the 64 MiB transport frame.
+    if (byte_limit < 4 || byte_limit > 64 * 1024 * 1024 - 2056 ||
+      queue_limit < 1 || queue_limit > 1000000)
+    {
+      throw std::invalid_argument("invalid serialized byte or pending message limit");
+    }
+    byte_limit_ = static_cast<std::size_t>(byte_limit);
+    queue_limit_ = static_cast<std::size_t>(queue_limit);
     const auto routes = load_config(path);
     std::set<std::string> resolved_topics;
     // Validate remappings before creating endpoints: aliases must not form loops.
@@ -45,7 +53,7 @@ public:
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
           [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
-            if (message->size() > max_bytes || outgoing_.size() >= max_messages) {
+            if (message->size() > byte_limit_ || outgoing_.size() >= queue_limit_) {
               throw std::runtime_error("bridge outgoing queue or serialized message limit exceeded");
             }
             chimaera::Message bytes(8 + key.size() + message->size());
@@ -92,7 +100,7 @@ public:
       throw std::runtime_error("unknown incoming route/direction or mismatched bridge configuration");
     }
     const auto size = bytes.size() - 8 - length;
-    if (size < 4 || size > max_bytes) {
+    if (size < 4 || size > byte_limit_) {
       throw std::runtime_error("invalid incoming serialized message size");
     }
     rclcpp::SerializedMessage message(size);
@@ -137,6 +145,7 @@ public:
   std::function<void()> pump;
 
 private:
+  std::size_t byte_limit_{max_bytes}, queue_limit_{max_messages};
   std::deque<chimaera::Message> outgoing_;
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
@@ -144,4 +153,4 @@ private:
   std::map<std::string, rclcpp::GenericPublisher::SharedPtr> publishers_;
   std::vector<rclcpp::GenericSubscription::SharedPtr> subscriptions_;
 };
-}  // namespace talker_listener_bridge
+}  // namespace chimaera_ros_bridge

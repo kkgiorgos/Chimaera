@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "routes": "bridge.json",
+  "host": {
+    "domain_id": 41,
+    "setup": [
+      "/opt/ros/humble/setup.bash",
+      "../../../../chimaera_ros_ws/install/local_setup.bash"
+    ],
+    "processes": [
+      {
+        "name": "host_application",
+        "command": [
+          "ros2",
+          "launch",
+          "talker_listener_bridge",
+          "host.launch.py"
+        ]
+      }
+    ]
+  },
+  "guest": {
+    "domain_id": 42,
+    "setup": [
+      "/opt/ros/humble/setup.bash",
+      "/opt/chimaera/session/app/local_setup.bash"
+    ],
+    "processes": [
+      {
+        "name": "guest_application",
+        "command": [
+          "ros2",
+          "launch",
+          "talker_listener_bridge",
+          "guest.launch.py"
+        ]
+      }
+    ]
+  },
+  "bridge": {
+    "interval_us": 100000,
+    "poll_us": 10000,
+    "steps": 0,
+    "ratio": 1.0
+  },
+  "simulator": {
+    "gem5_root": "../../../../../gem5",
+    "outdir": "../../../../chimaera_ros_ws/m5out-talker-listener"
+  },
+  "builds": [
+    {
+      "sources": [
+        "../../../../chimaera_ros_ws/src",
+        ".."
+      ],
+      "output": "../../../../chimaera_ros_ws",
+      "setup": [
+        "/opt/ros/humble/setup.bash"
+      ],
+      "colcon_args": [
+        "--cmake-args",
+        "-DBUILD_TESTING=ON"
+      ]
+    }
+  ],
+  "deploy": {
+    "guest_root": "/opt/chimaera/session",
+    "install_trees": [
+      {
+        "source": "../../../../chimaera_ros_ws/install",
+        "destination": "app"
+      }
+    ]
+  }
+}

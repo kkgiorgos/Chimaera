@@ -32,6 +32,7 @@ Simulation time and the real time spent running an experiment are different.
 | Directory | Purpose |
 | --- | --- |
 | [ros/wall_follow_ws](ros/wall_follow_ws/README.md) | Main robot example, setup, experiment sweeps, plots, and dashboards. |
+| [ros/chimaera_ros_ws](ros/chimaera_ros_ws/README.md) | Universal ROS topic bridge, application builds, guest deployment, and host/guest orchestration. |
 | [ros/talker_listener_ws](ros/talker_listener_ws/README.md) | Smaller example sending ROS messages between host and guest. |
 | [gem5-transport](gem5-transport/README.md) | C++ message transport; [controllers](gem5-transport/CONTROLLERS.md) coordinate guest execution. |
 | [mock-sim](mock-sim/README.md) | Local process demos for learning the transport and coordination without gem5 or ROS. |

@@ -35,7 +35,7 @@ One ASCII line per connection:
 Errors are ERROR <description>. Early simulation termination is DONE <tick>.
 The tick frequency is fixed at 1 THz: one nanosecond is 1000 ticks.
 
-The simulator boots the deployed chimaera_talker_listener_guest
+The simulator boots the configured guest startup command
 and pauses at its workbegin marker
 before opening the timing socket. Host data listeners must be started first.
 The guest stays on KVM throughout; workbegin does not switch CPU models.
@@ -43,6 +43,7 @@ The guest stays on KVM throughout; workbegin does not switch CPU models.
 
 import argparse
 import socket
+import shlex
 from pathlib import Path
 
 import m5
@@ -65,6 +66,7 @@ parser.add_argument("--boot-to-controller", action="store_true", default=True)
 parser.add_argument("--gem5-root", required=True)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
+parser.add_argument("--guest-command", default="/opt/chimaera/session/guest_start")
 args = parser.parse_args()
 m5.ticks.setGlobalFrequency("1THz")
 m5.ticks.fixGlobalFrequency()
@@ -115,7 +117,7 @@ board.set_kernel_disk_workload(
         "mce=off",
     ],
     readfile_contents=(
-        "#!/bin/bash\nexec sudo -n /usr/local/bin/chimaera_talker_listener_guest\n"
+        "#!/bin/bash\nexec sudo -n " + shlex.quote(args.guest_command) + "\n"
         if args.boot_to_controller else "#!/bin/bash\n/bin/bash\n"
     ),
 )

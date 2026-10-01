@@ -7,10 +7,10 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     nodes = [
-        Node(package='demo_nodes_cpp', executable='talker', name='host_talker',
-             remappings=[('chatter', '/host/chatter')], output='screen'),
-        Node(package='demo_nodes_cpp', executable='listener', name='host_listener',
+        Node(package='demo_nodes_cpp', executable='talker', name='guest_talker',
              remappings=[('chatter', '/guest/chatter')], output='screen'),
+        Node(package='demo_nodes_cpp', executable='listener', name='guest_listener',
+             remappings=[('chatter', '/host/chatter')], output='screen'),
     ]
     return LaunchDescription([
         *[RegisterEventHandler(OnProcessExit(target_action=node,
