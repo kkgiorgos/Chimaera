@@ -33,10 +33,14 @@ class SessionTest(unittest.TestCase):
         self.assertIn('config_file:=' + str(self.root / 'routes.json'), host['processes'][0]['command'])
         self.assertNotIn('poll_us:=10000', guest['processes'][0]['command'])
         self.assertEqual(len(host['processes']), 1)
+        self.assertNotIn('ratio', data['bridge'])
+        self.assertFalse(any(arg.startswith('ratio:=')
+                             for arg in host['processes'][0]['command']))
 
     def test_invalid_config(self):
         variants = []
-        for key, value in [('poll_us', 100000), ('steps', True), ('ratio', float('inf'))]:
+        for key, value in [('poll_us', 100000), ('steps', True),
+                           ('report_seconds', float('inf')), ('ratio', 1.0)]:
             data = copy.deepcopy(self.data)
             data['bridge'] = {key: value}
             variants.append(data)

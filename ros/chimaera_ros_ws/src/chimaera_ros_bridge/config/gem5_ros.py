@@ -62,7 +62,6 @@ from gem5.utils.requires import requires
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--socket-path", default="/tmp/chimaera_time.sock")
-parser.add_argument("--boot-to-controller", action="store_true", default=True)
 parser.add_argument("--gem5-root", required=True)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
@@ -116,10 +115,7 @@ board.set_kernel_disk_workload(
         "root=/dev/sda2",
         "mce=off",
     ],
-    readfile_contents=(
-        "#!/bin/bash\nexec sudo -n " + shlex.quote(args.guest_command) + "\n"
-        if args.boot_to_controller else "#!/bin/bash\n/bin/bash\n"
-    ),
+    readfile_contents="#!/bin/bash\nexec sudo -n " + shlex.quote(args.guest_command) + "\n",
 )
 
 roi_started = False
@@ -253,12 +249,11 @@ def serve(path):
                 pass
 
 
-if args.boot_to_controller:
-    print("[host] Booting until the controller's workbegin marker", flush=True)
-    while not roi_started and not finished:
-        simulator.run()
-    if finished:
-        raise RuntimeError("guest finished before its controller was ready")
+print("[host] Booting until the controller's workbegin marker", flush=True)
+while not roi_started and not finished:
+    simulator.run()
+if finished:
+    raise RuntimeError("guest finished before its controller was ready")
 
 serve(args.socket_path)
 print(f"[host] Timing server stopped at tick {m5.curTick()}")

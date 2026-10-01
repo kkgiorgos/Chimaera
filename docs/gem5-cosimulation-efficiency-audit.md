@@ -167,7 +167,7 @@ as benchmarks of the current implementation.
     preserving the configured delivery guarantees. This finding applies to the archived
     `ChannelService`; the ROS bridges use their own queues.
 
-    Sources: [blocking insertion](../queue-manager/src/queue_manager.cpp#L171),
+    Sources: [blocking insertion](../legacy/queue-manager/src/queue_manager.cpp#L171),
     [channel submission](../legacy/gem5-transport-demos/src/channel_service.cpp#L118),
     [host callback delivery](../gem5-transport/src/gem5_host_controller.cpp#L85).
 

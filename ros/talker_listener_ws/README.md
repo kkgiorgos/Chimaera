@@ -45,4 +45,5 @@ actions and automatic simulation clock changes are deferred.
 
 The old example-specific bridge executables and launch timing arguments have been
 replaced by the independent `chimaera_ros_bridge` package and session config. Its
-existing ROS and mock-sim bridge tests moved with the implementation.
+ROS serialization and routing tests live with the implementation; the retired
+mock-sim integration tests are archived in `legacy/chimaera-ros-mock-tests`.

@@ -19,8 +19,7 @@ add_library(chimaera::host ALIAS gem5_host)
 target_link_libraries(gem5_host PUBLIC chimaera::transport)
 
 find_package(Threads REQUIRED)
-add_library(gem5_host_controller src/gem5_host_controller.cpp src/gem5_timing_controller.cpp
-    src/wall_clock_pacer.cpp)
+add_library(gem5_host_controller src/gem5_host_controller.cpp src/gem5_timing_controller.cpp)
 add_library(chimaera::host_controller ALIAS gem5_host_controller)
 target_link_libraries(gem5_host_controller PUBLIC chimaera::host PRIVATE Threads::Threads)
 

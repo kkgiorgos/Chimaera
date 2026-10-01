@@ -184,15 +184,10 @@ hour; remaining undershoot carries forward. Integer tick accounting preserves
 sub-nanosecond drift. This corrects cumulative progress, not the precision of
 individual pause boundaries.
 
-`WallClockPacer` addresses a separate problem: limiting simulation progress per
-real second. Construct it after startup, pass actual `timing.elapsed_ticks()` to
-`delay()`, and sleep or service input before checking again. The delay is capped
-at one wall second. `report()` returns recent and overall achieved ratios.
-A ratio of 1 targets real time; 0.5 targets half speed; 2 targets twice real time.
-Cumulative pacing avoids accumulating oversleep. When behind, it requests no
-wait; it cannot make the simulator run faster. See the
-[talker/listener host loop](../ros/talker_listener_ws/src/talker_listener_bridge/src/host_bridge.cpp)
-for integration.
+Host intervals advance as soon as the previous exchange completes. No wall-time
+ratio or pacing delay is imposed. Simulation tick accounting remains independent
+of host execution speed. The former pacer is archived in
+[legacy/wall-clock-pacer](../legacy/wall-clock-pacer/README.md).
 
 ## Protocols
 

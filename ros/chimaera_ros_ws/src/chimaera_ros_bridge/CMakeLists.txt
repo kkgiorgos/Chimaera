@@ -4,7 +4,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(ament_index_cpp REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSON_C REQUIRED IMPORTED_TARGET json-c)
 set(GEM5_TRANSPORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../gem5-transport"
@@ -28,7 +27,7 @@ foreach(side host guest)
   add_executable(${side}_bridge src/${side}_bridge.cpp)
   target_link_libraries(${side}_bridge PRIVATE bridge chimaera::${side}_controller)
   target_compile_options(${side}_bridge PRIVATE -Wall -Wextra -Wpedantic)
-  ament_target_dependencies(${side}_bridge PUBLIC rclcpp ament_index_cpp)
+  ament_target_dependencies(${side}_bridge PUBLIC rclcpp)
   install(TARGETS ${side}_bridge DESTINATION lib/${PROJECT_NAME})
 endforeach()
 if(BUILD_GUEST_BRIDGE)
@@ -42,33 +41,15 @@ install(PROGRAMS scripts/chimaera_ros scripts/deploy_image.sh DESTINATION lib/${
 if(BUILD_TESTING)
   find_package(std_msgs REQUIRED)
   enable_testing()
-  option(BUILD_MOCK_BRIDGE_TEST "Test external ROS demo nodes using mock-sim" ON)
-  if(BUILD_MOCK_BRIDGE_TEST)
-    set(MOCK_SIM_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../mock-sim"
-        CACHE PATH "mock-sim source directory")
-    set(MOCK_SIM_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${MOCK_SIM_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/mock-sim")
-    find_package(Python3 REQUIRED COMPONENTS Interpreter)
-    add_executable(mock_bridge_test test/mock_bridge.cpp)
-    target_link_libraries(mock_bridge_test PRIVATE bridge MockSim::mock_host_controller
-      MockSim::mock_guest_controller MockSim::mock_timing)
-    ament_target_dependencies(mock_bridge_test PUBLIC rclcpp ament_index_cpp)
-    add_test(NAME mock_bridge_integration COMMAND ${Python3_EXECUTABLE}
-      ${CMAKE_CURRENT_SOURCE_DIR}/test/mock_integration.py $<TARGET_FILE:mock_bridge_test>
-      ${CMAKE_CURRENT_SOURCE_DIR}/test/demo_routes.json)
-    set_tests_properties(mock_bridge_integration PROPERTIES TIMEOUT 35)
-  endif()
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_executable(bridge_test test/bridge_test.cpp)
   target_link_libraries(bridge_test PRIVATE bridge)
-  ament_target_dependencies(bridge_test PUBLIC rclcpp std_msgs ament_index_cpp)
+  ament_target_dependencies(bridge_test PUBLIC rclcpp std_msgs)
   target_compile_definitions(bridge_test PRIVATE
     TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/routes.json")
   add_test(NAME bridge_test COMMAND bridge_test)
   set_tests_properties(bridge_test PROPERTIES TIMEOUT 20
     ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=197;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
-endif()
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-if(BUILD_TESTING)
   add_test(NAME manifest_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_manifest.py)
   set_tests_properties(manifest_test PROPERTIES ENVIRONMENT

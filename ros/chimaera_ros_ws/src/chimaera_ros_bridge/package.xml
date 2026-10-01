@@ -6,9 +6,9 @@
   <license>BSD-3-Clause</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
-  <depend>rclcpp</depend><depend>ament_index_cpp</depend>
+  <depend>rclcpp</depend>
   <depend>libjson-c-dev</depend><build_depend>pkg-config</build_depend>
   <exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
-  <test_depend>std_msgs</test_depend><test_depend>demo_nodes_cpp</test_depend>
+  <test_depend>std_msgs</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

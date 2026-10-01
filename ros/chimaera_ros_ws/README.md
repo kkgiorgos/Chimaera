@@ -9,7 +9,10 @@ used directly; the bridge requires no application dependency or source changes.
 The first version targets the existing Ubuntu 22.04/x86 ROS Humble guest. Guest
 binaries must be built in an environment matching that image. It transports topics;
 services/actions and automatic `/clock` or `use_sim_time` changes are outside this
-version. The wall-follow integration continues to use its existing bridge.
+version. The wall-follow integration continues to use its existing bridge. The universal
+bridge runs exclusively through gem5-transport; the local mock-sim adapter and
+standalone queue-manager are archived under `legacy/`. See the
+[simplification audit](../../docs/universal-ros-bridge-audit.md) for the scope and remaining limits.
 
 ## Build and try the example
 
@@ -31,9 +34,8 @@ ros2 run chimaera_ros_bridge chimaera_ros plan "$session" --side guest
 The bridge uses generic serialized endpoints, so application message packages are
 runtime dependencies on **both sides**, with matching definitions and compatible
 serialization. C++ node builds require rclcpp, JSON-C, pkg-config, custom libm5,
-and the sibling transport tree. `-DBUILD_GUEST_BRIDGE=OFF` permits host-only builds;
-`-DBUILD_MOCK_BRIDGE_TEST=OFF` disables the mock-sim integration test.
-Override `GEM5_TRANSPORT_ROOT`, `GEM5_ROOT`, `GEM5_M5_LIBRARY`, or `MOCK_SIM_ROOT`
+and the sibling transport tree. `-DBUILD_GUEST_BRIDGE=OFF` permits building the host on a separate machine.
+Override `GEM5_TRANSPORT_ROOT`, `GEM5_ROOT`, or `GEM5_M5_LIBRARY`
 with CMake arguments when the trees live elsewhere.
 
 ## Configuration contract
@@ -82,7 +84,7 @@ or loaned-message transfer is provided. Applications must offer/request compatib
 QoS on the local hop.
 
 `bridge` defaults: `interval_us: 100000`, `poll_us: 10000`, `steps: 0` (unbounded),
-`ratio: 1.0` (simulation seconds per wall second), `startup_timeout_s: 300`,
+`startup_timeout_s: 300`,
 `timing_socket: /tmp/chimaera_time.sock`, `status_bar: true`, `report_seconds: 1.0`,
 `max_serialized_bytes: 4096`, `max_pending_messages: 128`. Require
 `0 < poll_us < interval_us <= 3600000000`. The byte limit can be raised for sensor
@@ -90,7 +92,8 @@ messages up to `67106808` bytes (64 MiB minus room for the route header); queue
 capacity accepts `1..1000000`. Limits apply separately on both sides and overflow
 fails explicitly. Choose bounds appropriate to guest memory; pending messages
 can occupy capacity times payload size. The host status bar reports bridge traffic
-and pacing, and is disabled when output is redirected.
+and simulation progress, and is disabled when output is redirected. Intervals
+advance without wall-time pacing; there is no `ratio` setting.
 
 ## Build, stage, deploy, run
 
@@ -130,7 +133,7 @@ is not transactional and does not remove obsolete application files.
 The image must execute gem5 readfile on boot and permit passwordless root startup
 (or already run readfile as root), because the guest bridge maps m5 memory.
 Bringup passes the generated guest startup path to the universal gem5 configuration,
-boots until workbegin, then the host controls barriers and wall-clock pacing. Guest
+boots until workbegin, then the host controls barriers and simulation intervals. Guest
 callbacks run after each poll; host callbacks run at interval boundaries. This does
 not guarantee that arbitrary application callbacks complete within a barrier.
 
@@ -157,8 +160,8 @@ colcon --log-base ros/chimaera_ros_ws/log test-result --test-result-base ros/chi
 ```
 
 Tests cover route validation, ROS serialization/QoS and limits, malformed frames,
-echo isolation, real external talkers/listeners through mock-sim barriers, manifest
-validation, staged path relocation, symlink dereferencing and process cleanup.
+echo isolation, manifest validation, staged path relocation, symlink dereferencing
+and process cleanup.
 `validate` and `stage` check session configuration and the full route/QoS schema
 using the same C++ parser as the bridge. Topic name resolution and runtime type
 support are checked when ROS endpoints are created. Actual disk deployment and gem5 boot need

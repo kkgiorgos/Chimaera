@@ -72,7 +72,7 @@ it was running before the first build.
 The structure follows `talker_listener_ws`: `host_bridge`, `guest_bridge`, a
 shared JSON route file, guest startup script, offline deployment helper, and
 `bringup.launch.py`. Build additionally requires the sibling `gem5-transport`,
-`queue-manager`, custom x86 gem5/libm5, JSON-C development files, and Fortress
+custom x86 gem5/libm5, JSON-C development files, and Fortress
 Ignition Transport 11 / Messages 8 development files. Override
 `GEM5_TRANSPORT_ROOT`, `GEM5_ROOT`, or `GEM5_M5_LIBRARY` through CMake as in the
 talker/listener example. `-DBUILD_GUEST_BRIDGE=OFF` supports host-only builds.

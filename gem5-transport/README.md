@@ -43,7 +43,7 @@ target_link_libraries(your_guest PRIVATE chimaera::guest_controller)
 | `chimaera::transport` | `chimaera/transport.hpp` | Raw message contracts and result types |
 | `chimaera::host` | `chimaera/host_transport.hpp` | Synchronous host socket transport |
 | `chimaera::guest` | `chimaera/guest_transport.hpp` | Synchronous guest m5op transport |
-| `chimaera::host_controller` | `chimaera/gem5_controller.hpp` | Buffered host exchange and timing; wall-clock pacing |
+| `chimaera::host_controller` | `chimaera/gem5_controller.hpp` | Buffered host exchange and timing |
 | `chimaera::guest_controller` | `chimaera/gem5_controller.hpp` | Buffered guest polling |
 
 Targets propagate interface headers and C++20. The guest target links libm5 and

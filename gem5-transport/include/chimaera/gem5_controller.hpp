@@ -19,7 +19,7 @@ public:
     ~Gem5TimingController() override;
     void start(Duration interval) override;
     void wait() override;
-    // Wait for a paused server before starting automatic pacing (boot excluded).
+    // Wait for a paused server before starting simulation intervals.
     void wait_until_ready(std::chrono::seconds timeout = std::chrono::seconds(300),
                           const std::function<bool()>& cancelled = {});
     // Actual progress since the first step's start, at the fixed 1 THz frequency.

@@ -1,5 +1,7 @@
 # Queue manager
 
+Archived: this component is no longer part of the active Chimaera ROS bridge.
+
 A standalone C++20 library for multiplexing bounded FIFO queues onto one byte
 channel. It has no transport dependency; its bundles can be passed directly to
 Chimaera's `Transport::send` and `Transport::receive` interfaces.

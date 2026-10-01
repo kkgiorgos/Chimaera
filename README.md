@@ -35,28 +35,17 @@ Simulation time and the real time spent running an experiment are different.
 | [ros/chimaera_ros_ws](ros/chimaera_ros_ws/README.md) | Universal ROS topic bridge, application builds, guest deployment, and host/guest orchestration. |
 | [ros/talker_listener_ws](ros/talker_listener_ws/README.md) | Smaller example sending ROS messages between host and guest. |
 | [gem5-transport](gem5-transport/README.md) | C++ message transport; [controllers](gem5-transport/CONTROLLERS.md) coordinate guest execution. |
-| [mock-sim](mock-sim/README.md) | Local process demos for learning the transport and coordination without gem5 or ROS. |
-| [queue-manager](queue-manager/README.md) | Bounded message queues that share one transport. |
 | `gem5/` | Modified gem5 source, including Chimaera's guest-to-host operations. |
 | `docs/` | Architecture material, [custom gem5 operations](docs/gem5ops.md), and an [efficiency audit](docs/gem5-cosimulation-efficiency-audit.md). |
 | [legacy/gem5-transport-demos](legacy/gem5-transport-demos/README.md) | Frozen raw transport and controller demos with their build dependencies. |
+| [legacy/mock-sim](legacy/mock-sim/README.md), [legacy/queue-manager](legacy/queue-manager/README.md) | Archived local transport demos and standalone queues. |
 | `legacy/`, `ros/franka_ws/` | Earlier implementations and additional robot integration work. |
 
 ## Start here
 
-For a small hands-on introduction, use Linux with CMake 3.21+, Make, Python 3,
-and a C++20 compiler. From the repository root, run these in separate terminals:
-
-```sh
-# Terminal 1
-make -C mock-sim demo-host
-
-# Terminal 2
-make -C mock-sim demo-guest
-```
-
-Enter `send 1 hello` on the host, then `step` to deliver it to the guest.
-Enter `quit` on the host to shut down both sides.
+For a small gem5 example, follow the [talker/listener guide](ros/talker_listener_ws/README.md).
+The [universal bridge guide](ros/chimaera_ros_ws/README.md) covers building the
+bridge, staging applications, and running host/guest sessions through gem5-transport.
 
 For the full robot experiment, follow the [wall-follow guide](ros/wall_follow_ws/README.md).
 It covers ROS 2 Humble, Gazebo Fortress, custom gem5/libm5, the guest kernel and

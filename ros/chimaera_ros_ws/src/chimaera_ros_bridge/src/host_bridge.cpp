@@ -1,13 +1,10 @@
-#include <algorithm>
 #include <chimaera/gem5_controller.hpp>
-#include <chimaera/wall_clock_pacer.hpp>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <chimaera_ros_bridge/status_bar.hpp>
-#include <thread>
 
 int main(int argc, char ** argv)
 {
@@ -19,15 +16,14 @@ int main(int argc, char ** argv)
     const auto poll = node->declare_parameter<int64_t>("poll_us", 10000);
     const auto steps = node->declare_parameter<int64_t>("steps", 0);
     const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);
-    const auto ratio = node->declare_parameter<double>("ratio", 1.0);
     const auto socket =
       node->declare_parameter<std::string>("timing_socket", "/tmp/chimaera_time.sock");
     if (
       interval < 1 || interval > 3600000000LL || poll < 1 || poll >= interval || steps < 0 ||
-      timeout < 1 || !std::isfinite(ratio) || ratio <= 0) {
+      timeout < 1) {
       throw std::invalid_argument(
         "require 0 < poll_us < interval_us <= 3600000000, "
-        "steps >= 0, startup_timeout_s > 0 and finite ratio > 0");
+        "steps >= 0, startup_timeout_s > 0");
     }
     const auto report_seconds = node->declare_parameter<double>("report_seconds", 1.0);
     if (!std::isfinite(report_seconds) || report_seconds <= 0) {
@@ -65,25 +61,22 @@ int main(int argc, char ** argv)
         }
         return !rclcpp::ok();
       });
-      chimaera::WallClockPacer pacer(ratio);
       std::uint64_t completed_steps = 0;
       auto report_status = [&] {
         if (!refresh_due()) {
           return;
         }
-        const auto rate = pacer.report(timing.elapsed_ticks());
         std::ostringstream text;
         text << " CHIMAERA | " << (node->received() ? "ACTIVE" : "TIMING READY") << " | TX "
              << node->transmitted() << " RX " << node->received() << " Q " << node->pending()
-             << " | " << std::fixed << std::setprecision(2) << rate.achieved_ratio << "x/" << ratio
-             << "x"
-             << " | sim " << rate.simulated_seconds << "s | step " << completed_steps;
+             << " | sim " << std::fixed << std::setprecision(2)
+             << static_cast<double>(timing.elapsed_ticks()) / 1e12
+             << "s | step " << completed_steps;
         if (node->received()) {
           text << " | RX age "
                << std::chrono::duration<double>(Clock::now() - node->last_receive()).count() << "s";
         }
-        text << " | ROS pub/sub " << node->local_talkers() << '/' << node->local_listeners()
-             << " | avg " << rate.average_ratio << "x";
+        text << " | ROS pub/sub " << node->local_talkers() << '/' << node->local_listeners();
         bar.update(text.str());
       };
       last_report = Clock::time_point::min();
@@ -97,22 +90,12 @@ int main(int argc, char ** argv)
         }
         node->exchange(controller);
         ++completed_steps;
-        while (rclcpp::ok()) {
-          report_status();
-          const auto delay = pacer.delay(timing.elapsed_ticks());
-          if (delay <= chimaera::Duration::zero()) {
-            break;
-          }
-          executor.spin_some();
-          std::this_thread::sleep_for(
-            std::min(delay, chimaera::Duration(std::chrono::milliseconds(10))));
-        }
+        report_status();
       }
-      const auto report = pacer.report(timing.elapsed_ticks());
       bar.clear();
       RCLCPP_INFO(
-        node->get_logger(), "Simulated %.3fs in %.3fs; average %.3fx", report.simulated_seconds,
-        report.wall_seconds, report.average_ratio);
+        node->get_logger(), "Simulated %.3fs",
+        static_cast<double>(timing.elapsed_ticks()) / 1e12);
     } catch (...) {
       bar.clear();
       const auto result = controller.stop();

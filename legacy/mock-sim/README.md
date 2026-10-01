@@ -1,5 +1,7 @@
 # Mock simulator transport and controllers
 
+Archived: this component is no longer part of the active Chimaera ROS bridge.
+
 C++20 implementation of the sequential transport described in
 [docs/transport-spec.md](docs/transport-spec.md), using Linux Unix-domain sockets,
 and the control loop in [docs/controller-spec.md](docs/controller-spec.md).
