@@ -10,26 +10,17 @@ namespace chimaera {
 using Duration = std::chrono::nanoseconds;
 using Message = std::vector<std::byte>;
 
-// Application-owned handlers. All calls are serialized on the controller thread.
-class DataProducer {
+// Applications push outgoing data and pull received data. Calls to a controller
+// are serialized by the application; no application callbacks are invoked.
+class DataController {
 public:
-    virtual ~DataProducer() = default;
-    // Remove the next queued message, or return nullopt when no data is ready.
+    virtual ~DataController() = default;
+    // Queue an outgoing message. Empty keys preserve FIFO; a nonempty key
+    // replaces pending messages with the same key. The controller copies the key.
+    // Queue overflow throws without changing the queue.
+    virtual void submit(Message data, std::string_view coalescing_key = {}) = 0;
+    // Remove the next received message, or return nullopt when none is ready.
     virtual std::optional<Message> take() = 0;
-    // Nonempty keys identify replaceable state updates: only the latest pending
-    // message for each key is retained. Other messages keep their FIFO order.
-    // The returned view must remain valid while data is unchanged. Empty opts
-    // out, preserving the default lossless queue behavior.
-    virtual std::string_view coalescing_key(const Message& data) const noexcept {
-        (void)data;
-        return {};
-    }
-};
-
-class DataConsumer {
-public:
-    virtual ~DataConsumer() = default;
-    virtual void submit(Message data) = 0;
 };
 
 class TimingController {
@@ -48,20 +39,20 @@ struct ControllerResult {
     [[nodiscard]] bool ok() const noexcept { return state == ControllerState::completed; }
 };
 
-class HostController {
+class HostController : public DataController {
 public:
     virtual ~HostController() = default;
-    // Collect queued host data before resume; deliver guest data after stopping.
+    // Resume for an interval, then make decoded guest data available to take().
     [[nodiscard]] virtual ControllerResult step(Duration interval, Duration poll_interval) = 0;
     [[nodiscard]] virtual ControllerResult stop() = 0;
 };
 
-class GuestController {
+class GuestController : public DataController {
 public:
     virtual ~GuestController() = default;
-    // Execute an interval under external scheduling. No code (including this
-    // call's return) runs while paused. Completion may therefore be observed by
-    // the caller only on the following resume. Keep calling until stopped/failed.
+    // Perform one poll exchange and sleep for the configured guest duration.
+    // Startup polls stay inside this call until the first host epoch arrives.
+    // External scheduling pauses this call along with all other guest code.
     [[nodiscard]] virtual ControllerResult run_next() = 0;
 };
 

@@ -28,7 +28,7 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
     Mapping mapping;
-    chimaera::Gem5GuestController controller(*node, *node);
+    chimaera::Gem5GuestController controller;
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
     m5_work_begin_addr(0, 0);
     while (rclcpp::ok()) {
@@ -39,6 +39,8 @@ int main(int argc, char ** argv)
       if (!result.ok()) {
         throw std::runtime_error(result.message);
       }
+      // Deliver, pump ROS once, then queue outgoing messages for the next poll.
+      node->exchange(controller);
     }
   } catch (const std::exception & error) {
     std::cerr << "Guest bridge: " << error.what() << '\n';

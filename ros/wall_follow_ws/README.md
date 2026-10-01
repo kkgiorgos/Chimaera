@@ -163,6 +163,14 @@ the only gateway to Gazebo `/cmd_vel`; ground truth and recording stay local.
 Parameter services/events are not bridged, so cosimulation records the supplied
 fixed controller settings rather than guest live parameter updates.
 
+The guest services ROS once after each successful transport poll: it publishes
+received frames, calls `spin_some()` once, and queues outgoing frames for the
+next poll. The polling wait happens at the start of the next controller call,
+so received frames reach ROS before the guest sleeps. Bridge `take()` only pops
+a queued frame. Callback pumping is independent
+of the number of messages drained. Rebuild and redeploy the guest bridge to use
+this executor policy.
+
 The wall-follow bridge retains the example's route validation and framing,
 with a 128 KiB serialized-payload limit to accommodate scans with up to 8192
 ranges and intensities. Its outgoing queue is bounded at 128 messages; exceeding

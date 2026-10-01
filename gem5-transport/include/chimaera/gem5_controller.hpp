@@ -30,16 +30,16 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-// Owns HostTransport and its I/O worker. Only the caller thread invokes
-// producer/consumer callbacks. Dependencies must outlive the controller.
+// Owns HostTransport and its I/O worker. Timing must outlive the controller.
 // stop terminates gem5; destruction alone cancels local I/O without advancing it.
 class Gem5HostController final : public HostController {
 public:
-    Gem5HostController(Gem5TimingController& timing, DataProducer& producer,
-                       DataConsumer& consumer,
+    Gem5HostController(Gem5TimingController& timing,
                        std::string guest_to_host = "/tmp/chimaera_g2h.sock",
                        std::string host_to_guest = "/tmp/chimaera_h2g.sock");
     ~Gem5HostController() override;
+    void submit(Message data, std::string_view coalescing_key = {}) override;
+    std::optional<Message> take() override;
     ControllerResult step(Duration interval, Duration poll_interval) override;
     ControllerResult stop() override;
 private:
@@ -51,14 +51,15 @@ private:
 // Instruction mode runs on a simulated CPU without a mapping. For KVM boot,
 // address_bootstrap keeps using address ops until a nonzero host epoch confirms
 // the workbegin CPU switch; keep the mapping alive throughout run_next. Polling
-// sleeps use the guest OS clock. run_next returns when a later host interval is
-// observed, so completion is observed only after the next resume/poll.
+// sleeps use the guest OS clock. run_next performs one exchange, allowing the
+// application to submit/take data between polls.
 class Gem5GuestController final : public GuestController {
 public:
-    Gem5GuestController(DataProducer& producer, DataConsumer& consumer,
-                        GuestM5Ops ops = GuestM5Ops::address,
-                        bool address_bootstrap = false);
+    explicit Gem5GuestController(GuestM5Ops ops = GuestM5Ops::address,
+                                 bool address_bootstrap = false);
     ~Gem5GuestController() override;
+    void submit(Message data, std::string_view coalescing_key = {}) override;
+    std::optional<Message> take() override;
     ControllerResult run_next() override;
 private:
     struct Impl;

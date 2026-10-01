@@ -63,7 +63,7 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&executor] { executor.spin_some(); };
     wall_follow_bridge::TimingController timing(
-      socket, std::chrono::seconds(timeout), *node, *node,
+      socket, std::chrono::seconds(timeout), *node,
       node->declare_parameter<std::string>("gazebo_world", "wall_arena"),
       std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)));
     timing.pump = node->pump;

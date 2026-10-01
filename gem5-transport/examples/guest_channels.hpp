@@ -9,14 +9,14 @@
 #include <unistd.h>
 
 namespace chimaera::controller_example {
-// All application callbacks run on the guest controller thread. No guest IPC
+// The application services channels between guest controller polls. No guest IPC
 // clients or worker threads are needed to manage the demo's two channels.
-class GuestChannels final : public DataProducer, public DataConsumer {
+class GuestChannels final {
 public:
     explicit GuestChannels(int input = STDIN_FILENO, std::ostream& output = std::cout)
         : input_(input), output_(output), outgoing_(outgoing_channels), incoming_(incoming_channels) {}
 
-    std::optional<Message> take() override {
+    std::optional<Message> take() {
         // Read only ready bytes; a partial command must never stop guest polling.
         for (int attempt = 0; !eof_ && attempt < 4; ++attempt) {
             pollfd descriptor{input_, POLLIN, 0};
@@ -47,7 +47,7 @@ public:
         return std::nullopt;
     }
 
-    void submit(Message bundle) override {
+    void submit(Message bundle) {
         // A ChannelService snapshot contains at most 4096 records. Reserve that
         // capacity per incoming channel and drain every bundle synchronously,
         // so deserialization never waits for this same thread to consume data.
@@ -64,6 +64,11 @@ public:
             }
         }
         output_ << std::flush;
+    }
+    // Called by the application loop; the controller never calls this adapter.
+    void exchange(DataController& controller) {
+        while (auto message = controller.take()) submit(std::move(*message));
+        while (auto message = take()) controller.submit(std::move(*message));
     }
 private:
     void command(std::string_view line) {

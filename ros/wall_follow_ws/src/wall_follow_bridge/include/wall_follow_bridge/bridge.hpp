@@ -17,7 +17,7 @@ namespace wall_follow_bridge
 {
 // ROS and controller callbacks share one thread. Each transport frame contains
 // a versioned route identity followed by one unchanged ROS serialized message.
-class Bridge : public rclcpp::Node, public chimaera::DataProducer, public chimaera::DataConsumer
+class Bridge : public rclcpp::Node
 {
 public:
   explicit Bridge(
@@ -95,7 +95,7 @@ public:
     }
   }
 
-  std::string_view coalescing_key(const chimaera::Message & bytes) const noexcept override
+  std::string_view coalescing_key(const chimaera::Message & bytes) const noexcept
   {
     if (clock_routes_.empty() || bytes.size() < 8 || std::memcmp(bytes.data(), "CBR1", 4) != 0) {
       return {};
@@ -111,12 +111,8 @@ public:
     return clock_routes_.find(key) == clock_routes_.end() ? std::string_view{} : key;
   }
 
-  std::optional<chimaera::Message> take() override
+  std::optional<chimaera::Message> take()
   {
-    // Pump even when guest run_next() stays inside an interval for many polls.
-    if (pump) {
-      pump();
-    }
     if (outgoing_.empty()) {
       return std::nullopt;
     }
@@ -126,7 +122,7 @@ public:
     return bytes;
   }
 
-  void submit(chimaera::Message bytes) override
+  void submit(chimaera::Message bytes)
   {
     if (bytes.size() < 8 || std::memcmp(bytes.data(), "CBR1", 4) != 0) {
       throw std::runtime_error("invalid bridge frame/version");
@@ -155,6 +151,18 @@ public:
     publisher->second->publish(message);
     ++received_;
     last_receive_ = std::chrono::steady_clock::now();
+  }
+
+  // Application-driven transfer, shared by host boundaries and guest polls.
+  void exchange(chimaera::DataController & controller)
+  {
+    while (auto bytes = controller.take()) {submit(std::move(*bytes));}
+    // Service callbacks once per exchange, after delivery and before draining.
+    if (pump) {pump();}
+    while (auto bytes = take()) {
+      const std::string key(coalescing_key(*bytes));
+      controller.submit(std::move(*bytes), key);
+    }
   }
 
   std::uint64_t transmitted() const { return transmitted_; }

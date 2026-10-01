@@ -7,9 +7,20 @@
 struct Adapter : mock_sim::DataProducer, mock_sim::DataConsumer
 {
   explicit Adapter(talker_listener_bridge::Bridge & bridge) : bridge(bridge) {}
-  std::optional<mock_sim::Message> take() override {return bridge.take();}
+  std::optional<mock_sim::Message> take() override
+  {
+    // mock-sim retains its callback API: pump once when collection starts.
+    if (!collecting) {
+      if (bridge.pump) {bridge.pump();}
+      collecting = true;
+    }
+    auto message = bridge.take();
+    if (!message) {collecting = false;}
+    return message;
+  }
   void submit(mock_sim::Message message) override {bridge.submit(std::move(message));}
   talker_listener_bridge::Bridge & bridge;
+  bool collecting{false};
 };
 int main(int argc, char ** argv)
 {

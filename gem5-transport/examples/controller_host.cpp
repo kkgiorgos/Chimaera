@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
         const std::array channels{QueueChannel{1, 128}, QueueChannel{2, 128}};
         ChannelService service(options.channels, channels);
         Gem5TimingController timing(options.endpoint);
-        Gem5HostController controller(timing, service, service);
+        Gem5HostController controller(timing);
         std::cout << "Channel clients: " << argv[0] << " --channel ID " << options.channels << "\n";
         std::cout << "Host data listeners ready. Waiting for gem5 at " << options.endpoint
                   << "...\n" << std::flush;
@@ -195,8 +195,10 @@ int main(int argc, char* argv[]) {
             input.read(0, command);
             if (quit || interrupted) break;
             ++step;
+            service.exchange(controller);
             require(controller.step(std::chrono::microseconds(options.interval_us),
                                     std::chrono::microseconds(options.poll_us)));
+            service.exchange(controller);
             while (!quit && !interrupted) {
                 if (std::chrono::duration<double>(Clock::now() - last_report).count() >= options.report_seconds)
                     report();

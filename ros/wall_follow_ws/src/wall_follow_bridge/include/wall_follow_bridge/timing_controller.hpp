@@ -5,6 +5,7 @@
 #include <ignition/msgs/world_stats.pb.h>
 
 #include <chimaera/gem5_controller.hpp>
+#include <wall_follow_bridge/bridge.hpp>
 #include <condition_variable>
 #include <ignition/transport/Node.hh>
 #include <limits>
@@ -20,10 +21,10 @@ class TimingController final : public chimaera::TimingController
 {
 public:
   TimingController(
-    std::string socket, std::chrono::seconds timeout, chimaera::DataProducer & producer,
-    chimaera::DataConsumer & consumer, std::string world, chimaera::Duration physics_step)
+    std::string socket, std::chrono::seconds timeout, Bridge & bridge, std::string world, chimaera::Duration physics_step)
   : gem5_(std::move(socket), timeout),
-    host_(gem5_, producer, consumer),
+    host_(gem5_),
+    bridge_(bridge),
     timeout_(timeout),
     physics_step_(physics_step),
     world_(std::move(world))
@@ -70,11 +71,13 @@ public:
     interval_ = interval;
     pending_ = true;
     const auto begin = std::chrono::steady_clock::now();
+    bridge_.exchange(host_);
     const auto result = host_.step(interval_, poll_);
     gem5_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
     if (!result.ok()) {
       throw std::runtime_error(result.message);
     }
+    bridge_.exchange(host_);
     // DDS and the host command gateway run asynchronously to the timing barrier.
     // Allow their executors to consume commands while both simulators are paused.
     settle();
@@ -189,6 +192,7 @@ private:
   }
   chimaera::Gem5TimingController gem5_;
   chimaera::Gem5HostController host_;
+  Bridge & bridge_;
   std::chrono::seconds timeout_;
   chimaera::Duration physics_step_, interval_{}, poll_{std::chrono::milliseconds(10)};
   std::string world_;

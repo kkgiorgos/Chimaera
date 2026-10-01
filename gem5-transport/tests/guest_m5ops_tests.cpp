@@ -7,16 +7,21 @@
 #include <cstring>
 #include <deque>
 #include <stdexcept>
+#include <time.h>
 
 using namespace chimaera;
 extern "C" { void* m5_mem = nullptr; }
 namespace {
 std::deque<Message> received;
 std::vector<bool> calls;
+std::vector<Message> sent;
+struct Wait { Duration duration; std::size_t sent_frames; std::size_t remaining_frames; };
+std::vector<Wait> waits;
 bool short_send = false;
 void expect(bool condition) { if (!condition) throw std::runtime_error("m5ops test failed"); }
-std::uint64_t send(bool instruction, void*, std::uint64_t size) {
+std::uint64_t send(bool instruction, void* buffer, std::uint64_t size) {
     calls.push_back(instruction);
+    sent.emplace_back(static_cast<std::byte*>(buffer), static_cast<std::byte*>(buffer) + size);
     return short_send ? size - 1 : size;
 }
 std::uint64_t recv(bool instruction, void* buffer, std::uint64_t size) {
@@ -31,13 +36,17 @@ void enqueue(Message data) {
     received.emplace_back(header.begin(), header.end());
     if (!data.empty()) received.push_back(std::move(data));
 }
-struct App : DataProducer, DataConsumer {
-    int taken = 0;
-    std::optional<Message> take() override { ++taken; return std::nullopt; }
-    void submit(Message) override { throw std::runtime_error("unexpected callback"); }
-};
+
 }
 extern "C" {
+// Capture guest waits without host wall-clock timing assertions. The snapshots
+// distinguish sleeping before the next send from sleeping after a reply.
+int __wrap_nanosleep(const struct timespec* requested, struct timespec*) {
+    waits.push_back({std::chrono::seconds(requested->tv_sec) +
+                     std::chrono::nanoseconds(requested->tv_nsec),
+                     sent.size(), received.size()});
+    return 0;
+}
 uint64_t m5_chimaera_send(void* b, uint64_t s) { return send(true, b, s); }
 uint64_t m5_chimaera_send_addr(void* b, uint64_t s) { return send(false, b, s); }
 uint64_t m5_chimaera_recv(void* b, uint64_t s) { return recv(true, b, s); }
@@ -60,16 +69,46 @@ int main() {
     short_send = false;
     calls.clear();
     // A delayed KVM exit can produce epoch-zero polls. No instruction op or
-    // application callback is allowed until a switched host publishes epoch 1.
+    // application data is sent until a switched host publishes epoch 1.
     m5_mem = &address;
-    for (unsigned epoch : {0, 1, 2})
-        enqueue(control::encode({control::Kind::reply, epoch, Duration(1), {}}));
-    App app;
-    Gem5GuestController controller(app, app, GuestM5Ops::instruction, true);
+    sent.clear();
+    enqueue(control::encode({control::Kind::reply, 0, Duration(1), {}}));
+    enqueue(control::encode({control::Kind::reply, 1, Duration(3), {data, {}}}));
+    enqueue(control::encode({control::Kind::reply, 2, Duration(7), {data}}));
+    Gem5GuestController controller(GuestM5Ops::instruction, true);
+    expect(!controller.take());
+    controller.submit(Message{std::byte{9}}, "state");
+    controller.submit(data, "state");
     expect(controller.run_next().ok());
-    expect(app.taken == 1);
+    // Only epoch-zero bootstrap sleeps; the first application reply is ready
+    // immediately, with no polling wait before it can be delivered.
+    expect(waits.size() == 1 && waits[0].duration == Duration(1));
+    expect(waits[0].sent_frames == 2 && waits[0].remaining_frames == 4);
+    expect(controller.take() == data);
+    expect(controller.take() == Message{});
+    expect(!controller.take());
+    expect(received.size() == 2); // One poll per call once bootstrap completes.
+    expect(controller.run_next().ok());
+    expect(waits.size() == 2 && waits[1].duration == Duration(3));
+    expect(waits[1].sent_frames == 4 && waits[1].remaining_frames == 2);
+    expect(controller.take() == data);
+    expect(!controller.take());
+    expect(sent.size() == 6);
+    expect(control::decode(sent[1], control::Kind::poll).messages.empty());
+    expect(control::decode(sent[3], control::Kind::poll).messages.empty());
+    expect(control::decode(sent[5], control::Kind::poll).messages == control::Batch{data});
     expect(calls == std::vector<bool>({false, false, false, false,
                                      false, false, false, false,
                                      true, true, true, true}));
     expect(received.empty());
+    enqueue(control::encode({control::Kind::reply, 1, Duration(1), {}}));
+    expect(!controller.run_next().ok()); // Epoch regression is terminal.
+    expect(waits.size() == 3 && waits[2].duration == Duration(7));
+    expect(waits[2].sent_frames == 6 && waits[2].remaining_frames == 2);
+    const auto failed = calls.size();
+    expect(!controller.run_next().ok() && calls.size() == failed);
+    expect(waits.size() == 3); // Terminal failures never wait or poll again.
+    bool rejected = false;
+    try { controller.submit(data); } catch (const std::runtime_error&) { rejected = true; }
+    expect(rejected);
 }

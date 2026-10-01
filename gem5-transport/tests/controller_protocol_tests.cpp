@@ -1,8 +1,5 @@
 #include "../src/controller_protocol.hpp"
-
-#include <deque>
 #include <iostream>
-
 using namespace chimaera;
 namespace {
 void expect(bool condition, const char* message) {
@@ -20,76 +17,90 @@ Message frame(char route, unsigned value, std::size_t size = 3) {
     message[2] = static_cast<std::byte>(value & 255);
     return message;
 }
-struct Producer : DataProducer {
-    std::deque<Message> pending;
-    bool coalesce{true};
-    std::optional<Message> take() override {
-        if (pending.empty()) return std::nullopt;
-        auto message = std::move(pending.front());
-        pending.pop_front();
-        return message;
-    }
-    std::string_view coalescing_key(const Message& message) const noexcept override {
-        if (coalesce && !message.empty() && message[0] == std::byte{'c'}) return "clock";
-        return {};
-    }
-};
-struct Fifo : DataProducer {
-    std::optional<Message> take() override { return std::nullopt; }
-};
 }
-
 int main() {
     try {
-        Producer producer;
-        // Draining a burst larger than the packet limit must still retain its
-        // newest clock, even when take() exposes updates one at a time.
+        control::OutgoingQueue queue;
         for (unsigned i = 0; i < 4096; ++i) {
-            producer.pending.push_back(frame('c', i));
-            if (i == 10 || i == 2000) producer.pending.push_back(frame('s', i));
+            queue.submit(frame('c', i), "clock");
+            if (i == 10 || i == 2000) queue.submit(frame('s', i));
         }
-        const auto batch = control::collect(producer);
-        expect(producer.pending.empty(), "clock burst not fully drained");
+        const auto batch = queue.drain();
         expect(batch == control::Batch({frame('s', 10), frame('s', 2000), frame('c', 4095)}),
                "latest clock or scan FIFO order lost");
         const auto packet = control::decode(
             control::encode({control::Kind::reply, 7, Duration(10), batch}), control::Kind::reply);
         expect(packet.messages == batch, "coalescing changed wire round trip");
-
-        // A guest can miss several host boundaries. Only its latest pending
-        // clock survives, while every scan remains in order.
-        control::Batch outgoing;
-        for (unsigned boundary = 0; boundary < 100; ++boundary)
-            control::append(outgoing, {frame('c', boundary), frame('s', boundary)}, producer);
+        expect(queue.drain().empty(), "drain did not clear queue");
+        for (unsigned i = 0; i < 100; ++i) {
+            queue.submit(frame('c', i), "clock");
+            queue.submit(frame('s', i));
+        }
+        auto outgoing = queue.drain();
         expect(outgoing.size() == 101, "clock backlog grew across boundaries");
         for (unsigned i = 0; i < 99; ++i)
             expect(outgoing[i] == frame('s', i), "scan order changed across boundaries");
         expect(outgoing[99] == frame('c', 99) && outgoing[100] == frame('s', 99),
                "newest clock position changed");
-
-        // Superseding an existing clock is allowed at both capacity limits.
-        outgoing.assign(control::max_messages - 1, frame('s', 0));
-        outgoing.push_back(frame('c', 1));
-        control::append(outgoing, {frame('c', 2)}, producer);
+        for (unsigned i = 0; i < control::max_messages - 1; ++i) queue.submit(frame('s', 0));
+        queue.submit(frame('c', 1), "clock");
+        queue.submit(frame('c', 2), "clock");
+        rejects([&] { queue.submit(frame('s', 1)); });
+        // A rejected oversized replacement must retain the accepted clock.
+        rejects([&] { queue.submit(frame('c', 3, control::max_bytes + 1), "clock"); });
+        outgoing = queue.drain();
         expect(outgoing.size() == control::max_messages && outgoing.back() == frame('c', 2),
-               "clock replacement failed at message capacity");
-        rejects([&] { control::append(outgoing, {frame('s', 1)}, producer); });
-        outgoing = {frame('c', 1, control::max_bytes)};
-        control::append(outgoing, {frame('c', 2, control::max_bytes)}, producer);
+               "replacement or rejection changed queue at message capacity");
+        queue.submit(frame('c', 1, control::max_bytes), "clock");
+        queue.submit(frame('c', 2, control::max_bytes), "clock");
+        rejects([&] { queue.submit(frame('s', 1)); });
+        outgoing = queue.drain();
         expect(outgoing.size() == 1 && outgoing[0][2] == std::byte{2},
                "clock replacement failed at byte capacity");
-        rejects([&] { control::append(outgoing, {frame('s', 1)}, producer); });
-        outgoing.clear();
+        std::string key = "clock";
+        queue.submit(frame('c', 1), key);
+        key = "changed";
+        queue.submit(frame('c', 2), "clock");
+        queue.submit(frame('c', 2));
+        queue.submit({});
+        outgoing = queue.drain();
+        expect(outgoing == control::Batch({frame('c', 2), frame('c', 2), {}}),
+               "copied key, default FIFO or empty message lost");
+        control::ReceivedQueue received;
+        received.append(std::move(outgoing));
+        expect(received.take() == frame('c', 2), "take lost FIFO order");
+        expect(received.take() == frame('c', 2), "take lost duplicate");
+        expect(received.take() == Message{}, "take lost empty message");
+        expect(!received.take(), "empty queue returned a message");
+        // Taking and appending at partial capacity must retain FIFO and buffers.
+        control::Batch full;
+        for (unsigned i = 0; i < control::max_messages; ++i) full.push_back(frame('s', i));
+        const auto* payload = full[1].data();
+        received.append(std::move(full));
+        rejects([&] { received.append({frame('s', 1024)}); });
+        expect(received.take() == frame('s', 0), "overflow changed received queue");
+        received.append({frame('s', 1024)});
+        auto second = received.take();
+        expect(second && second->data() == payload, "receive queue copied payload storage");
+        for (unsigned i = 2; i <= 1024; ++i)
+            expect(received.take() == frame('s', i), "partial drain/append changed FIFO");
+        expect(!received.take(), "partial drain left stale entries");
+        received.append({frame('c', 1, control::max_bytes)});
+        rejects([&] { received.append({frame('s', 2)}); });
+        expect(received.take()->size() == control::max_bytes, "byte overflow changed queue");
+        received.append({{}});
+        expect(received.take() == Message{}, "byte count did not reset after take");
 
-        // Existing producers opt out by default, including identical payloads.
-        Fifo fifo;
-        control::append(outgoing, {frame('c', 1), frame('c', 1), frame('s', 2)}, fifo);
-        expect(outgoing.size() == 3, "default FIFO producer lost messages");
-        producer.coalesce = false;
-        producer.pending = {frame('c', 1), frame('c', 2)};
-        expect(control::collect(producer).size() == 2, "FIFO collection lost messages");
-        std::cout << "Clock burst/backlog coalescing, scan FIFO, wire compatibility and queue limits passed\n";
-        return 0;
+        // Both sides of a queue swap retain independent coalescing/accounting.
+        control::OutgoingQueue detached;
+        queue.submit(frame('c', 1), "clock");
+        queue.swap(detached);
+        queue.submit(frame('c', 2), "clock");
+        expect(detached.drain() == control::Batch{frame('c', 1)}, "swap lost detached update");
+        queue.swap(detached);
+        expect(detached.drain() == control::Batch{frame('c', 2)}, "swap lost new pending update");
+        expect(queue.drain().empty(), "swap left messages in pending queue");
+        std::cout << "Coalescing, FIFO, wire compatibility and queue limits passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

@@ -1,6 +1,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <rosgraph_msgs/msg/clock.hpp>
@@ -30,6 +31,23 @@ void rejects(F operation)
   }
   require(rejected, "invalid input was accepted");
 }
+
+struct QueueController : chimaera::DataController
+{
+  chimaera::control::OutgoingQueue outgoing;
+  void submit(chimaera::Message data, std::string_view key = {}) override
+  {
+    outgoing.submit(std::move(data), key);
+  }
+  std::deque<chimaera::Message> incoming;
+  std::optional<chimaera::Message> take() override
+  {
+    if (incoming.empty()) {return std::nullopt;}
+    auto message = std::move(incoming.front());
+    incoming.pop_front();
+    return message;
+  }
+};
 
 int main(int argc, char ** argv)
 {
@@ -127,6 +145,7 @@ int main(int argc, char ** argv)
         (forward ? host_pub : guest_pub)->publish(message);
         std::optional<chimaera::Message> wire;
         until([&] {
+          executor.spin_some();
           wire = source->take();
           return wire.has_value();
         });
@@ -148,6 +167,7 @@ int main(int argc, char ** argv)
     number_pub->publish(number);
     std::optional<chimaera::Message> wire;
     until([&] {
+      executor.spin_some();
       wire = host->take();
       return wire.has_value();
     });
@@ -179,7 +199,7 @@ int main(int argc, char ** argv)
     bool rejected = false;
     until([&] {
       try {
-        (void)host->take();
+        executor.spin_some();
       } catch (const std::runtime_error &) {
         rejected = true;
       }
@@ -206,6 +226,29 @@ int main(int argc, char ** argv)
       }
       return rejected;
     });
+    // Queue reads are passive; even a full batch pumps only once per exchange.
+    int pump_count = 0;
+    host->pump = [&] {++pump_count;};
+    require(host->take().has_value() && pump_count == 0, "take pumped callbacks");
+    QueueController queued;
+    host->exchange(queued);
+    require(pump_count == 1 && host->pending() == 0, "batch drain pumped more than once");
+    require(queued.outgoing.drain().size() == Bridge::max_messages - 1, "exchange lost outgoing frames");
+    host->exchange(queued);
+    require(pump_count == 2, "empty exchange did not pump once");
+    host->pump = [&] {executor.spin_some();};
+    // Received data must be published before the single executor pump.
+    QueueController incoming_controller;
+    incoming_controller.incoming.push_back(saved);
+    const auto received_before = guest->received();
+    int delivery_pumps = 0;
+    guest->pump = [&] {
+      require(guest->received() == received_before + 1, "pump ran before incoming delivery");
+      ++delivery_pumps;
+    };
+    guest->exchange(incoming_controller);
+    require(delivery_pumps == 1 && incoming_controller.incoming.empty(), "receive exchange did not pump once");
+    guest->pump = [&] {executor.spin_some();};
     // Exercise the deployed routes with the largest supported benchmark scan.
     rclcpp::NodeOptions wall_options;
     wall_options.parameter_overrides({rclcpp::Parameter("config_file", WALL_CONFIG)});
@@ -236,6 +279,7 @@ int main(int argc, char ** argv)
     scan.intensities.assign(8192, 3.5f);
     scans->publish(scan);
     until([&] {
+      executor.spin_some();
       wire = wall_host->take();
       return wire.has_value();
     });
@@ -289,7 +333,9 @@ int main(int argc, char ** argv)
       executor.spin_some();
       return wall_host->pending() == 3;
     });
-    auto boundary = chimaera::control::collect(*wall_host);
+    QueueController controller;
+    wall_host->exchange(controller);
+    auto boundary = controller.outgoing.drain();
     require(boundary.size() == 3, "clock coalescing dropped scans");
     require(
       wall_host->coalescing_key(boundary[0]).empty() &&
@@ -325,7 +371,8 @@ int main(int argc, char ** argv)
     require(wall_host->pending() == Bridge::max_messages, "queue did not fill");
     queue_clock(202);
     require(wall_host->pending() == Bridge::max_messages, "full queue clock replacement failed");
-    boundary = chimaera::control::collect(*wall_host);
+    wall_host->exchange(controller);
+    boundary = controller.outgoing.drain();
     require(
       boundary.size() == Bridge::max_messages &&
         !wall_host->coalescing_key(boundary.back()).empty(),

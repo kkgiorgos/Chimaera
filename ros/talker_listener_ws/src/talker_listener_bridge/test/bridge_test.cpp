@@ -1,4 +1,5 @@
 #include <chrono>
+#include <deque>
 #include <fstream>
 #include <iostream>
 #include <std_msgs/msg/string.hpp>
@@ -19,6 +20,23 @@ template<typename F> void rejects(F operation)
   try {operation();} catch (const std::exception &) {rejected = true;}
   require(rejected, "invalid input was accepted");
 }
+
+struct QueueController : chimaera::DataController
+{
+  std::vector<chimaera::Message> outgoing;
+  void submit(chimaera::Message data, std::string_view = {}) override
+  {
+    outgoing.push_back(std::move(data));
+  }
+  std::deque<chimaera::Message> incoming;
+  std::optional<chimaera::Message> take() override
+  {
+    if (incoming.empty()) {return std::nullopt;}
+    auto message = std::move(incoming.front());
+    incoming.pop_front();
+    return message;
+  }
+};
 
 int main(int argc, char ** argv)
 {
@@ -103,7 +121,7 @@ int main(int argc, char ** argv)
         std_msgs::msg::String message; message.data = sample;
         (forward ? host_pub : guest_pub)->publish(message);
         std::optional<chimaera::Message> wire;
-        until([&] {wire = source->take(); return wire.has_value();});
+        until([&] {executor.spin_some(); wire = source->take(); return wire.has_value();});
         rejects([&] {source->submit(*wire);});  // wrong direction
         if (forward) {saved = *wire;}
         destination->submit(std::move(*wire));
@@ -115,7 +133,7 @@ int main(int argc, char ** argv)
     std_msgs::msg::Int32 number; number.data = -314;
     number_pub->publish(number);
     std::optional<chimaera::Message> wire;
-    until([&] {wire = host->take(); return wire.has_value();});
+    until([&] {executor.spin_some(); wire = host->take(); return wire.has_value();});
     guest->submit(std::move(*wire));
     until([&] {executor.spin_some(); return !numbers.empty();});
     require(numbers.back() == -314, "generic Int32 routing failed");
@@ -134,7 +152,7 @@ int main(int argc, char ** argv)
     host_pub->publish(oversized);
     bool rejected = false;
     until([&] {
-      try {(void)host->take();} catch (const std::runtime_error &) {rejected = true;}
+      try {executor.spin_some();} catch (const std::runtime_error &) {rejected = true;}
       return rejected;
     });
     // Fill the bridge queue deliberately without draining it.
@@ -149,6 +167,29 @@ int main(int argc, char ** argv)
       try {executor.spin_some();} catch (const std::runtime_error &) {rejected = true;}
       return rejected;
     });
+    // Queue reads are passive; even a full batch pumps only once per exchange.
+    int pump_count = 0;
+    host->pump = [&] {++pump_count;};
+    require(host->take().has_value() && pump_count == 0, "take pumped callbacks");
+    QueueController queued;
+    host->exchange(queued);
+    require(pump_count == 1 && host->pending() == 0, "batch drain pumped more than once");
+    require(queued.outgoing.size() == Bridge::max_messages - 1, "exchange lost outgoing frames");
+    host->exchange(queued);
+    require(pump_count == 2, "empty exchange did not pump once");
+    host->pump = [&] {executor.spin_some();};
+    // Received data must be published before the single executor pump.
+    QueueController incoming_controller;
+    incoming_controller.incoming.push_back(saved);
+    const auto received_before = guest->received();
+    int delivery_pumps = 0;
+    guest->pump = [&] {
+      require(guest->received() == received_before + 1, "pump ran before incoming delivery");
+      ++delivery_pumps;
+    };
+    guest->exchange(incoming_controller);
+    require(delivery_pumps == 1 && incoming_controller.incoming.empty(), "receive exchange did not pump once");
+    guest->pump = [&] {executor.spin_some();};
     std::cout << "Config validation, bidirectional generic routing, QoS, frame/queue limits and echo isolation passed\n";
   } catch (const std::exception & error) {
     std::cerr << error.what() << '\n'; status = 1;

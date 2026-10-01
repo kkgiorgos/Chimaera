@@ -16,14 +16,16 @@ int main(int argc, char** argv) {
     int status = 0;
     try {
         GuestChannels channels;
-        Gem5GuestController controller(channels, channels);
+        Gem5GuestController controller;
         std::cout << "Guest controller ready. Receiving channels 1 and 2 automatically.\n"
                      "Commands: send CHANNEL [TEXT]. Quit from the host.\n" << std::flush;
         // The boot-to-controller config pauses here before opening its timing socket.
         m5_work_begin_addr(0, 0);
         while (true) {
+            channels.exchange(controller);
             const auto result = controller.run_next();
             require(result);
+            channels.exchange(controller);
             if (result.state == ControllerState::stopped) break;
         }
     } catch (const std::exception& error) {

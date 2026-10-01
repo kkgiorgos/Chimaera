@@ -25,7 +25,7 @@ int main(int argc, char ** argv)
     node->pump = [&executor] { executor.spin_some(); };
     Mapping mapping;
     chimaera::Gem5GuestController controller(
-      *node, *node, chimaera::GuestM5Ops::instruction, true);
+      chimaera::GuestM5Ops::instruction, true);
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
     // KVM boots to this address op. gem5 switches CPUs before resuming us;
     // transport switches to instruction ops once the host confirms epoch 1.
@@ -38,6 +38,8 @@ int main(int argc, char ** argv)
       if (!result.ok()) {
         throw std::runtime_error(result.message);
       }
+      // Deliver, pump ROS once, then queue outgoing messages for the next poll.
+      node->exchange(controller);
     }
   } catch (const std::exception & error) {
     std::cerr << "Guest bridge: " << error.what() << '\n';

@@ -117,8 +117,11 @@ The host bridge owns `Gem5HostController`, its transport worker and the timing
 controller. It advances gem5 at synchronization boundaries and paces simulated
 time against wall time. The guest bridge owns `Gem5GuestController`, links the
 custom **libm5.a**, maps m5 memory, and issues the workbegin marker before polling.
-ROS callbacks and controller callbacks share one thread in each bridge. Guest
-callbacks are pumped during polling, even while `run_next()` has not returned.
+ROS callbacks and controller calls share one thread in each bridge. Applications
+push outgoing data with `submit()` and pull incoming data with `take()`. The guest
+pumps ROS callbacks once after each successful poll performed by `run_next()`,
+after publishing received frames and before queuing outgoing frames for the next
+poll. Bridge `take()` only pops queued data.
 The console/channel-service examples are not needed for this application: the
 support nodes are the controller producers and consumers themselves.
 
