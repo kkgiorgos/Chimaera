@@ -16,10 +16,7 @@ The main example is a robot that follows a wall using laser scans.
 - **Bridge**: passes sensor readings, simulation time, and movement commands
   between the host and guest.
 
-```text
-Gazebo → laser scans and clock → gem5 guest controller
-Gazebo ← movement commands    ← gem5 guest controller
-```
+![Chimaera architecture](docs/architecture.png)
 
 Chimaera advances gem5 and Gazebo in coordinated, sequential intervals and
 exchanges messages at their boundaries. In the wall-follow example, KVM
