@@ -64,7 +64,16 @@ def guest_start_script(command, files=(), *, preamble=""):
     files contains GUEST_PATH=HOST_PATH entries. preamble is trusted experiment
     shell code, run before file injection and the privileged guest command.
     """
-    script = "#!/bin/bash\nset -eo pipefail\n" + preamble
+    script = """#!/bin/bash
+set -eo pipefail
+chimaera_root() {
+    if (( EUID == 0 )); then
+        "$@"
+    else
+        sudo -n "$@"
+    fi
+}
+""" + preamble
     if preamble and not preamble.endswith("\n"):
         script += "\n"
     for entry in files:
@@ -76,9 +85,9 @@ def guest_start_script(command, files=(), *, preamble=""):
         encoded = base64.b64encode(source.read_bytes()).decode("ascii")
         destination = shlex.quote(guest_path)
         mode = '755' if source.stat().st_mode & 0o111 else '644'
-        script += f"printf %s {encoded} | base64 -d | sudo -n tee {destination} >/dev/null\n"
-        script += f"sudo -n chmod {mode} {destination}\n"
-    return script + "exec sudo -n " + shlex.quote(command) + "\n"
+        script += f"printf %s {encoded} | base64 -d | chimaera_root tee {destination} >/dev/null\n"
+        script += f"chimaera_root chmod {mode} {destination}\n"
+    return script + "chimaera_root " + shlex.quote(command) + "\n"
 
 
 def parse_ticks(value, allow_zero=False):
@@ -235,6 +244,10 @@ class TimingServer:
         while not self.roi_started and not self.finished:
             self._run_once()
         if self.finished:
-            raise RuntimeError("guest finished before its bridge was ready")
+            raise RuntimeError(
+                "guest finished before its bridge was ready: "
+                f"{simulator.get_last_exit_event_cause()} "
+                f"(code {simulator.get_last_exit_event_code()}); "
+                f"see {Path(m5.options.outdir) / 'board.pc.com_1.device'}")
         self.serve(socket_path, managed_shutdown=managed_shutdown)
         print(f"[host] Timing server stopped at tick {m5.curTick()}", flush=True)

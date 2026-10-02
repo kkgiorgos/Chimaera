@@ -42,6 +42,9 @@ class SimulatorStub:
         if self.last in self.handlers:
             next(self.handlers[self.last])
 
+    def get_last_exit_event_code(self):
+        return 127
+
     def get_last_exit_event_cause(self):
         return self.last
 
@@ -52,6 +55,7 @@ class TimingTest(unittest.TestCase):
         self.m5 = ModuleType('m5')
         self.m5.curTick = lambda: self.tick[0]
         self.m5.MaxTick = 2**64 - 1
+        self.m5.options = Mock(outdir='/tmp/gem5')
         self.m5.stats = Mock()
         self.m5.ticks = Mock()
         event_module = ModuleType('gem5.simulate.exit_event')
@@ -151,7 +155,7 @@ class TimingTest(unittest.TestCase):
     def test_boot_failure_never_opens_timing_socket(self):
         simulator = self.simulator([(Event.FAILED, 10)])
         self.server.serve = Mock()
-        with self.assertRaisesRegex(RuntimeError, 'before its bridge was ready'):
+        with self.assertRaisesRegex(RuntimeError, r'before its bridge was ready:.*code 127'):
             self.server.run(simulator)
         self.server.serve.assert_not_called()
 
@@ -161,8 +165,8 @@ class TimingTest(unittest.TestCase):
             source.write_bytes(b'executable')
             source.chmod(0o755)
             script = self.module.guest_start_script('/start', [f'/opt/guest_bridge={source}'])
-            self.assertIn('sudo -n tee /opt/guest_bridge >/dev/null', script)
-            self.assertIn('sudo -n chmod 755 /opt/guest_bridge', script)
+            self.assertIn('chimaera_root tee /opt/guest_bridge >/dev/null', script)
+            self.assertIn('chimaera_root chmod 755 /opt/guest_bridge', script)
             subprocess.run(['bash', '-n'], input=script, text=True, check=True)
 
     def test_after_boot_hypercall_is_a_boot_boundary(self):
@@ -208,6 +212,28 @@ class TimingTest(unittest.TestCase):
         self.m5.stats.dump.assert_called_once_with()
         self.assertEqual(signals.call_args_list[-1].args,
                          (self.module.signal.SIGINT, 'previous'))
+
+    def test_guest_startup_as_root_does_not_require_sudo(self):
+        # Docker guests boot as root with no sudo package. Force that branch
+        # even when the regression suite itself runs as an ordinary user.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, destination = root / 'input', root / 'injected'
+            source.write_text('controller settings\n')
+            source.chmod(0o755)
+            command = root / 'start'
+            command.write_text('#!/bin/bash\ncat "$1"\n')
+            command.chmod(0o755)
+            script = self.module.guest_start_script(
+                str(command), [f'{destination}={source}'])
+            script = script.replace('(( EUID == 0 ))', 'true')
+            script = script.replace('sudo -n "$@"', 'exit 99')
+            # Verify injection, modes, and workload execution together.
+            command.write_text(f'#!/bin/bash\ncat "{destination}"\n')
+            result = subprocess.run(['bash'], input=script, text=True,
+                                    capture_output=True, check=True)
+            self.assertEqual(result.stdout, source.read_text())
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o755)
 
     def test_guest_startup_files_and_shell_quoting(self):
         with tempfile.TemporaryDirectory() as directory:
