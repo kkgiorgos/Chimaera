@@ -28,6 +28,7 @@ Simulation time and the real time spent running an experiment are different.
 
 | Directory | Purpose |
 | --- | --- |
+| [containers/wall-follow](containers/wall-follow/README.md) | Docker build, guest preparation, worker checks, and parallel wall-follow runs. |
 | [ros/wall_follow_ws](ros/wall_follow_ws/README.md) | Main robot example, setup, experiment sweeps, plots, and dashboards. |
 | [ros/chimaera_ros_ws](ros/chimaera_ros_ws/README.md) | Universal ROS topic bridge, application builds, guest deployment, and host/guest orchestration. |
 | [ros/talker_listener_ws](ros/talker_listener_ws/README.md) | Smaller example sending ROS messages between host and guest. |
@@ -41,10 +42,13 @@ Use `git switch archive` to access them; active development continues on `main`.
 
 ## Start here
 
-**A fresh clone is not ready to run a gem5 session.** The repository supplies
-source and example configurations, but not the built simulator, built ROS
-workspaces, prepared guest disk image, or guest kernel. Complete the following
-setup before following an example's launch commands.
+For wall-follow, follow the [Docker guide](containers/wall-follow/README.md).
+Its build → check → run workflow supplies the simulator, ROS/Gazebo dependencies,
+and guest image.
+
+The manual instructions below apply when running directly on the host. A fresh
+clone supplies source and configurations; native runs also require building the
+simulator and ROS workspaces and supplying a prepared guest disk and kernel.
 
 ### Host prerequisites
 
@@ -107,9 +111,8 @@ You must obtain or create these **untracked external artifacts**:
 | `gem5/resources/x86-ubuntu-22.04-ros-humble.img` | A raw, partitioned x86-64 Ubuntu 22.04 disk image with ROS Humble and the guest dependencies below. |
 | `gem5/resources/x86-linux-kernel-5.15.180` | A gem5-compatible x86 Linux kernel that can boot the image. |
 
-These filenames are defaults, not automatic downloads. There is currently no
-complete image provisioning script or published prepared-image download in this
-repository. Preparing an image using QEMU requires QEMU and image-resizing/
+These filenames are defaults, not automatic downloads. For native setup, supply these artifacts yourself; the Docker workflow
+constructs its own guest image. Preparing an image using QEMU requires QEMU and image-resizing/
 network tools.
 
 Prepare the image with all of the following before deploying:
@@ -120,9 +123,8 @@ Prepare the image with all of the following before deploying:
   their libraries and message type support installed on both host and guest,
   with matching message definitions.
 - A boot hook that reads gem5's supplied script using `m5 readfile` and executes
-  it with Bash. Merely installing the `m5` binary is not enough. The supplied
-  boot scripts invoke `sudo -n`, so configure passwordless guest sudo for the
-  boot user, or run the boot hook as root with working noninteractive sudo.
+  it with Bash. Merely installing the `m5` binary is not enough. Configure passwordless guest sudo if the boot user is nonroot; root boot hooks
+  execute commands directly.
   Guest bridges need permission to map m5 memory through `/dev/mem` or
   `/dev/gem5_bridge`.
 - A root filesystem on **partition 2**, bootable as `/dev/sda2`. Both example
