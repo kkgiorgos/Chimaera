@@ -28,7 +28,7 @@ Simulation time and the real time spent running an experiment are different.
 
 | Directory | Purpose |
 | --- | --- |
-| [containers/wall-follow](containers/wall-follow/README.md) | Docker build, guest preparation, worker checks, and parallel wall-follow runs. |
+| [containers](containers/README.md) | Configurable parallel Docker jobs, image setup, and the wall-follow example. |
 | [ros/wall_follow_ws](ros/wall_follow_ws/README.md) | Main robot example, setup, experiment sweeps, plots, and dashboards. |
 | [ros/chimaera_ros_ws](ros/chimaera_ros_ws/README.md) | Universal ROS topic bridge, application builds, guest deployment, and host/guest orchestration. |
 | [ros/talker_listener_ws](ros/talker_listener_ws/README.md) | Smaller example sending ROS messages between host and guest. |
@@ -43,8 +43,9 @@ Use `git switch archive` to access them; active development continues on `main`.
 ## Start here
 
 For wall-follow, follow the [Docker guide](containers/wall-follow/README.md).
-Its build → check → run workflow supplies the simulator, ROS/Gazebo dependencies,
-and guest image.
+Build the shared simulator/dependency image, then prepare the application
+overlay and guest disk separately. Export a benchmark configuration, then use the [generic Docker runner](containers/README.md)
+to execute independent jobs in parallel.
 
 The manual instructions below apply when running directly on the host. A fresh
 clone supplies source and configurations; native runs also require building the

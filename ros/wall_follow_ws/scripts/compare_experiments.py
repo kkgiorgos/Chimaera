@@ -6,7 +6,10 @@ import math
 from pathlib import Path
 import sys
 
-from run_experiments import eligible
+WORKSPACE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(WORKSPACE / 'benchmarking'))
+sys.path.insert(0, str(WORKSPACE / 'src/wall_follow_robot'))
+from wall_follow_benchmark.results import eligible
 
 
 def discover(roots, include_incomplete=False):

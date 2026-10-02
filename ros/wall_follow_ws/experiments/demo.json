@@ -23,7 +23,7 @@
     "arena_height": 4.0
   },
   "sweep": {
-    "control_hz": [10.0],
+    "control_hz": [5.0, 10.0],
     "lidar_hz": [5.0, 10.0]
   }
 }

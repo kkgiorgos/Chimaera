@@ -1,5 +1,0 @@
-wall_follower:
-  ros__parameters:
-    control_hz: 20.0
-    target_distance: 0.8
-    speed: 0.35

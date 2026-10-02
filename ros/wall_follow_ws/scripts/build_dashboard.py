@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 import sys
 from datetime import datetime, timezone
-from run_experiments import WORKSPACE
+WORKSPACE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(WORKSPACE / 'src/wall_follow_robot'))
 sys.path.insert(0,str(WORKSPACE/'benchmarking'))
 from wall_follow_benchmark.comparison import load_comparison
 from wall_follow_benchmark.metrics import TASK, ARCHITECTURE, SIMULATION

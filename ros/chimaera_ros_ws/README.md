@@ -167,8 +167,9 @@ quoting and optional `--guest-file GUEST_PATH=HOST_PATH` injections. Injection
 requires the guest destination's parent directory to exist.
 
 See the [wall-follow session](../wall_follow_ws/src/wall_follow_bridge/config/session.json)
-for synchronized settings with a 128 KiB scan limit. Existing wall-follow launch
-arguments and benchmark outputs are preserved.
+for guest deployment and synchronized settings with a 128 KiB scan limit.
+The wall-follow suite runner owns the complete host/application launch and generates
+world and controller inputs per attempt.
 
 ## Build, stage, deploy, run
 

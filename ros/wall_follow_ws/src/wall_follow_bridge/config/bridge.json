@@ -14,7 +14,7 @@
       }
     },
     {
-      "host_topic": "/robot/cmd_vel",
+      "host_topic": "/cmd_vel",
       "guest_topic": "/robot/cmd_vel",
       "type": "geometry_msgs/msg/Twist",
       "direction": "guest_to_host",

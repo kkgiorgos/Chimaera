@@ -1,24 +1,75 @@
-# Wall-follow benchmark
+# Wall-follow application and benchmark
 
-This example measures how a robot tracks a wall under different controller,
-sensor, and simulated hardware settings. It also measures the host time Chimaera
-needs to advance the simulation.
+This workspace supports two workflows: developing the ROS application locally,
+and running complete benchmark suites with either a native controller or gem5.
+The C++ controller reads lidar and publishes velocity commands. Gazebo supplies
+physics and sensors. A passive host collector records commands, poses, and time;
+it never forwards commands or controls simulation. In gem5 runs, Chimaera routes
+host `/robot/scan` to guest `/robot/scan`, and guest `/robot/cmd_vel` directly to
+host `/cmd_vel`, which the Gazebo adapter consumes.
 
-The C++ robot controller receives lidar scans and publishes velocity commands.
-Gazebo provides the arena and ground-truth poses. A separate host collector records
-commands, poses, and simulation time; the robot contains no benchmark code.
-In a Chimaera run, the controller runs inside gem5 and Gazebo runs on the host.
-The bridge advances both simulators in synchronized steps. In a local run,
-the controller and Gazebo both run on the host.
+## Local application development
 
-## Setup
+For the native workflow, install ROS 2 Humble, Gazebo Fortress, `ros_gz_sim`, and
+`ros_gz_bridge`. Build only the application from `ros/wall_follow_ws`:
 
-You need ROS 2 Humble, Gazebo Fortress, `ros_gz_sim`, `ros_gz_bridge`, and NumPy.
-Chimaera runs also need a built x86 gem5, KVM access, and a ROS Humble guest image.
-See the [bridge guide](../chimaera_ros_ws/README.md) for transport dependencies and
-image preparation.
+```bash
+source /opt/ros/humble/setup.bash
+colcon build --packages-select wall_follow_robot --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+ros2 launch wall_follow_robot application.launch.py
+```
 
-For Chimaera, build from the **repository root**:
+That one launch starts Gazebo, its ROS adapter, and the controller. GUI is enabled
+by default; use `gui:=false` for headless execution. It generates a temporary world
+from the shared application generator. Adjust `lidar_hz`, `lidar_samples`,
+`noise_std`, `physics_step`, `arena_width`, or `arena_height` through launch arguments.
+Optional `world:=/absolute/path/world.sdf` and `parameters_file:=/absolute/path/controller.yaml`
+let you supply custom development inputs. Without a parameter file, the controller
+uses its C++ defaults. There is no collector, results directory, gem5, or Chimaera
+process in this workflow. Use `.zsh` setup files when sourcing from zsh.
+
+For container development, run from the repository root:
+
+```bash
+python3 containers/wall-follow/dev.py
+# Or: python3 containers/wall-follow/dev.py --headless
+```
+
+Container setup, GUI/display access, and an interactive development shell are
+covered in the [container guide](../../containers/wall-follow/README.md).
+
+## Automated benchmark suites
+
+For container execution, one command from the repository root prepares the image,
+builds the application, prepares the guest when needed, runs the jobs, and generates
+the report:
+
+```bash
+python3 containers/wall-follow/suite.py \
+  --config ros/wall_follow_ws/experiments/cache_hierarchy.json --output results/cache-hierarchy
+# Add --local for a native controller suite, using a configuration without hardware settings.
+```
+
+All container orchestration lives under `containers/`. The benchmark runner itself
+has no Docker dependency.
+
+For a native local suite, build all application/benchmark packages and install the
+analysis library from `ros/wall_follow_ws`:
+
+```bash
+source /opt/ros/humble/setup.bash
+colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
+source install/setup.bash
+python3 -m pip install -e benchmarking
+python3 scripts/run_experiments.py --config experiments/demo.json --output results/local
+```
+
+The runner starts and stops every runtime component automatically. No separate
+host, controller, or bridge startup is required.
+
+For native Chimaera suites, build the shared bridge and application from the
+repository root, then deploy once into an offline ROS Humble guest image:
 
 ```bash
 source /opt/ros/humble/setup.bash
@@ -30,27 +81,40 @@ colcon --log-base ros/chimaera_ros_ws/log build \
 source ros/chimaera_ros_ws/install/setup.bash
 cd ros/wall_follow_ws
 python3 -m pip install -e benchmarking
-```
-
-Deploy the built guest runtime and robot once, with the image **offline**:
-
-```bash
 ./deploy_guest.sh /absolute/path/to/disk.img 2
+python3 scripts/run_experiments.py --gem5 \
+  --config experiments/cache_hierarchy.json --output results/cache-hierarchy \
+  --image /absolute/path/to/disk.img
 ```
 
-The second argument is the image's root partition. Deployment requires sudo;
-build the guest binaries in an environment matching the image. Redeploy after
-changing guest code. Sweep settings are injected at boot without redeploying.
-Use `.zsh` setup files when sourcing from zsh.
+Chimaera needs a built x86 gem5, KVM access, and a matching kernel/guest image.
+See the [bridge guide](../chimaera_ros_ws/README.md) for transport dependencies and
+image preparation. Deployment requires sudo; build guest binaries in an environment
+matching the image and redeploy after changing guest code. Experiment settings are
+injected at boot without redeploying.
 
-For local runs only, build inside `ros/wall_follow_ws` instead:
+## Structure
 
-```bash
-source /opt/ros/humble/setup.bash
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release
-source install/setup.bash
-python3 -m pip install -e benchmarking
-```
+| Component | Responsibility |
+| --- | --- |
+| `wall_follow_robot` | Controller, shared world generator, and local development launch |
+| `wall_follow_benchmark` | Passive collector and benchmark lifecycle launch |
+| `wall_follow_bridge` | Complete gem5 attempt launch, topic routes, guest deployment settings, and hardware model |
+| `benchmarking/` | Configuration validation, result loading, metrics, and comparison; no ROS imports |
+| `scripts/` | One suite runner and offline comparison/dashboard tools |
+| `experiments/` | Sweep definitions |
+| `tests/` | Controller, recording, orchestration, analysis, and dashboard checks |
+
+Four launch files remain: `wall_follow_robot/application.launch.py` is the public
+local development entry point; `wall_follow_robot/robot.launch.py` starts just the
+controller for composition and guest execution. Each benchmark package has a
+`benchmark.launch.py` for a complete native or gem5 attempt, called by the runner.
+`session.json` stages the guest; it is not a separate world/application launcher.
+
+Worlds and benchmark controller files are generated per attempt and retained with
+the results. There are no checked-in default `world.sdf` or `controller.yaml` files.
+The world generator is shared with local development, and controller defaults live
+in the controller and are checked against the benchmark defaults by tests.
 
 ## Define a sweep
 
@@ -79,7 +143,7 @@ Omitted parameters use the [controller](benchmarking/wall_follow_benchmark/confi
 [launch](scripts/run_experiments.py) defaults.
 
 `duration` is the robot observation window in simulated seconds, starting at the
-first command. `wall_timeout` limits host wall time, including startup. Hardware
+first recorded command. `wall_timeout` limits host wall time, including startup. Hardware
 parameters require gem5. Other sweep parameters include `control_hz`, `speed`,
 `lidar_hz`, `lidar_samples`, `noise_std`, and arena dimensions.
 
@@ -88,7 +152,7 @@ parameters require gem5. Other sweep parameters include `control_hz`, `speed`,
 Run these commands from `ros/wall_follow_ws`, with the built workspace sourced:
 
 ```bash
-python3 scripts/run_gem5_experiments.py \
+python3 scripts/run_experiments.py --gem5 \
   --config experiments/cache_hierarchy.json --output results/cache-hierarchy
 ```
 
@@ -112,6 +176,7 @@ and an approximate remaining task time. Boot is reported separately.
 
 | Option | Purpose |
 | --- | --- |
+| `--run-id ID` | Execute a selected run ID; repeat in original plan order |
 | `--dry-run` | Print the validated plan without launching or writing results |
 | `--resume` | Continue the same saved plan; skip successful runs and retry failures |
 | `--keep-going` | Continue after failed attempts; still return failure |

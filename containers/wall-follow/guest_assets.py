@@ -35,12 +35,12 @@ def select(profile, directory, image_id):
 def selected(profile, image_id=None):
     pointer = selection_file(profile)
     if not pointer.is_file():
-        raise ValueError("No prepared guest is selected. Run python3 containers/wall-follow/build.py first, "
+        raise ValueError("No prepared guest is selected. Run containers/wall-follow/prepare-guest.py first, "
                          "or supply --guest-assets DIRECTORY")
     selection = json.loads(pointer.read_text())
     if image_id is not None and selection.get("image_id") != image_id:
         raise ValueError("Selected guest belongs to a different image. Run python3 "
-                         "containers/wall-follow/build.py to prepare matching assets, "
+                         "containers/wall-follow/prepare-guest.py to prepare matching assets, "
                          "or supply --guest-assets DIRECTORY explicitly")
     name = selection.get("directory")
     if not isinstance(name, str) or Path(name).name != name or name in ("", ".", ".."):
@@ -68,10 +68,7 @@ def verify(directory):
     )
     missing = [name for name in required if name not in payload.get("files", {})]
     if missing:
-        raise ValueError(
-            "Guest uses an obsolete or incomplete wall-follow runtime; "
-            "regenerate it with prepare-guest.py --output NEW_DIRECTORY and "
-            "pass that directory to --guest-assets. Missing: " + ", ".join(missing))
+        raise ValueError("Guest runtime is missing required files: " + ", ".join(missing))
     for name in ("disk.img", "kernel"):
         path = directory / name
         expected = manifest["sha256"][name]

@@ -1,4 +1,4 @@
-"""Host command gateway and recorder. All instrumentation stays in this process."""
+"""Passive host observer. Never publishes commands or controls either simulator."""
 import json
 import math
 from pathlib import Path
@@ -44,11 +44,10 @@ class Collector(Node):
         validate(parameters)
         experiment = directory / 'experiment.json'
         provenance = json.loads(experiment.read_text()).get('source_sha256', {}) if experiment.exists() else {}
-        self.publisher = self.create_publisher(Twist, '/cmd_vel', 10)
         self.create_subscription(Clock, '/clock', self.on_clock, qos_profile_sensor_data)
         self.create_subscription(LaserScan, '/robot/scan', self.on_scan, qos_profile_sensor_data)
         self.create_subscription(Odometry, '/ground_truth', self.on_pose, qos_profile_sensor_data)
-        self.create_subscription(Twist, '/robot/cmd_vel', self.on_command, 10)
+        self.create_subscription(Twist, '/cmd_vel', self.on_command, 10)
         self.create_subscription(ParameterEvent, '/parameter_events', self.on_parameters,
                                  qos_profile_parameter_events)
         self.recorder = Recorder(directory, parameters, self.duration, provenance=provenance)
@@ -77,11 +76,11 @@ class Collector(Node):
             self.finish(True, 'duration reached')
 
     def on_command(self, command):
-        # Keep the simulated robot stationary until observation inputs are available.
+        # Start recording once observation inputs are available. Commands go
+        # directly to Gazebo regardless of this observer's readiness.
         if self.finished or self.sim is None or self.sim <= 0 or self.scan is None or not self.have_pose:
             return
         wall = time.monotonic()
-        self.publisher.publish(command)
         self.last_command = self.sim
         self.recorder.record_command(self.sim, wall, command.linear.x, command.angular.z,
                                      stamp_seconds(self.scan.header.stamp))
@@ -105,8 +104,6 @@ class Collector(Node):
             return
         self.finished = True
         self.success = success
-        if rclpy.ok():
-            self.publisher.publish(Twist())
         if self.recorder:
             gap = (self.sim - self.last_command
                    if self.sim is not None and self.last_command is not None else None)

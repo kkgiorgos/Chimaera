@@ -100,12 +100,11 @@ def test_dry_run_does_not_create_output(suite):
     assert not output.exists()
 
 
-def test_host_only_selects_independent_launch(suite):
+def test_run_selection(suite):
     command, env, output = suite
-    subprocess.run(command + ['--host-only'], env=env, check=True, capture_output=True)
-    record = json.loads(next(output.rglob('attempt.json')).read_text())
-    assert record['command'][3] == 'host.launch.py'
-    assert json.loads((output/'suite.json').read_text())['deployment'] == 'host_only'
+    subprocess.run(command + ['--run-id', 'case_002_rep_01'], env=env, check=True, capture_output=True)
+    assert len(list(output.rglob('attempt.json'))) == 1
+    assert json.loads((output/'suite.json').read_text())['selected_run_ids'] == ['case_002_rep_01']
 
 
 def gem5_args(tmp_path):
@@ -135,7 +134,7 @@ if sys.argv[2] == 'wall_follow_bridge':
     records = [json.loads(p.read_text()) for p in output.rglob('attempt.json')]
     assert len(records) == 4
     for record in records:
-        assert record['command'][2:4] == ['wall_follow_bridge', 'bringup.launch.py']
+        assert record['command'][2:4] == ['wall_follow_bridge', 'benchmark.launch.py']
         assert 'physics_step_ns:=1000000' in record['command']
         assert 'cpu_type:=timing' in record['command']
         assert not any(arg.startswith('ratio:=') for arg in record['command'])

@@ -18,12 +18,14 @@ import time
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE / 'benchmarking'))
+sys.path.insert(0, str(WORKSPACE / 'src/wall_follow_robot'))
 from wall_follow_benchmark.configuration import DEFAULTS, validate
 from wall_follow_benchmark.hardware import DEFAULTS as HARDWARE_DEFAULTS, validate as validate_hardware
-from wall_follow_benchmark.world import make_world
+from wall_follow_sim.world import make_world
 from wall_follow_benchmark.timing import summarize
 from wall_follow_benchmark.gem5_stats import summarize as summarize_gem5
 from wall_follow_benchmark.sockets import prepare_sockets
+from wall_follow_benchmark.results import completed, eligible
 
 LAUNCH_DEFAULTS = dict(DEFAULTS, duration=120., gui=False, lidar_hz=20.,
                        lidar_samples=720, noise_std=0., physics_step=.001, wall_timeout=600., arena_width=12., arena_height=8.)
@@ -89,28 +91,6 @@ def make_plan(config, architecture, gem5=False):
             runs.append(dict(id=f'case_{case:03d}_rep_{rep:02d}', parameters=params.copy(),
                              sweep=coordinates, repetition=rep))
     return dict(version=2, architecture=architecture, dimensions={k: list(v[0]) for k,v in dimensions.items()}, runs=runs)
-
-
-def completed(path):
-    try:
-        metadata = json.loads((path/'metadata.json').read_text())
-        return (metadata.get('schema_version') == 3 and metadata.get('completed') is True
-                and (path/'poses.csv').is_file()
-                and (path/'samples.csv').is_file()
-                and len((path/'samples.csv').read_text().splitlines()) >= 3)
-    except (OSError, ValueError):
-        return False
-
-
-def eligible(path):
-    if not completed(path):
-        return False
-    if not (path/'attempt.json').exists():
-        return True  # Direct runtime runs have no suite attempt record.
-    try:
-        return json.loads((path/'attempt.json').read_text()).get('status') == 'completed'
-    except (OSError, ValueError):
-        return False
 
 
 def stop_process(process):
@@ -281,7 +261,7 @@ def main():
     parser.add_argument('--config', type=Path, default=WORKSPACE/'experiments/demo.json')
     parser.add_argument('--output', type=Path, required=True, help='New suite directory (or matching suite with --resume)')
     parser.add_argument('--architecture', default=None, help='Result label (default: gem5 or local)')
-    parser.add_argument('--host-only', action='store_true', help='Launch host.launch.py; start the robot separately with controller.yaml')
+    parser.add_argument('--run-id', action='append', help='Run selected plan IDs in original order (repeatable)')
     parser.add_argument('--gem5', action='store_true', help='Run each attempt with gem5 and paused Gazebo')
     parser.add_argument('--gem5-root', type=Path, default=WORKSPACE/'../../gem5')
     parser.add_argument('--image', type=Path, help='Previously deployed guest image')
@@ -305,10 +285,13 @@ def main():
         parser.error('warmup must be finite and nonnegative')
     try:
         plan = make_plan(json.loads(args.config.read_text()), args.architecture, gem5=args.gem5)
-        plan['deployment'] = 'gem5' if args.gem5 else 'host_only' if args.host_only else 'local'
+        plan['deployment'] = 'gem5' if args.gem5 else 'local'
+        if args.run_id:
+            selected = [run for run in plan['runs'] if run['id'] in args.run_id]
+            if [run['id'] for run in selected] != args.run_id:
+                raise ValueError('run IDs must be distinct known IDs in original plan order')
+            plan.update(runs=selected, selected_run_ids=args.run_id)
         if args.gem5:
-            if args.host_only:
-                raise ValueError('--gem5 and --host-only are mutually exclusive')
             if not 0 < args.poll_us < args.interval_us <= 3600000000:
                 raise ValueError('require 0 < poll-us < interval-us <= 3600000000')
             if args.startup_timeout <= 0:
@@ -385,7 +368,7 @@ def main():
                                timing_socket=str(Path('/tmp/chimaera_time.sock')),
                                physics_step_ns=round(params['physics_step'] * 1e9), status_bar=False)
         command = ['ros2','launch','wall_follow_bridge' if args.gem5 else 'wall_follow_benchmark',
-                   'bringup.launch.py' if args.gem5 else 'host.launch.py' if args.host_only else 'benchmark.launch.py'] + [
+                   'benchmark.launch.py'] + [
             f'{key}:={str(value).lower() if type(value) is bool else value}' for key,value in launch_args.items()]
         record = dict(command=command, started_unix=time.time(), status='running')
         status_file = directory/'attempt.json'

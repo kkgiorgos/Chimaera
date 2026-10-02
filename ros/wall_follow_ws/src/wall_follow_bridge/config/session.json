@@ -7,17 +7,7 @@
       "/opt/ros/humble/setup.bash",
       "../../../../chimaera_ros_ws/install/local_setup.bash"
     ],
-    "processes": [
-      {
-        "name": "host_application",
-        "command": [
-          "ros2",
-          "launch",
-          "wall_follow_bridge",
-          "host_application.launch.py"
-        ]
-      }
-    ]
+    "processes": []
   },
   "guest": {
     "domain_id": 42,
@@ -31,8 +21,10 @@
         "command": [
           "ros2",
           "launch",
-          "wall_follow_bridge",
-          "guest.launch.py"
+          "wall_follow_robot",
+          "robot.launch.py",
+          "parameters_file:=/tmp/chimaera-controller.yaml",
+          "command_topic:=/robot/cmd_vel"
         ]
       }
     ]
@@ -46,15 +38,12 @@
     "timing_backend": "gazebo",
     "gazebo_world": "wall_arena",
     "physics_step_ns": 1000000,
-    "timing_file": "/tmp/wall-follow-session/timing.csv",
+    "timing_file": "",
     "m5ops": "instruction",
-    "wait_for_application": true
-  },
-  "simulator": {
-    "gem5_root": "../../../../../gem5",
-    "outdir": "../../../../chimaera_ros_ws/m5out-wall-follow",
-    "config": "gem5_wall_follow.py",
-    "args": []
+    "wait_for_application": true,
+    "startup_timeout_s": 300,
+    "status_bar": true,
+    "report_seconds": 1.0
   },
   "builds": [
     {

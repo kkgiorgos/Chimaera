@@ -20,9 +20,9 @@ def collector_methods():
     # Keep the production methods, replacing only the ROS Node base and constructor.
     cls.bases = []
     cls.body = [node for node in cls.body if isinstance(node, ast.FunctionDef)
-                and node.name in ('on_clock', 'finish')]
+                and node.name in ('on_clock', 'on_command', 'finish')]
     stamp = next(node for node in module.body if isinstance(node, ast.FunctionDef) and node.name == 'stamp_seconds')
-    namespace = dict(rclpy=SimpleNamespace(ok=lambda: False))
+    namespace = dict(time=SimpleNamespace(monotonic=lambda: 100.))
     exec(compile(ast.Module(body=[stamp, cls], type_ignores=[]), str(source), 'exec'), namespace)
     return namespace['Collector']
 
@@ -58,3 +58,32 @@ def test_simulated_command_gap_reports_exact_failure_context(tmp_path):
     assert '1 command receipts' in messages[0]
     collector.finish(True, 'duration reached')
     assert json.loads((tmp_path / 'metadata.json').read_text()) == metadata
+
+
+def test_command_observation_needs_inputs_but_never_forwards(tmp_path):
+    collector = collector_methods()()
+    collector.finished = False
+    collector.sim = .5
+    collector.scan = None
+    collector.have_pose = False
+    collector.last_command = None
+    collector.recorder = Recorder(tmp_path, DEFAULTS, 3.)
+    command = SimpleNamespace(linear=SimpleNamespace(x=.35), angular=SimpleNamespace(z=.2))
+    collector.on_command(command)
+    assert collector.recorder.count == 0
+    collector.scan = SimpleNamespace(header=SimpleNamespace(stamp=clock(.45).clock))
+    collector.have_pose = True
+    collector.on_command(command)
+    assert collector.recorder.count == 1 and collector.last_command == .5
+    # There is no publisher on this object: observation must work without one.
+    assert command.linear.x == .35 and command.angular.z == .2
+    collector.recorder.finish()
+
+
+def test_collector_has_no_actuation_or_simulator_control():
+    source = (WORKSPACE / 'src/wall_follow_benchmark/wall_follow_host/collector.py').read_text()
+    calls = [node.func.attr for node in ast.walk(ast.parse(source))
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)]
+    assert 'create_publisher' not in calls
+    assert 'publish' not in calls
+    assert 'create_client' not in calls

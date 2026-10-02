@@ -1,4 +1,5 @@
-artifacts/
 guest-assets/
 __pycache__/
 *.pyc
+overlay/
+run-configs/

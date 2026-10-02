@@ -1,0 +1,7 @@
+{
+  "image": "chimaera:jammy-humble-fortress",
+  "command": ["python3", "-c", "import os,time; print('Running', os.environ['CHIMAERA_JOB'], flush=True); time.sleep(5); open('/output/result.txt','w').write(os.environ['CHIMAERA_JOB'])"],
+  "cpus": 1,
+  "memory": "1g",
+  "jobs": [{"name": "first"}, {"name": "second"}, {"name": "third"}]
+}

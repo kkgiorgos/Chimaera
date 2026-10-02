@@ -40,7 +40,7 @@ if grep -qw 'chimaera.probe=1' /proc/cmdline; then
     test -c /dev/mem
     set +e
     timeout 3 /opt/chimaera/wall_follow/app/lib/wall_follow_robot/controller --ros-args \
-        --params-file /opt/chimaera/wall_follow/app/share/wall_follow_bridge/config/controller.yaml -p use_sim_time:=true
+        -p use_sim_time:=false
     status=$?
     set -e
     test "$status" -eq 124

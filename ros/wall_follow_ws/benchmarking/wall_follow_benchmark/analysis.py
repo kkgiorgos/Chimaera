@@ -30,7 +30,7 @@ def run_label(run):
 def derive_metrics(rows, poses, arena):
     """Derive arena-specific metrics from raw samples and odometry."""
     import math
-    from .world import wall_distance
+    from wall_follow_sim.world import wall_distance
     index, path, previous = 0, 0., None
     for row in rows:
         now = float(row['sim_time'])

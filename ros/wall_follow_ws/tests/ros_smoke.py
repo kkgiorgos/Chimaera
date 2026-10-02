@@ -90,7 +90,7 @@ def run(mode):
         collector_executable = Path(get_package_prefix('wall_follow_benchmark'))/'lib/wall_follow_benchmark/collector'
         with (root/'robot.log').open('w') as robot_log, (root/'host.log').open('w') as host_log:
             robot = subprocess.Popen([str(robot_executable), '--ros-args', '--params-file', str(config),
-                '-p', 'use_sim_time:=false', '-r', 'scan:=/robot/scan', '-r', 'cmd_vel:=/robot/cmd_vel'],
+                '-p', 'use_sim_time:=false', '-r', 'scan:=/robot/scan', '-r', 'cmd_vel:=/cmd_vel'],
                 cwd=robot_cwd, stdout=robot_log, stderr=subprocess.STDOUT)
             host = subprocess.Popen([sys.executable, str(collector_executable), '--ros-args',
                 '-p', f'parameters_file:={config}', '-p', f'output_dir:={root / "result"}',
@@ -100,8 +100,8 @@ def run(mode):
             clock = node.create_publisher(Clock, '/clock', 10)
             scan_pub = node.create_publisher(LaserScan, '/robot/scan', 10)
             pose_pub = node.create_publisher(Odometry, '/ground_truth', 10)
-            forwarded = []
-            node.create_subscription(Twist, '/cmd_vel', lambda m: forwarded.append(m.linear.x), 10)
+            observed = []
+            node.create_subscription(Twist, '/cmd_vel', lambda m: observed.append(m.linear.x), 10)
             parameters = node.create_client(SetParameters, '/wall_follower/set_parameters')
             try:
                 deadline = time.monotonic()+10
@@ -147,8 +147,7 @@ def run(mode):
                 metadata = json.loads((root/'result/metadata.json').read_text())
                 rows = list(csv.DictReader((root/'result/samples.csv').open()))
                 assert metadata['completed'] == (mode == 'complete')
-                assert len(rows)>2 and any(value>0 for value in forwarded)
-                assert forwarded[-1] == 0.
+                assert len(rows)>2 and any(value>0 for value in observed)
                 assert not list(robot_cwd.iterdir()), 'Robot process wrote experiment files'
                 assert 'compute_ms' not in rows[0]
                 assert not any(key.startswith('reference_') for key in rows[0])

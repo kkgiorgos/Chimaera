@@ -9,5 +9,8 @@ description = "Standalone wall-follow experiment analysis; no ROS Python depende
 requires-python = ">=3.10"
 dependencies = ["numpy"]
 
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.setuptools]
+packages = ["wall_follow_benchmark", "wall_follow_sim"]
+
+[tool.setuptools.package-dir]
+wall_follow_sim = "../src/wall_follow_robot/wall_follow_sim"

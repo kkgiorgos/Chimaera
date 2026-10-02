@@ -4,7 +4,7 @@ import math
 import numpy as np
 import pytest
 from wall_follow_benchmark.configuration import DEFAULTS, validate
-from wall_follow_benchmark.world import make_world
+from wall_follow_sim.world import make_world
 import xml.etree.ElementTree as ET
 
 
@@ -112,7 +112,7 @@ def test_noisy_wall_with_outliers():
 
 @pytest.mark.parametrize('width,height', [(12.,8.), (8.,6.), (20.,12.), (4.,4.)])
 def test_arena_dimensions_spawn_and_ground_truth(width,height):
-    from wall_follow_benchmark.world import wall_distance
+    from wall_follow_sim.world import wall_distance
     world = ET.fromstring(make_world(arena_width=width, arena_height=height)).find('world')
     east = world.find("model[@name='east']")
     north = world.find("model[@name='north']")

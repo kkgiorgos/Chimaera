@@ -32,29 +32,34 @@ def main():
     directory = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", default="jammy-humble-fortress")
-    parser.add_argument("--sdk-image")
+    parser.add_argument("--sdk-image", default="chimaera:jammy-humble-fortress")
+    parser.add_argument("--overlay", type=Path, default=directory / "overlay", help="Built benchmark overlay")
     parser.add_argument("--kernel", type=Path, help="Local kernel; otherwise use the gem5 cache or download the pinned resource")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    profile_file = directory / "profiles" / f"{args.profile}.json"
+    profile_file = directory.parent / "profiles" / f"{args.profile}.json"
     policy_file = directory / "profiles" / f"{args.profile}.guest.json"
-    if profile_file.parent != directory / "profiles" or not policy_file.is_file():
+    if profile_file.parent != directory.parent / "profiles" or not policy_file.is_file():
         parser.error("Unknown guest stack profile")
     profile = json.loads(profile_file.read_text())
     policy = json.loads(policy_file.read_text())
     if profile["platform"] != "linux/amd64" or policy["construction"] != "ubuntu-docker-rootfs":
         parser.error("Unsupported guest platform or construction method")
-    image = json.loads(docker("image", "inspect", args.sdk_image or f"chimaera-builder:{args.profile}"))[0]
+    image = json.loads(docker("image", "inspect", args.sdk_image))[0]
     if image["Architecture"] != "amd64" or image["Os"] != "linux":
         parser.error("Guest SDK must be linux/amd64")
     sdk_id = image["Id"]
+    overlay = args.overlay.expanduser().resolve(strict=True)
+    if not (overlay / "share/wall_follow_bridge/config/session.json").is_file():
+        parser.error("Build the benchmark overlay with build-overlay.py first")
+    overlay_hashes = {str(p.relative_to(overlay)): sha256(p) for p in sorted(overlay.rglob("*")) if p.is_file()}
     build_files = [directory / "Guest.Dockerfile", directory / "Guest.Dockerfile.dockerignore",
                    directory / "prepare-guest.py", directory / "guest_assets.py", profile_file, policy_file,
                    *[directory / "scripts" / name for name in
                      ("stage-guest.py", "guest_session.py", "install-runtime.py", "guest-init.sh", "build-guest-disk.py")]]
-    source_hashes = {str(p.relative_to(directory)): sha256(p) for p in build_files}
+    source_hashes = {str(p): sha256(p) for p in build_files}
     identity = {"profile": args.profile, "sdk_image_id": sdk_id, "ubuntu_image": profile["base_image"],
-                "kernel": policy["kernel"], "construction_sha256": source_hashes}
+                "kernel": policy["kernel"], "construction_sha256": source_hashes, "overlay_sha256": overlay_hashes}
     input_sha256 = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     output = (args.output or directory / "guest-assets" / f"{args.profile}-{input_sha256[:16]}").expanduser().resolve()
     if "," in str(output):
@@ -72,6 +77,8 @@ def main():
             return
         stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.build-", dir=output.parent))
         token = uuid.uuid4().hex
+        alias = "chimaera-guest-sdk:" + token
+        image_ids = {}
         names = (f"chimaera-guest-export-{token}", f"chimaera-guest-disk-{token}")
         try:
             kernel = args.kernel or Path.home() / ".cache/gem5" / policy["kernel"]["resource"]
@@ -87,14 +94,14 @@ def main():
                     shutil.copyfileobj(source, target)
                 if sha256(stage / "kernel") != policy["kernel"]["sha256"]:
                     raise ValueError("Downloaded kernel checksum differs")
-            alias = "chimaera-guest-sdk:" + sdk_id.split(":")[1]
             docker("tag", sdk_id, alias)
-            image_ids = {}
             for target in ("rootfs", "tools"):
                 iid = stage / f"{target}.iid"
                 docker("buildx", "build", "--load", "--platform", profile["platform"],
                        "--progress", "plain", "--file", str(directory / "Guest.Dockerfile"),
                        "--target", target, "--iidfile", str(iid),
+                       "--build-context", f"benchmark={overlay}",
+                       "--build-context", f"profiles={directory.parent / 'profiles'}",
                        "--build-arg", f"SDK_IMAGE={alias}", "--build-arg", f"BASE_IMAGE={profile['base_image']}",
                        "--build-arg", f"STACK_PROFILE={args.profile}", str(directory), capture=False)
                 image_ids[target] = iid.read_text().strip()
@@ -130,6 +137,10 @@ def main():
         finally:
             for name in names:
                 subprocess.run(["docker", "rm", "--force", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Construction images and temporary SDK tags are not runtime inputs.
+            for image_id in set(image_ids.values()):
+                subprocess.run(["docker", "image", "rm", image_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["docker", "image", "rm", alias], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if stage.exists():
                 stage.chmod(0o755)
                 shutil.rmtree(stage)

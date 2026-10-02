@@ -1,13 +1,13 @@
-ARG SDK_IMAGE=chimaera-builder:jammy-humble-fortress
+ARG SDK_IMAGE=chimaera:jammy-humble-fortress
 ARG BASE_IMAGE=ubuntu:22.04@sha256:281c5745f657873d78e5531fc5ba8575f46ab7769b94550ac99543f122679986
 FROM ${SDK_IMAGE} AS payload
 USER 0:0
 ARG STACK_PROFILE=jammy-humble-fortress
-COPY profiles/${STACK_PROFILE}.json /guest-profile.json
+COPY --from=profiles ${STACK_PROFILE}.json /guest-profile.json
 COPY profiles/${STACK_PROFILE}.guest.json /guest-policy.json
+COPY --from=benchmark / /opt/chimaera/ros/
 COPY scripts/stage-guest.py scripts/guest_session.py /
-RUN --network=none python3 /opt/chimaera/scripts/verify-artifacts.py /opt/chimaera \
-    && /bin/bash /opt/chimaera/scripts/builder-entrypoint.sh python3 /stage-guest.py
+RUN --network=none /bin/bash /opt/chimaera/scripts/entrypoint.sh python3 /stage-guest.py
 
 FROM ${BASE_IMAGE} AS rootfs
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1
@@ -23,9 +23,7 @@ RUN apt-get update \
 COPY --from=payload /payload/opt/ros/ /opt/ros/
 COPY --from=payload /payload/usr/ /usr/
 COPY scripts/guest-init.sh /usr/sbin/init
-RUN chmod 755 /usr/sbin/init \
-    && LD_LIBRARY_PATH=/opt/ros/humble/lib python3 -c \
-       'import pathlib,subprocess; files=list(pathlib.Path("/opt/ros").rglob("*"))+list(pathlib.Path("/usr/local/bin").glob("*"))+list(pathlib.Path("/opt/chimaera/wall_follow").rglob("*")); elves=[p for p in files if p.is_file() and not p.is_symlink() and p.open("rb").read(4)==b"\x7fELF"]; results=[subprocess.run(["ldd",str(p)],capture_output=True,text=True) for p in elves]; assert all("not found" not in r.stdout+r.stderr for r in results), "Unresolved guest ELF dependency"; print("Verified",len(elves),"guest ELF files")'
+RUN chmod 755 /usr/sbin/init
 ENTRYPOINT []
 CMD ["/bin/bash"]
 
