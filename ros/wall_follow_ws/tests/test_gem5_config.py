@@ -11,6 +11,11 @@ import pytest
     ('boot log\nCHIMAERA_ONLINE_CPUS=2\n', 2, None),
     ('boot log\r\nCHIMAERA_ONLINE_CPUS=1\r\n', 1, None),
     ('CHIMAERA_ONLINE_CPUS=1\n', 2, 'Guest has 1 online CPUs; requested 2'),
+    ('CHIMAERA_ONLINE_CPU[   96.017954] random: python3: uninitialized urandom read (24 bytes read)\nS=2\n', 2, None),
+    ('CHIMAE[    2.636117] random: python3: uninitialized urandom read (24 bytes read)\nRA_ONLINE_CPUS=2\n', 2, None),
+    ('CHIMAERA_ONLINE_CPUS=[    2.636117] random: warning\n1\n', 2,
+     'Guest has 1 online CPUs; requested 2'),
+    ('CHIMAERA_ONLINE_CPUS=invalid\n', 2, 'Guest online CPU count missing'),
     ('smp: Brought up 1 node, 1 CPU\n', 2, 'Guest online CPU count missing'),
     ('CHIMAERA_ONLINE_CPUS=2\nCHIMAERA_ONLINE_CPUS=1\n', 2,
      'Guest has 1 online CPUs; requested 2'),
@@ -49,3 +54,12 @@ def test_kvm_roi_does_not_switch_processors():
     exec(compile(functions, str(config), 'exec'), namespace)
     namespace['prepare_roi']()
     assert calls == ['verify']
+
+
+@pytest.mark.parametrize('split', range(len('CHIMAERA_ONLINE_CPUS=12') + 1))
+@pytest.mark.parametrize('newline', ['\n', '\r\n'])
+def test_kernel_output_at_every_cpu_marker_boundary(tmp_path, split, newline):
+    marker = 'CHIMAERA_ONLINE_CPUS=12'
+    warning = '[    2.636117] random: python3: uninitialized urandom read' + newline
+    serial = 'boot log' + newline + marker[:split] + warning + marker[split:] + newline
+    test_online_cpu_verification(tmp_path, serial, 12, None)

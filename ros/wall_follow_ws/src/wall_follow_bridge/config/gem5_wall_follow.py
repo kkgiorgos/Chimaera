@@ -124,11 +124,13 @@ board.set_kernel_disk_workload(
 )
 
 def verify_online_cpus():
-    # The serial output is flushed as it is written. Read the boot script's
-    # guest count before switching CPUs or spending time on the measured ROI.
+    # Kernel printk messages can interrupt the boot script's marker mid-write.
+    # Remove their timestamped lines, including the inserted newline, before
+    # checking the guest count and switching CPUs for the measured ROI.
     serial = Path(m5.options.outdir) / "board.pc.com_1.device"
-    counts = re.findall(r"^CHIMAERA_ONLINE_CPUS=(\d+)\r?$",
-                        serial.read_text(errors="replace"), re.MULTILINE)
+    text = serial.read_text(errors="replace")
+    text = re.sub(r"\[\s*\d+\.\d+\] [^\r\n]*(?:\r?\n|$)", "", text)
+    counts = re.findall(r"^CHIMAERA_ONLINE_CPUS=(\d+)\r?$", text, re.MULTILINE)
     if not counts:
         raise RuntimeError(f"Guest online CPU count missing from {serial}")
     online = int(counts[-1])
