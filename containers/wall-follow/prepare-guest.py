@@ -15,12 +15,17 @@ import tempfile
 import urllib.request
 import uuid
 
-from guest_assets import sha256, verify
+from guest_assets import select, sha256, verify
 
 
 def docker(*args, capture=True):
-    return subprocess.run(["docker", *args], check=True, text=True,
-                          capture_output=capture).stdout
+    try:
+        return subprocess.run(["docker", *args], check=True, text=True,
+                              capture_output=capture).stdout
+    except subprocess.CalledProcessError as error:
+        if capture:
+            raise ValueError(error.stderr.strip() or str(error)) from None
+        raise
 
 
 def main():
@@ -51,7 +56,7 @@ def main():
     identity = {"profile": args.profile, "sdk_image_id": sdk_id, "ubuntu_image": profile["base_image"],
                 "kernel": policy["kernel"], "construction_sha256": source_hashes}
     input_sha256 = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-    output = (args.output or directory / "guest-assets" / args.profile).expanduser().resolve()
+    output = (args.output or directory / "guest-assets" / f"{args.profile}-{input_sha256[:16]}").expanduser().resolve()
     if "," in str(output):
         parser.error("Docker bind paths cannot contain commas")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +66,8 @@ def main():
             manifest = verify(output)
             if manifest["input_sha256"] != input_sha256:
                 parser.error("Existing guest has different construction inputs; choose a new --output")
+            if not args.output:
+                select(args.profile, output, sdk_id)
             print(f"Verified existing guest: {output}")
             return
         stage = Path(tempfile.mkdtemp(prefix=f".{output.name}.build-", dir=output.parent))
@@ -102,7 +109,7 @@ def main():
             docker("run", "--rm", "--name", names[1], "--network", "none",
                    "--mount", f"type=bind,source={stage},target=/work", image_ids["tools"],
                    "--uid", str(os.getuid()), "--gid", str(os.getgid()), capture=False)
-            verify(stage)
+            manifest = verify(stage)
             for name in ("rootfs.tar", "guest-policy.json", "inputs.json", "rootfs.iid", "tools.iid"):
                 (stage / name).unlink()
             for path in stage.iterdir():
@@ -116,8 +123,10 @@ def main():
                 os.fsync(fd)
             finally:
                 os.close(fd)
+            if not args.output:
+                select(args.profile, output, sdk_id)
             print(f"Guest assets: {output}", flush=True)
-            print(f"Disk SHA256: {verify(output)['sha256']['disk.img']}", flush=True)
+            print(f"Disk SHA256: {manifest['sha256']['disk.img']}", flush=True)
         finally:
             for name in names:
                 subprocess.run(["docker", "rm", "--force", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

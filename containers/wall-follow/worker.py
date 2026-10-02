@@ -18,7 +18,7 @@ import subprocess
 import time
 import uuid
 
-from guest_assets import sha256, verify as verify_guest
+from guest_assets import selected, sha256, verify as verify_guest
 
 
 def docker(*arguments, check=True, timeout=15):
@@ -90,7 +90,7 @@ def parser():
     run.add_argument("--resume", action="store_true")
     run.add_argument("--keep-going", action="store_true")
     run.add_argument("--run-ids-file", type=Path, help="Read-only JSON selection of global suite run IDs")
-    run.add_argument("--warmup", type=float, default=5)
+    run.add_argument("--warmup", type=float, default=0)
     run.add_argument("--interval-us", type=int, default=50000)
     run.add_argument("--poll-us", type=int, default=10000)
     run.add_argument("--startup-timeout", type=int, default=300)
@@ -149,6 +149,9 @@ def run_worker(args):
             if args.guest_image or args.kernel or args.guest_assets:
                 raise ValueError("--local does not accept guest assets")
         else:
+            if not (args.guest_assets or args.guest_image or args.kernel):
+                args.guest_assets = selected((image_info["Config"].get("Labels") or {}).get(
+                    "io.chimaera.stack", "jammy-humble-fortress"), image_id)
             root_device = "/dev/sda2"
             if args.guest_assets:
                 if args.guest_image or args.kernel:

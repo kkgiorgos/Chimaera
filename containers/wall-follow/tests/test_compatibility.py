@@ -34,8 +34,9 @@ def test_adapter_refuses_invalid_selection(tmp_path, ids):
     assert not (tmp_path / 'output').exists()
 
 
-@pytest.mark.parametrize('local', [True, False])
-def test_worker_command_is_accepted_by_current_runner(tmp_path, monkeypatch, local):
+@pytest.mark.parametrize('deployment', ['local', 'external', 'selected'])
+def test_worker_command_is_accepted_by_current_runner(tmp_path, monkeypatch, deployment):
+    local = deployment == 'local'
     config, selection = tmp_path / 'config.json', tmp_path / 'ids.json'
     config.write_text(json.dumps(bundled_config()))
     selection.write_text(json.dumps(['case_002_rep_02']))
@@ -45,7 +46,8 @@ def test_worker_command_is_accepted_by_current_runner(tmp_path, monkeypatch, loc
         if arguments[:2] == ('image', 'inspect'):
             return subprocess.CompletedProcess(arguments, 0, json.dumps([dict(
                 Id=image_id, Architecture='amd64', Os='linux',
-                Config=dict(Labels={'io.chimaera.run-selection': '2'}))]), '')
+                Config=dict(Labels={'io.chimaera.run-selection': '2',
+                                    'io.chimaera.stack': 'jammy-humble-fortress'}))]), '')
         return subprocess.CompletedProcess(arguments, 1, '', 'No such container')
     monkeypatch.setattr(worker, 'docker', docker)
     monkeypatch.setattr(worker.os, 'getuid', lambda: 1000)
@@ -62,7 +64,16 @@ def test_worker_command_is_accepted_by_current_runner(tmp_path, monkeypatch, loc
         else:
             disk, kernel = tmp_path / 'disk.img', tmp_path / 'kernel'
             disk.touch(); kernel.touch()
-            arguments += ['--guest-image', str(disk), '--kernel', str(kernel)]
+            if deployment == 'external':
+                arguments += ['--guest-image', str(disk), '--kernel', str(kernel)]
+            else:
+                (tmp_path / 'manifest.json').write_text('{}')
+                def selected(profile, image):
+                    assert profile == 'jammy-humble-fortress' and image == image_id
+                    return tmp_path
+                context.setattr(worker, 'selected', selected)
+                context.setattr(worker, 'verify_guest', lambda _: dict(
+                    profile='jammy-humble-fortress', layout=dict(root_partition=2)))
             # Device access is independently checked by the real worker verifier.
             context.setattr(worker.stat, 'S_ISCHR', lambda _: True)
             original_stat = Path.stat
@@ -111,3 +122,30 @@ def test_guest_uses_current_session_staging(tmp_path, monkeypatch):
     assert session['guest']['setup'][-1] == '/opt/chimaera/wall_follow/app/local_setup.bash'
     assert session['guest']['processes'][0]['command'] == [
         'ros2', 'launch', 'wall_follow_bridge', 'guest.launch.py']
+
+
+@pytest.mark.parametrize('layout', ['current', 'legacy', 'corrupt'])
+def test_guest_asset_runtime_validation(tmp_path, layout):
+    from guest_assets import sha256, verify
+    files = {name: {} for name in (
+        'opt/chimaera/wall_follow/guest_start',
+        'opt/chimaera/wall_follow/runtime/guest_bridge',
+        'opt/chimaera/wall_follow/runtime/chimaera_ros/runner.py',
+        'opt/chimaera/wall_follow/app/lib/wall_follow_robot/controller')}
+    if layout == 'legacy':
+        files = {'usr/local/bin/chimaera_wall_follow_bridge': {}}
+    (tmp_path / 'payload.json').write_text(json.dumps({'files': files}))
+    for name in ('disk.img', 'kernel'):
+        (tmp_path / name).write_bytes(b'test artifact')
+    manifest = dict(schema_version=1,
+                    layout=dict(root_partition=2, root_partuuid='4348494d-02'),
+                    payload_sha256=sha256(tmp_path / 'payload.json'),
+                    sha256={name: sha256(tmp_path / name) for name in ('disk.img', 'kernel')})
+    (tmp_path / 'manifest.json').write_text(json.dumps(manifest))
+    if layout == 'corrupt':
+        (tmp_path / 'payload.json').write_text('{}')
+    if layout == 'current':
+        assert verify(tmp_path) == manifest
+    else:
+        with pytest.raises(ValueError, match='obsolete' if layout == 'legacy' else 'checksum'):
+            verify(tmp_path)

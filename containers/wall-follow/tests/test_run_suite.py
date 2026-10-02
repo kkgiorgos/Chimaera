@@ -219,7 +219,7 @@ def resuming_suite(results, monkeypatch):
     config = root / 'original-config.json'
     config.write_text(json.dumps(dict(repetitions=2, sweep=dict(control_hz=[10, 20]))))
     args = suite.parser().parse_args(['--config', str(config), '--output', str(root),
-        '--architecture', 'cpu', '--local', '--warmup', '0', '--resume'])
+        '--architecture', 'cpu', '--local', '--warmup', '0', '--workers', '2', '--resume'])
     content, actual, assignments = suite.prepare(args)
     assert actual == plan and assignments == shards
     monkeypatch.setattr(suite, 'execution', lambda *_: dict(image_id='test-image'))
@@ -376,7 +376,7 @@ def test_completed_resume_launches_no_workers_and_can_change_limit(resuming_suit
     original_popen = suite.subprocess.Popen
 
     def launch(argv, **options):
-        assert 'compare-suite.py' in argv[1], 'completed run launched a worker'
+        assert 'compare_experiments.py' in argv[1], 'completed run launched a worker'
         return original_popen(argv, **options)
 
     monkeypatch.setattr(suite.subprocess, 'Popen', launch)

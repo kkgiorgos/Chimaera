@@ -54,7 +54,10 @@ while pending:
         installed = next((name for name in alternatives if name in packages), None)
         if installed and installed.startswith(f"ros-{distro}-"):
             pending.append(installed)
-        elif installed:
+        elif installed and installed.startswith("python3") and not installed.endswith("-dev"):
+            # ROS Debian metadata mixes runtime and build dependencies. Keep
+            # Python modules for launch/setup; ELF inspection below discovers
+            # system libraries without pulling their development packages.
             system.add(installed)
         elif not installed and any(name.startswith(f"ros-{distro}-") for name in alternatives):
             raise RuntimeError(f"No installed ROS dependency satisfies {package}: {group}")

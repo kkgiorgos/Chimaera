@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the selected container stage using a versioned stack profile."""
+"""Build the shared Docker image and guest needed for wall-follow benchmarks."""
 
 import argparse
 import fnmatch
@@ -10,6 +10,7 @@ from pathlib import Path
 import shlex
 import stat
 import subprocess
+import sys
 
 
 def build_input_digest(root, directory):
@@ -72,14 +73,20 @@ def main():
     root = directory.parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", default="jammy-humble-fortress")
-    parser.add_argument("--target", choices=("build-env", "builder", "artifacts", "worker"), default="builder")
+    parser.add_argument("--target", choices=("all", "build-env", "builder", "artifacts", "worker"), default="all",
+                        help="all prepares the image and guest (default); select a stage for development")
     parser.add_argument("--jobs", type=int, default=3)
-    parser.add_argument("--tag")
-    parser.add_argument("--output", type=Path, default=directory / "artifacts")
+    parser.add_argument("--tag", help="override the tag for an individual image target")
+    parser.add_argument("--output", type=Path, default=directory / "artifacts",
+                        help="export directory for --target artifacts")
     parser.add_argument("--print-command", action="store_true")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="refresh package versions by rebuilding Docker layers")
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
+    if args.target == "all" and args.tag:
+        parser.error("--tag requires an individual image target")
     profile_path = directory / "profiles" / f"{args.profile}.json"
     if profile_path.parent != directory / "profiles" or not profile_path.is_file():
         parser.error(f"Unknown profile: {args.profile}")
@@ -87,9 +94,10 @@ def main():
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True))
     digest = build_input_digest(root, directory)
+    target = "worker" if args.target == "all" else args.target
     command = [
-        "docker", "buildx", "build", "--progress", "plain",
-        "--platform", profile["platform"], "--target", args.target,
+        "docker", "buildx", "build", "--progress", "plain", "--provenance=false",
+        "--platform", profile["platform"], "--target", target,
         "--file", str(directory / "Dockerfile"),
         "--build-arg", f"BASE_IMAGE={profile['base_image']}",
         "--build-arg", f"STACK_PROFILE={profile['id']}",
@@ -100,19 +108,35 @@ def main():
         "--build-arg", f"SOURCE_DIRTY={int(dirty)}",
         "--label", f"io.chimaera.stack={profile['id']}",
     ]
-    if args.target == "artifacts":
+    if args.no_cache:
+        command.append("--no-cache")
+    if target == "artifacts":
         output = args.output.resolve()
         if not args.print_command and output.exists():
             if not output.is_dir() or any(output.iterdir()):
                 parser.error("Artifact output must be an empty directory; choose a new --output")
         command += ["--output", f"type=local,dest={output}"]
     else:
-        command += ["--load", "--tag", args.tag or f"chimaera-{args.target}:{profile['id']}"]
+        command += ["--load", "--tag", args.tag or f"chimaera-{target}:{profile['id']}"]
     command.append(str(root))
     print(shlex.join(command), flush=True)
     if not args.print_command:
         subprocess.run(command, check=True)
+    if args.target == "all":
+        # Keep the SDK tag for prepare-guest.py and existing development commands.
+        invocation = ["docker", "tag", f"chimaera-worker:{profile['id']}", f"chimaera-builder:{profile['id']}"]
+        print(shlex.join(invocation), flush=True)
+        if not args.print_command:
+            subprocess.run(invocation, check=True)
+        invocation = [sys.executable, str(directory / "prepare-guest.py"), "--profile", args.profile]
+        print(shlex.join(invocation), flush=True)
+        if not args.print_command:
+            subprocess.run(invocation, check=True)
+            print("Ready. Run: python3 containers/wall-follow/run-suite.py --output results/demo", flush=True)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        raise SystemExit(str(error)) from None

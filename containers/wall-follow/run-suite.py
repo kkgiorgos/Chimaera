@@ -24,7 +24,7 @@ SCRIPTS = DIRECTORY.parents[1] / 'ros/wall_follow_ws/scripts'
 sys.path.insert(0, str(DIRECTORY))
 sys.path.insert(0, str(SCRIPTS))
 import worker
-from guest_assets import sha256, verify as verify_guest
+from guest_assets import selected, sha256, verify as verify_guest
 from run_experiments import eligible, make_plan
 from suite_adapter import select_runs
 
@@ -124,10 +124,10 @@ def verify_report(coverage, directory):
 
 def parser():
     cli = argparse.ArgumentParser(description=__doc__)
-    cli.add_argument('--config', type=Path, required=True)
+    cli.add_argument('--config', type=Path, default=SCRIPTS.parent / 'experiments/demo.json')
     cli.add_argument('--output', type=Path, required=True)
-    cli.add_argument('--architecture', required=True)
-    cli.add_argument('--workers', type=int, default=2, help='Maximum concurrent containers')
+    cli.add_argument('--architecture', default='baseline')
+    cli.add_argument('--workers', type=int, default=1, help='Maximum concurrent containers')
     cli.add_argument('--image', default='chimaera-worker:jammy-humble-fortress')
     cli.add_argument('--local', action='store_true', help='Run the native controller without guest assets')
     cli.add_argument('--guest-assets', type=Path)
@@ -138,7 +138,7 @@ def parser():
     rendering = cli.add_mutually_exclusive_group()
     rendering.add_argument('--render-device', type=Path, default=Path('/dev/dri/renderD128'))
     rendering.add_argument('--software-rendering', action='store_true')
-    cli.add_argument('--warmup', type=float, default=5)
+    cli.add_argument('--warmup', type=float, default=0)
     cli.add_argument('--interval-us', type=int, default=50000)
     cli.add_argument('--poll-us', type=int, default=10000)
     cli.add_argument('--startup-timeout', type=int, default=300)
@@ -186,6 +186,8 @@ def execution(args, content):
     if (image['Os'] != 'linux' or image['Architecture'] != 'amd64'
             or labels.get('io.chimaera.run-selection') != '2'):
         raise ValueError('image lacks run selection; rebuild with build.py --target worker --jobs 5')
+    if not args.local and not (args.guest_assets or args.guest_image or args.kernel):
+        args.guest_assets = selected(labels.get('io.chimaera.stack', 'jammy-humble-fortress'), image['Id'])
     options = dict(local=args.local, architecture=args.architecture,
                    cpus=args.cpus, memory=args.memory.lower(), warmup=args.warmup,
                    interval_us=args.interval_us, poll_us=args.poll_us,
@@ -388,7 +390,7 @@ def run(args, content, plan, jobs):
             comparison = root / 'reports' / token
             if coverage['selected']:
                 comparison.mkdir(parents=True)
-                argv = [sys.executable, str(DIRECTORY / 'compare-suite.py'),
+                argv = [sys.executable, str(SCRIPTS / 'compare_experiments.py'),
                         '--runs-file', str(collection / 'selected_runs.json'),
                         '--output', str(comparison), '--warmup', str(args.warmup)]
                 with (launch / 'comparison.log').open('w') as log:

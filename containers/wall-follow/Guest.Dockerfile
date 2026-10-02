@@ -1,12 +1,13 @@
 ARG SDK_IMAGE=chimaera-builder:jammy-humble-fortress
 ARG BASE_IMAGE=ubuntu:22.04@sha256:281c5745f657873d78e5531fc5ba8575f46ab7769b94550ac99543f122679986
 FROM ${SDK_IMAGE} AS payload
+USER 0:0
 ARG STACK_PROFILE=jammy-humble-fortress
 COPY profiles/${STACK_PROFILE}.json /guest-profile.json
 COPY profiles/${STACK_PROFILE}.guest.json /guest-policy.json
 COPY scripts/stage-guest.py scripts/guest_session.py /
 RUN --network=none python3 /opt/chimaera/scripts/verify-artifacts.py /opt/chimaera \
-    && python3 /stage-guest.py
+    && /bin/bash /opt/chimaera/scripts/builder-entrypoint.sh python3 /stage-guest.py
 
 FROM ${BASE_IMAGE} AS rootfs
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBYTECODE=1
@@ -29,5 +30,6 @@ ENTRYPOINT []
 CMD ["/bin/bash"]
 
 FROM ${SDK_IMAGE} AS tools
+USER 0:0
 COPY scripts/build-guest-disk.py /build-guest-disk.py
 ENTRYPOINT ["python3", "/build-guest-disk.py"]

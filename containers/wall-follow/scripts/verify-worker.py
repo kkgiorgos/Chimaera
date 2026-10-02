@@ -7,7 +7,6 @@ import importlib
 import json
 import os
 from pathlib import Path
-import shutil
 import stat
 import subprocess
 import socket
@@ -68,12 +67,9 @@ def main():
         path = Path(value)
         if not path.is_symlink() or str(path.readlink()) != target or not path.exists():
             raise RuntimeError(f"Worker symlink mismatch or missing target: {path}")
-    for command in ("gcc", "g++", "cmake", "make", "colcon", "scons", "git", "strip"):
-        if shutil.which(command):
-            raise RuntimeError(f"Build tool in worker: {command}")
     packages = subprocess.check_output(["dpkg-query", "--show", "--showformat=${binary:Package}\t${Version}\n"], text=True)
-    if sorted(packages.splitlines()) != sorted((root / "runtime-packages.tsv").read_text().splitlines()):
-        raise RuntimeError("Installed runtime package versions differ from the worker inventory")
+    if sorted(packages.splitlines()) != sorted((root / "packages.tsv").read_text().splitlines()):
+        raise RuntimeError("Installed package versions differ from the SDK inventory")
     for module in ("rclpy", "launch", "launch_ros", "ros2launch", "ros2pkg", "numpy", "yaml", "catkin_pkg", "em"):
         importlib.import_module(module)
     elves = 0
@@ -83,7 +79,8 @@ def main():
             is_elf = stream.read(4) == b"\x7fELF"
         if is_elf:
             result = subprocess.run(["ldd", str(path)], capture_output=True, text=True)
-            if result.returncode or "not found" in result.stdout:
+            output = result.stdout + result.stderr
+            if "not found" in output or (result.returncode and "not a dynamic executable" not in output):
                 raise RuntimeError(f"Unresolved ELF: {path}\n{result.stdout}{result.stderr}")
             elves += 1
     subprocess.run([str(root / "gem5/build/X86/gem5.opt"), "--outdir", str(args.output / "gem5"),
