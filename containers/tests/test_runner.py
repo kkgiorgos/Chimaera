@@ -133,7 +133,11 @@ def test_wall_follow_export_uses_current_adapter(tmp_path):
     inputs = tmp_path / 'inputs'
     overlay = tmp_path / 'overlay'
     overlay.mkdir()
+    experiment = tmp_path / 'native.json'
+    experiment.write_text(json.dumps(dict(
+        fixed=dict(gui=False, duration=3.0), sweep=dict(control_hz=[5.0, 10.0]))))
     subprocess.run([sys.executable, str(DIRECTORY / 'wall-follow/configure.py'),
+                    '--config', str(experiment),
                     '--local', '--overlay', str(overlay), '--output', str(inputs)], check=True, capture_output=True)
     config = runner.load(inputs / 'runner.json')
     assert not config['devices'] and len(config['jobs']) > 1

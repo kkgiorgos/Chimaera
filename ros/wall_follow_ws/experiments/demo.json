@@ -1,5 +1,5 @@
 {
-  "repetitions": 1,
+  "repetitions": 2,
   "fixed": {
     "target_distance": 0.8,
     "speed": 0.7,
@@ -8,22 +8,33 @@
     "max_yaw_rate": 1.2,
     "front_stop": 0.65,
     "scan_timeout": 0.3,
-    "beam_stride": 1,
     "sector_start": -110.0,
     "sector_end": -40.0,
     "min_points": 6,
     "fit_threshold": 0.04,
-    "duration": 5.0,
+    "duration": 10.0,
     "gui": false,
-    "lidar_samples": 720,
-    "noise_std": 0.05,
+    "lidar_hz": 20.0,
+    "noise_std": 0.0,
     "physics_step": 0.001,
-    "wall_timeout": 600.0,
+    "wall_timeout": 7200.0,
     "arena_width": 4.0,
-    "arena_height": 4.0
+    "arena_height": 4.0,
+    "cpu_type": "timing",
+    "l1_assoc": 8,
+    "l2_assoc": 16
   },
   "sweep": {
-    "control_hz": [5.0, 10.0],
-    "lidar_hz": [5.0, 10.0]
+    "cpu_clock": ["100MHz", "1GHz"],
+    "num_cores": [1, 2],
+    "cache_profile": [
+      {"l1i_size": "1KiB", "l1d_size": "1KiB", "l2_size": "4KiB"},
+      {"l1i_size": "64KiB", "l1d_size": "64KiB", "l2_size": "2MiB"}
+    ],
+    "scan_workload": [
+      {"lidar_samples": 180, "beam_stride": 4},
+      {"lidar_samples": 1440, "beam_stride": 1}
+    ],
+    "control_hz": [2.0, 20.0]
   }
 }
