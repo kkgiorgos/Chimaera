@@ -43,6 +43,14 @@ function validate(node) {
   for(const child of node.children ?? []) validate(child);
 }
 validate(elements.get('timing-chart'));
+// Many configurations widen the chart coordinate system without scaling its height.
+for(const id of ['bar-chart','timing-chart','architecture-chart']) {
+ const svg=elements.get(id).children[0];
+ const width=Math.max(700,data.runs.length*130);
+ assert.equal(svg.attrs.viewBox,`0 0 ${width} 440`);
+ assert.equal(svg.style.width,`${width}px`);
+ assert.equal(svg.style.height,'440px');
+}
 assert(!elements.has('diagram')&&!elements.has('y-axis'));
 for(const option of elements.get('x-axis').children) {
  elements.get('x-axis').value=option.value;

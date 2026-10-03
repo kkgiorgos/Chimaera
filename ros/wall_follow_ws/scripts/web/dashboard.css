@@ -5,3 +5,12 @@
 .plot-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px}.plot-heading h3{margin:0}
 #expanded-chart{width:96vw;height:94vh;max-width:none;max-height:none;border:1px solid var(--border);border-radius:12px;padding:24px;overflow:auto}
 #expanded-chart::backdrop{background:#112b3fb0}#expanded-plot .chart svg{width:100%;max-height:calc(94vh - 100px)}
+
+/* Keep controls and grid children within their available column. */
+.toolbar,.section-heading,.plot-heading{flex-wrap:wrap}
+.section-heading>*,.plot-heading>*,.chart-grid>div{min-width:0;max-width:100%}
+select{max-width:100%}
+.section-heading label,.plot-heading label{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.section-heading select,.plot-heading select{margin-top:0}
+.chart-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1050px){.chart-grid{grid-template-columns:minmax(0,1fr)}}

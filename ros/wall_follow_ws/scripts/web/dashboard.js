@@ -135,8 +135,11 @@ function renderMetricBars(runs, key, label, container) {
  const entries=runs.map(run=>({run,value:run.metrics[key],st:run.metric_stats[key]??{n:0},label:coordinate(run,xkey)}));
  // Keep related settings adjacent without combining distinct configurations.
  entries.sort((a,b)=>String(a.label).localeCompare(String(b.label),undefined,{numeric:true}));
- const svg=chart(container,label,1000,440),left=80,right=970,top=35,bottom=290;
- svg.style.minWidth=Math.max(700,runs.length*130)+'px';
+ // Widen the coordinate system with the bars so text and height stay stable.
+ const plotWidth=Math.max(700,runs.length*130,container.clientWidth||0);
+ const svg=chart(container,label,plotWidth,440),left=80,right=plotWidth-30,top=35,bottom=290;
+ svg.style.width=plotWidth+'px';
+ svg.style.height='440px';
  svg.append(svgElem('text',{x:12,y:18},label));
  const yd=domain(entries.flatMap(e=>[e.value,finite(e.value)?e.value+(e.st.std??0):null,finite(e.value)?e.value-(e.st.std??0):null]),true);
  const y=v=>bottom-(v-yd[0])/(yd[1]-yd[0])*(bottom-top),width=(right-left)/entries.length,hover=[];
@@ -165,7 +168,7 @@ function renderMetricBars(runs, key, label, container) {
   lines.forEach((line,j)=>caption.append(svgElem('tspan',{x:cx,dy:j?14:0},line)));
   caption.append(svgElem('title',{},text));svg.append(caption);
  });
- svg.append(svgElem('text',{x:500,y:430,'text-anchor':'middle'},axisLabel(xkey)));
+ svg.append(svgElem('text',{x:plotWidth/2,y:430,'text-anchor':'middle'},axisLabel(xkey)));
  attachHover(svg,hover);
 }
 function renderBars(runs) {
@@ -264,3 +267,16 @@ $('export').addEventListener('click',()=>{
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=elem('a');a.href=url;a.download='selected_groups.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 });
 render();
+
+// Refit bars when the viewport changes, including when a hidden chart returns.
+if(typeof ResizeObserver!=='undefined') {
+ for(const [id,redraw] of [['bar-chart',renderBars],['timing-chart',renderTiming],['architecture-chart',renderArchitecture]]) {
+  let width=$(id).clientWidth;
+  new ResizeObserver(()=>{
+   const next=$(id).clientWidth;
+   if(next===width)return;
+   width=next;
+   if(next&&active().length)redraw(active());
+  }).observe($(id));
+ }
+}
