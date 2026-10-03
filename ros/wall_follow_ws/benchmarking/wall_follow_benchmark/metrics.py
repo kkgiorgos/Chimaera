@@ -7,15 +7,16 @@ TASK = {
     'gt_coverage': 'Ground-truth coverage (fraction)',
 }
 ARCHITECTURE = {
-    'gem5_ipc': 'Instructions per cycle (IPC)',
-    'gem5_instructions': 'Executed instructions',
-    'gem5_cycles': 'CPU cycles',
-    'gem5_l1i_mpki': 'L1 instruction misses / 1,000 instructions',
-    'gem5_l1d_mpki': 'L1 data misses / 1,000 instructions',
-    'gem5_l2_mpki': 'L2 misses / 1,000 instructions',
-    'gem5_l1i_misses': 'L1 instruction cache misses',
-    'gem5_l1d_misses': 'L1 data cache misses',
-    'gem5_l2_misses': 'L2 cache misses',
+    'gem5_ipc': 'IPC (instructions / summed core-cycles)',
+    'gem5_instructions': 'Executed instructions (all cores)',
+    'gem5_instructions_per_sim_second': 'System throughput (instructions / simulated s)',
+    'gem5_cycles': 'Core-cycles (sum across cores)',
+    'gem5_l1i_mpki': 'L1 instruction MPKI (all cores)',
+    'gem5_l1d_mpki': 'L1 data MPKI (all cores)',
+    'gem5_l2_mpki': 'L2 MPKI (all banks)',
+    'gem5_l1i_misses': 'L1 instruction cache misses (all cores)',
+    'gem5_l1d_misses': 'L1 data cache misses (all cores)',
+    'gem5_l2_misses': 'L2 cache misses (all banks)',
 }
 SIMULATION = {
     'timing_cosim_realtime_factor': 'Overall co-simulation rate (sim s / wall s)',

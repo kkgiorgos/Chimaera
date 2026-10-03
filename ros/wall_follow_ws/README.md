@@ -198,9 +198,20 @@ The dashboard has three metric sets:
 - **Robot task:** time-weighted wall-error RMSE/MAE, maximum error, distance
   travelled after warmup, and ground-truth coverage. Distance is path length,
   not unique wall coverage or completed laps.
-- **Architecture:** IPC, instructions, cycles, cache misses, and misses per
-  thousand instructions. These cover the whole gem5 workload region, including
-  the guest OS and bridge activity.
+- **Architecture:** IPC, system instruction throughput, instructions, core-cycles,
+  cache misses, and misses per thousand instructions (MPKI). These cover the whole
+  gem5 workload region, including the guest OS and bridge activity. Core-cycles
+  sum the ROI CPUs' `numCycles`; KVM boot CPUs are excluded. IPC divides total
+  instructions by that sum: a cycle-weighted average across cores, not total
+  system instructions per elapsed cycle. Adding cores can lower this IPC while
+  increasing system throughput. Use instructions per simulated second to compare
+  total instruction throughput across core counts or clock rates; use robot-task
+  metrics to assess useful controller progress. L1 misses sum across cores and L2
+  misses across banks. MPKI divides those totals by total instructions, rather
+  than averaging per-core miss rates. Counts include OS and bridge work and do not
+  measure controller-only work or parallel speedup. Ratios are computed within
+  each repetition, then averaged with equal weight. Single-core gem5 uses
+  unnumbered CPU/cache names; multicore uses numbered names. Both are supported.
 - **Simulation:** overall simulated seconds per host wall second, gem5/Gazebo
   phase rates and wall times, settling time, and startup time. Overall throughput
   excludes startup. Local runs report collection throughput.

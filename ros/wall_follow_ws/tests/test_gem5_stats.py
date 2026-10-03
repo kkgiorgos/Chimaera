@@ -57,3 +57,64 @@ def test_l2_single_controller_and_multiple_banks(tmp_path, controllers, expected
     stats.write_text('---------- Begin Simulation Statistics ----------\n'
                      + counters + '\n---------- End Simulation Statistics ----------\n')
     assert summarize(stats)['l2_misses'] == expected
+
+
+@pytest.mark.parametrize('suffix', ['', '0'])
+def test_single_core_counter_names(tmp_path, suffix):
+    stats = tmp_path/'stats.txt'
+    stats.write_text(f'''---------- Begin Simulation Statistics ----------
+simSeconds 2
+simInsts 120
+board.processor.start{suffix}.core.numCycles 9999
+board.processor.switch{suffix}.core.numCycles 100
+board.cache_hierarchy.ruby_system.l1_controllers{suffix}.L1Dcache.m_demand_misses 4
+board.cache_hierarchy.ruby_system.l1_controllers{suffix}.L1Icache.m_demand_misses 6
+---------- End Simulation Statistics ----------
+''')
+    result = summarize(stats)
+    assert result['cycles'] == 100
+    assert result['ipc'] == 1.2
+    assert result['instructions_per_sim_second'] == 60
+    assert result['l1d_misses'] == 4
+    assert result['l1i_misses'] == 6
+    assert result['l1d_mpki'] == pytest.approx(1000 * 4 / 120)
+    assert result['l1i_mpki'] == 50
+
+
+def test_multicore_ipc_is_cycle_weighted_and_mpki_is_instruction_weighted(tmp_path):
+    # Core 0: 100 instructions / 100 cycles, core 1: 20 / 200.
+    # Weighted IPC is .4, not the arithmetic core average (.55), nor
+    # system instructions / maximum core cycles (.6).
+    stats = tmp_path/'stats.txt'
+    stats.write_text('''---------- Begin Simulation Statistics ----------
+simSeconds 2
+simInsts 120
+board.processor.switch0.core.numCycles 100
+board.processor.switch1.core.numCycles 200
+board.cache_hierarchy.ruby_system.l1_controllers0.L1Dcache.m_demand_misses 4
+board.cache_hierarchy.ruby_system.l1_controllers1.L1Dcache.m_demand_misses 6
+board.cache_hierarchy.ruby_system.l2_controllers0.L2cache.m_demand_misses 1
+board.cache_hierarchy.ruby_system.l2_controllers1.L2cache.m_demand_misses 2
+---------- End Simulation Statistics ----------
+''')
+    result = summarize(stats)
+    assert result['cycles'] == 300
+    assert result['ipc'] == .4
+    assert result['instructions_per_sim_second'] == 60
+    assert result['l1d_mpki'] == pytest.approx(1000 * 10 / 120)
+    assert result['l2_misses'] == 3
+    assert result['l2_mpki'] == 25
+
+
+@pytest.mark.parametrize('seconds, instructions, expected', [
+    ('2', '0', 0), ('0', '120', None), ('nan', '120', None),
+    ('2', 'nan', None),
+])
+def test_instruction_throughput_missing_and_zero_counters(tmp_path, seconds, instructions, expected):
+    stats = tmp_path/'stats.txt'
+    stats.write_text(f'''---------- Begin Simulation Statistics ----------
+simSeconds {seconds}
+simInsts {instructions}
+---------- End Simulation Statistics ----------
+''')
+    assert summarize(stats)['instructions_per_sim_second'] == expected

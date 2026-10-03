@@ -4,7 +4,8 @@ from pathlib import Path
 import re
 
 METRICS = ('sim_seconds', 'instructions', 'cycles', 'ipc', 'l1d_misses',
-           'l1i_misses', 'l2_misses', 'l1i_mpki', 'l1d_mpki', 'l2_mpki')
+           'l1i_misses', 'l2_misses', 'l1i_mpki', 'l1d_mpki', 'l2_mpki',
+           'instructions_per_sim_second')
 
 
 def summarize(path):
@@ -30,12 +31,17 @@ def summarize(path):
         return sum(values) if values else None
     # SwitchableProcessor names its ROI cores "switch". Never include KVM boot
     # cores in cycle/IPC totals, even when their stats appear in the same dump.
-    cycles = total(r'board\.processor\.switch\d+\.core\.numCycles')
+    cycles = total(r'board\.processor\.switch\d*\.core\.numCycles')
     instructions = last.get('simInsts')
-    result = dict(sim_seconds=last.get('simSeconds'), instructions=instructions,
+    seconds = last.get('simSeconds')
+    # IPC uses summed core-cycles, not a shared elapsed-cycle denominator.
+    # Throughput uses simulated seconds so adding cores does not add to its denominator.
+    result = dict(sim_seconds=seconds, instructions=instructions,
+                instructions_per_sim_second=instructions / seconds
+                if instructions is not None and seconds is not None and seconds > 0 else None,
                 cycles=cycles, ipc=instructions / cycles if cycles else None,
-                l1d_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d+\.L1Dcache\.m_demand_misses'),
-                l1i_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d+\.L1Icache\.m_demand_misses'),
+                l1d_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d*\.L1Dcache\.m_demand_misses'),
+                l1i_misses=total(r'board\.cache_hierarchy\.ruby_system\.l1_controllers\d*\.L1Icache\.m_demand_misses'),
                 l2_misses=total(r'board\.cache_hierarchy\.ruby_system\.l2_controllers\d*\.L2cache\.m_demand_misses'))
     for level in ('l1i', 'l1d', 'l2'):
         misses = result[f'{level}_misses']
