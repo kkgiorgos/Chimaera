@@ -1,62 +1,92 @@
-# Parallel benchmarks with Docker
+# Container images and parallel benchmarks
 
-Use one prepared image for many independent jobs. Each job gets a fresh
-container, private network/IPC and `/tmp`, read-only inputs, and its own writable
-`/output`. `--workers` limits concurrency; jobs enter the next free worker as
-others finish. This lets independent gem5 simulations use multiple host cores.
-The runner is Python standard library only and has no benchmark dependencies.
+Run independent jobs from one shared image. Each worker runs as your host UID/GID
+with private network/IPC, a read-only filesystem and inputs, writable `/tmp`, and
+its own `/output`. The runner uses only Python's standard library.
 
-## Prepare an image once
+Run all commands from the repository root.
 
-You need Linux, Python 3.10+, access to a **local** Docker daemon, and enough RAM
-for all concurrent simulations. Build or select an image containing your custom
-gem5 binary, configuration scripts, Python dependencies, and any benchmark
-software. Build from this repository's modified gem5 for Chimaera operations.
-The image must support running as your host UID/GID with a read-only filesystem,
-a writable `/tmp`, and output in `/output`. Its entrypoint should set up the
-required environment and execute its arguments (`exec "$@"`). Put downloadable
-resources in the image or supply them as inputs: workers have no network access.
+## Choose a workflow
 
-The supplied universal image includes Ubuntu 22.04, ROS 2 Humble, Gazebo
-Fortress, custom gem5/libm5, shared build tools, and the universal Chimaera bridge.
-It contains no application workspace, worlds, benchmark scripts or experiments.
-Build it from the repository root:
+| Workflow | Guide |
+| --- | --- |
+| Develop wall-follow with Gazebo | [Local application development](wall-follow/README.md#local-application-development) |
+| Prepare, run, and report a wall-follow suite | [Automated benchmark suites](wall-follow/README.md#automated-benchmark-suites) |
+| Run jobs for any benchmark | [Configure jobs](#configure-jobs) below |
+
+## Requirements
+
+Linux, Python 3.10+, a **local** Docker daemon, and sufficient CPU, RAM, and disk
+space. Building the supplied Linux x86-64 image needs Docker Buildx and network
+access; host ROS/Gazebo installations are unnecessary. Workers have no network
+access, so download resources during setup or mount them as inputs.
+
+KVM simulations additionally need read/write `/dev/kvm` access and hardware
+virtualization (nested virtualization on a VM).
+
+## Structure
+
+| Component | Responsibility |
+| --- | --- |
+| [`build.py`](build.py), [`Dockerfile`](Dockerfile) | Build the shared image |
+| [`profiles/`](profiles/), [`scripts/`](scripts/) | Stack dependencies, pinned repositories, compilation, and runtime setup |
+| [`run.py`](run.py) | Validate, schedule, record, and resume isolated jobs |
+| [`clean-images.py`](clean-images.py) | Remove obsolete Chimaera images |
+| [`wall-follow/`](wall-follow/README.md) | Application setup, development, suites, and reports |
+| [`tests/`](tests/) | Generic runner checks |
+
+## Build the shared image
+
+The image includes Ubuntu 22.04, ROS 2 Humble, Gazebo Fortress, custom gem5/libm5,
+build tools, and the universal Chimaera bridge. Application workspaces, worlds,
+experiments, and benchmark scripts are mounted separately.
 
 ```bash
 python3 containers/build.py --jobs 3
 ```
 
-The stable tag is `chimaera:jammy-humble-fortress`. Dependency packages and pinned
-repositories are in `containers/profiles/jammy-humble-fortress.json`. Edit the
-profile or derive another image to satisfy additional system dependencies.
-`--tag`, `--profile`, `--no-cache`, and `--print-command` customize the build.
+The default tag is `chimaera:jammy-humble-fortress`. Dependencies are defined in
+[`profiles/jammy-humble-fortress.json`](profiles/jammy-humble-fortress.json).
 
-Build benchmark application packages separately using this image, exporting
-the compiled files to a bind-mounted host directory. Mount the source/scripts,
-compiled application overlay, worlds, configurations and guest assets as inputs.
-The image entrypoint sources ROS and the universal bridge. Set `CHIMAERA_SETUP`
-to colon-separated setup files from mounted overlays, such as
-`/assets/overlay/local_setup.bash`, to enable your application packages.
-Keep compiled overlays compatible with the shared image's libraries.
-The [wall-follow example](wall-follow/README.md) provides these setup steps.
+| Option | Purpose |
+| --- | --- |
+| `--jobs N` | Compilation parallelism; default 3 |
+| `--profile NAME` | Stack profile; default `jammy-humble-fortress` |
+| `--tag TAG` | Override `chimaera:<profile>` |
+| `--no-cache` | Rebuild Docker layers without their cache |
+| `--print-command` | Print the build command without running it |
 
-You can also supply your own image. For example:
+Check the image and runner with three short jobs:
 
-```dockerfile
-FROM your-gem5-dependency-image
-COPY gem5/build/X86/gem5.opt /opt/gem5/gem5.opt
-WORKDIR /tmp
-ENTRYPOINT []
+```bash
+python3 containers/run.py --config containers/examples/commands.json \
+  --output /tmp/chimaera-command-check --workers 2 --progress-interval 1
 ```
 
-Build the binary against compatible libraries, or compile it inside the image.
-Supply a disk and kernel with the application's required guest dependencies for
-full-system simulations. Use gem5's copy-on-write disk layer over a read-only
-base disk; do not share writable disks between workers. The generic runner
-requires no image labels, manifests, guest layout, or benchmark name. Validate
-a new setup with one short job before running a large load.
+Each writes `jobs/<name>/result.txt`. Use a fresh output directory for another check.
 
-## Configure and run
+## Prepare application inputs
+
+Build application packages in the shared image and export them to a host overlay
+directory. Mount the overlay, sources/scripts, worlds, configurations, and guest
+assets as inputs. The entrypoint sources ROS and the universal bridge; set
+`CHIMAERA_SETUP` to colon-separated overlay setup files, such as
+`/assets/overlay/local_setup.bash`. Keep overlays compatible with the image's
+libraries. See the [wall-follow setup](wall-follow/README.md#individual-setup-steps).
+
+For another image, include the benchmark's binaries and dependencies. Chimaera
+requires this repository's modified gem5, built against compatible libraries.
+Support the worker permissions and writable paths described above; an entrypoint
+that sets up the environment should finish with `exec "$@"`.
+
+Full-system simulations need a matching guest disk and kernel. Use gem5's
+copy-on-write disk layer over a read-only base disk, rather than sharing writable
+disks. The generic runner requires no image labels or guest manifests.
+
+## Configure jobs
+
+Save a configuration such as `my-run.json`, adapting the command and disk/kernel
+arguments to your gem5 configuration:
 
 ```json
 {
@@ -76,61 +106,75 @@ a new setup with one short job before running a large load.
 }
 ```
 
-Adapt the arguments to your gem5 configuration, including its disk/kernel
-options. Mount sources are relative to the **configuration file**, or absolute.
-All configured inputs are read-only; `/output` is reserved for the individual job.
-Inputs and the result directory must be separate trees. Commands are arrays,
-passed directly to the image's entrypoint. Each job's `args` are appended to
-`command`; use `["bash", "-lc", "..."]` explicitly if you need shell syntax.
-For shell commands, pass job differences as environment variables.
+| Field | Meaning / default |
+| --- | --- |
+| `image` | Required local tag or image ID; resolved once for all workers |
+| `command` | Required nonempty argument array; job `args` are appended |
+| `jobs` | Required nonempty array; each job has a unique `name`, optional `args` and `env` |
+| `mounts` | Read-only `source`/`target` pairs; default empty |
+| `env` | String environment values; job values override global values |
+| `devices` | Absolute host device paths; default empty |
+| `cpus` | Per-worker CPU limit; default 2 |
+| `memory` | Per-worker memory limit; default `8g`, with no additional swap |
+| `workdir` | Absolute container directory; defaults to the image's working directory |
 
-Optional `env` maps variable names to string values, globally or per job (job
-values override global values). `CHIMAERA_JOB` contains the job name. Optional
-`workdir` selects an absolute container working directory. `devices` defaults to
-none: add KVM only if your gem5 configuration uses it, and a render node only
-if you use hardware graphics. Device groups are passed into workers. For a
-software renderer, set `env` to `{"LIBGL_ALWAYS_SOFTWARE": "1"}`. For Gazebo,
-set `IGN_PARTITION` to an explicit common value such as `chimaera` so its processes
-share a discovery partition. Container network isolation separates workers. CPU and memory
-limits default to 2 CPUs and 8 GiB per container. The image entrypoint remains
-active, allowing it to source ROS or other runtime setup.
+Mount sources are absolute or relative to the **configuration file**. Targets
+must be absolute and must not overlap one another or reserved `/output`. Inputs
+and results must be separate directory trees. Job names start with a letter or
+digit and contain only letters, digits, `_`, `.`, or `-`; `CHIMAERA_JOB` holds the name.
+
+Commands go directly to the image entrypoint. For shell syntax, use
+`["bash", "-lc", "..."]` and pass job differences through environment variables.
+Add devices only as needed; their groups are passed into workers. For software
+rendering, set `LIBGL_ALWAYS_SOFTWARE=1`. For Gazebo, set `IGN_PARTITION=chimaera`
+so processes within each isolated worker share a discovery partition.
+
+## Run jobs
 
 ```bash
 python3 containers/run.py --config my-run.json --output results/my-run --dry-run
 python3 containers/run.py --config my-run.json --output results/my-run --workers 8
 ```
 
-Choose concurrency to fit CPU **and** memory capacity. Progress prints every ten
-seconds: completed/failed/queued totals plus elapsed time and the latest log line
-for each active worker. Change this with `--progress-interval 5`. This shows
-activity, not a simulation percentage (only the benchmark knows that).
-`jobs/<name>/worker.log` holds console output; other files under that directory
-are whatever the benchmark writes to `/output`. `run.json` records the resolved
-image ID, configuration, Docker commands, exit codes, and job statuses. A failed
-job does not stop other jobs; the runner returns nonzero if any job fails.
+Validate a new setup with one short job, then choose concurrency to fit CPU and
+RAM. Queued jobs start as workers become free. Progress shows job totals, elapsed
+time, and each worker's latest log line. A failed job does not stop others; the
+runner returns nonzero if any job fails.
+
+| Option | Purpose |
+| --- | --- |
+| `--config PATH` | Required runner configuration |
+| `--output PATH` | Required fresh/empty result directory, unless resuming |
+| `--workers N` | Maximum concurrent jobs; default 1 |
+| `--progress-interval SECONDS` | Progress interval; default 10 |
+| `--dry-run` | Validate fields and mounted inputs; print resolved JSON without contacting Docker |
+| `--resume` | Skip completed jobs and retry the others |
+
+Execution requires the image locally and accessible devices; workers never pull
+images. `--dry-run` does not check either.
+
+## Read the results
+
+| Path under the output directory | Contents |
+| --- | --- |
+| `run.json` | Resolved image/configuration, Docker commands, job statuses, and exit codes |
+| `jobs/<name>/worker.log` | Container stdout and stderr |
+| `jobs/<name>/` | The worker's `/output`; additional files depend on the benchmark |
+
+See [wall-follow results](wall-follow/README.md#read-the-results) for dashboards.
+
+## Resume a run
 
 Ctrl+C stops active containers and records interruption. Repeat the command with
-`--resume` to skip successful jobs and retry the others. The resolved image and
-configuration must match; concurrency can change. Keep mounted inputs unchanged:
-the runner deliberately does not hash large disks or directory trees. Retried
-jobs retain their files and append their logs, so commands must handle existing
-output (for example, a benchmark's own `--resume` option). After a host crash or
-forced kill, remove any container named in the error before resume.
-
-For a short container-only check with the shared image:
-
-```bash
-python3 containers/run.py --config containers/examples/commands.json \
-  --output /tmp/chimaera-command-check --workers 2 --progress-interval 1
-```
+`--resume`. The resolved image and configuration must match; concurrency may change.
+Keep mounted inputs unchanged: the runner does not hash disks or directory trees.
+Retries retain files and append logs, so the benchmark must handle existing output.
+After a crash or forced kill, stop/remove any old container named in the resume error.
 
 ## Keep disk usage under control
 
-Use stable tags instead of a new permanent image tag per build. Workers are
-removed when they finish. Guest preparation removes its temporary SDK alias and
-construction images; the runtime and build tools share the same universal image.
-Old guest directories are ordinary inputs; remove ones you no longer need after
-their runs finish.
+Use stable tags. Workers and temporary guest construction images are removed
+automatically. Remove old guest directories after their runs finish.
 
 Preview obsolete Chimaera tags and dangling construction images, then remove them:
 
@@ -139,19 +183,18 @@ python3 containers/clean-images.py
 python3 containers/clean-images.py --apply
 ```
 
-Defaults keep only `chimaera:jammy-humble-fortress`. For
-custom images, pass every tag you need with repeated `--keep TAG`. This removes
-only `chimaera` and `chimaera-*` tags and dangling images identified by Chimaera
-labels or build history, without forcing deletion of images used by containers.
-Keep older images if you intend to resume runs pinned to them. Tags sharing an
-image do not duplicate its layers; removing stale tags allows old layers to be
-freed when no references remain. Untagged images and build cache can also consume
-space. Inspect `docker system df`; use `docker image prune` for dangling images,
-and `docker builder prune` when you no longer need compilation cache. Those
-Docker commands affect the daemon as a whole, so they are separate from our
-scoped cleanup script.
+The default keeps `chimaera:jammy-humble-fortress`; repeated `--keep TAG` options
+replace that default. Cleanup covers only `chimaera`/`chimaera-*` tags and dangling
+images identified by Chimaera labels or build history, without forcing deletion
+of images used by containers. Keep images needed for resume.
 
-Focused host tests:
+Inspect total usage with `docker system df`. `docker image prune` removes dangling
+images; `docker builder prune` removes build cache. These affect the whole daemon,
+unlike the scoped cleanup script. Tags sharing an image share its layers.
+
+## Checks
+
+Host tests require no image build or running benchmark:
 
 ```bash
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q containers/tests containers/wall-follow/tests
