@@ -126,6 +126,10 @@ The exported benchmark command also resumes, retaining successful attempts.
 
 ## Read the results
 
+See the [example dashboard](../../docs/examples/wall-follow-dashboard.html) for
+a report covering 62 of 64 planned demo runs. Download the HTML file and open it
+in a browser to explore it offline.
+
 | Path | Contents |
 | --- | --- |
 | `<output>-inputs/overlay/` | Built application packages |

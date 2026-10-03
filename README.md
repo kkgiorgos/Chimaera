@@ -8,6 +8,10 @@ affect robot behavior.
 
 The main example is a robot that follows a wall using laser scans.
 
+See the [example wall-follow dashboard](docs/examples/wall-follow-dashboard.html)
+for a hardware and workload sweep covering 62 of 64 planned runs. Download the
+HTML file and open it in a browser to explore the report offline.
+
 ## How it fits together
 
 - **Host**: your real Linux machine, running Gazebo, experiment recording, and

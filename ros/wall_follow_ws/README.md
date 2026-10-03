@@ -192,6 +192,11 @@ remain recorded as failed attempts and are excluded from comparisons by default.
 
 ## Read the results
 
+See the [example dashboard](../../docs/examples/wall-follow-dashboard.html) for
+a hardware and workload sweep covering 62 of 64 planned runs. GitHub displays
+HTML source; download the file and open it in a browser to use the interactive
+report offline.
+
 Open `<suite>/comparison/dashboard.html` in a browser. It works offline.
 The dashboard has three metric sets:
 
