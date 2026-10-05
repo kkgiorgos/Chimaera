@@ -32,9 +32,12 @@ cup orientation fixed upward in world coordinates while moving its position;
 coordinate wrist motion to preserve that orientation despite the rigid
 attachment. Investigate vertical velocity
 matching if contact tests show excessive bounce. Success requires physical entry
-and retention, with the retention duration still to be chosen. Cup dimensions,
-contact parameters, camera settings, initial arm pose, and operating envelope
-remain to be established experimentally.
+and retention for one simulated second by default, with a configurable duration.
+Every trial starts from a configurable joint pose, using the same neutral pose
+by default for comparable speed sweeps. The robot detects the throw visually;
+it receives no launch notification. Cup dimensions, contact parameters, camera
+settings, the neutral pose values, and operating envelope remain to be
+established experimentally.
 
 ## Proposed functional pipeline
 
@@ -95,8 +98,13 @@ Record launch position/direction/speed, initial robot pose, sensor configuration
 physics/contact parameters, seeds, and software provenance. For a fixed vector,
 sample success versus speed and repeat trials where variability exists. Do not
 assume success is strictly monotonic with speed or that a single trial defines
-a reliable maximum. Retention uses simulated time; any shorter future benchmark
-criterion must be validated against a longer observation period.
+a reliable maximum. Retention uses simulated time and defaults to 1.0 seconds;
+record the configured retention duration with each trial. Any shorter future
+benchmark criterion must be validated against a longer observation period.
+Reset and settle the arm at the configured starting pose before each throw;
+ensure capture and application readiness before launching the ball without
+exposing that launch event to the robot pipeline. Keep the starting pose fixed
+within a speed comparison unless pose is an explicit experiment variable.
 
 ## Implementation milestones
 
