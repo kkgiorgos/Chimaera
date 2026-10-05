@@ -1,7 +1,9 @@
 # FR3 ball-catching design
 
-Status: core requirements, calibration, control approach, and future compute
-boundary agreed; implementation and experimental parameter selection pending.
+Status: native implementation demonstrated with visual catches at 3–5 m/s;
+operating-envelope characterization and gem5 integration remain future work.
+See [implementation instructions](../ros/ball_catching_ws/README.md) and
+[native validation](ball-catching-validation.md).
 
 ## Objective and accepted requirements
 
@@ -36,8 +38,9 @@ and retention for one simulated second by default, with a configurable duration.
 Every trial starts from a configurable joint pose, using the same neutral pose
 by default for comparable speed sweeps. The robot detects the throw visually;
 it receives no launch notification. Cup dimensions, contact parameters, camera
-settings, the neutral pose values, and operating envelope remain to be
-established experimentally.
+settings and operating envelope remain experiment variables. The implemented
+cup uses a rigid offset bracket to clear the wrist, radius 0.12 m and depth
+0.14 m. The default neutral pose is `[0, -pi/4, 0, -3*pi/4, 0, pi/2, pi/4]`.
 
 ## Proposed functional pipeline
 
@@ -55,7 +58,8 @@ established experimentally.
 7. Track continuously revised, time-constrained joint trajectories with an
    effort-based feedback controller. Enforce joint position, velocity,
    acceleration, and torque limits; avoid discontinuities at target revisions.
-   The specific controller implementation and gains remain to be validated.
+   Native control uses KDL model-based gravity/Coriolis compensation and
+   inertia-scaled feedback; numerical trajectory checks enforce motion limits.
 
 No active stage may consume throw settings, scoring data, privileged poses, or
 simulator-only state. Diagnostic observations can be recorded for offline

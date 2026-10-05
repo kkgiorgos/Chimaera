@@ -27,6 +27,7 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include "ball_catching_sim/scoring.hpp"
 
 namespace ball_catching {
 namespace gz = ignition::gazebo;
@@ -56,7 +57,7 @@ class Host : public gz::System, public gz::ISystemConfigure,
     if (!output_.empty()) {
       samples_.open(output_ + "/ground_truth.csv");
       if (!samples_) throw std::runtime_error("Cannot open ground truth output");
-      samples_ << "time,ball_x,ball_y,ball_z,cup_x,cup_y,cup_z,inside,launched\n";
+      samples_ << "time,ball_x,ball_y,ball_z,cup_x,cup_y,cup_z,cup_qx,cup_qy,cup_qz,cup_qw,inside,launched\n";
     }
     context_ = std::make_shared<rclcpp::Context>();
     context_->init(0, nullptr);
@@ -177,17 +178,19 @@ class Host : public gz::System, public gz::ISystemConfigure,
     truth_->publish(truth);
     const Vector relative = cp->Rot().Inverse().RotateVector(bp->Pos() - cp->Pos());
     constexpr double ballRadius = 0.0335;
-    const bool inside = std::hypot(relative.X(), relative.Y()) < radius_ - 0.004 - ballRadius &&
-                        relative.Z() >= ballRadius - 0.008 && relative.Z() < depth_ - ballRadius;
+    // Match the actual 20-sided cavity, not an inscribed circle that wrongly
+    // reports a ball resting against a polygon wall as repeatedly leaving.
+    // A 2 mm tolerance accounts for contact solver penetration, far below the
+    // ball radius. Vertical escape still resets the retention interval.
+    const bool inside = contained(relative.X(), relative.Y(), relative.Z(), radius_, depth_, ballRadius);
     bool launched;
     { std::lock_guard<std::mutex> lock(mutex_); launched = launched_; }
     if (samples_) samples_ << std::setprecision(10) << now << ',' << bp->Pos().X() << ',' << bp->Pos().Y()
         << ',' << bp->Pos().Z() << ',' << cp->Pos().X() << ',' << cp->Pos().Y() << ',' << cp->Pos().Z()
+        << ',' << cp->Rot().X() << ',' << cp->Rot().Y() << ',' << cp->Rot().Z() << ',' << cp->Rot().W()
         << ',' << inside << ',' << launched << '\n';
     if (!launched || finished_) return;
-    if (inside && insideSince_ < 0) insideSince_ = now;
-    if (!inside) insideSince_ = -1;
-    if (insideSince_ >= 0 && now - insideSince_ >= retention_) Finish(true, "retained", now);
+    if (retained_.Update(inside, now, retention_)) Finish(true, "retained", now);
     else if (now - launchTime_ >= timeout_) Finish(false, "not_retained", now);
   }
 
@@ -214,7 +217,8 @@ class Host : public gz::System, public gz::ISystemConfigure,
   gz::Link ball_, cup_;
   Vector initial_, velocity_;
   double retention_{1}, radius_{0.12}, depth_{0.14}, timeout_{4};
-  double commandTime_{-1}, launchTime_{0}, lastPublish_{-1}, insideSince_{-1};
+  double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
+  Retention retained_;
   bool initialized_{false}, auto_{true}, ready_{false}, cameras_{false}, requested_{false};
   bool launched_{false}, finished_{false};
   std::mutex mutex_;

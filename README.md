@@ -34,6 +34,7 @@ Simulation time and the real time spent running an experiment are different.
 | --- | --- |
 | [containers](containers/README.md) | Configurable parallel Docker jobs, image setup, and the wall-follow example. |
 | [ros/wall_follow_ws](ros/wall_follow_ws/README.md) | Main robot example, setup, experiment sweeps, plots, and dashboards. |
+| [ros/ball_catching_ws](ros/ball_catching_ws/README.md) | Native FR3 visual ball catching with stereo perception, effort control, configurable throws, and binary scoring. |
 | [ros/chimaera_ros_ws](ros/chimaera_ros_ws/README.md) | Universal ROS topic bridge, application builds, guest deployment, and host/guest orchestration. |
 | [ros/talker_listener_ws](ros/talker_listener_ws/README.md) | Smaller example sending ROS messages between host and guest. |
 | [gem5-transport](gem5-transport/README.md) | C++ message transport; [controllers](gem5-transport/CONTROLLERS.md) coordinate guest execution. |

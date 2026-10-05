@@ -29,6 +29,7 @@ def start(context):
                    launch_direction=json.loads(get('launch_direction')),
                    launch_speed=float(get('launch_speed')), retention=float(get('retention')),
                    camera_hz=float(get('camera_hz')), physics_step=float(get('physics_step')),
+                   camera_width=int(get('camera_width')), camera_height=int(get('camera_height')),
                    cup_radius=float(get('cup_radius')), cup_depth=float(get('cup_depth')),
                    auto_throw=get('auto_throw').lower() == 'true',
                    trial_timeout=float(get('trial_timeout')), output=output)
@@ -68,7 +69,8 @@ def generate_launch_description():
     defaults = dict(gui='true', robot='true', output='', partition='ball-catching',
                     initial_pose=json.dumps(NEUTRAL), launch_position='[2.08,0.04,2.0]',
                     launch_direction='[-1.0,0.0,0.0]', launch_speed='3.0', retention='1.0',
-                    camera_hz='90.0', physics_step='0.001', cup_radius='0.12', cup_depth='0.14',
+                    camera_hz='90.0', camera_width='640', camera_height='480',
+                    physics_step='0.001', cup_radius='0.12', cup_depth='0.14',
                     auto_throw='true', trial_timeout='4.0')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],
                               OpaqueFunction(function=start)])

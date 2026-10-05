@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import rclpy
+from rclpy.executors import ExternalShutdownException
 
 
 def seconds(stamp):
@@ -28,7 +29,7 @@ def run(factory):
     node = factory()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
         if hasattr(node, 'record'):

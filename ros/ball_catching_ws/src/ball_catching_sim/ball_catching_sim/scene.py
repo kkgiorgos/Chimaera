@@ -93,6 +93,10 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
         raise ValueError('initial_pose must contain seven finite joint angles')
     if len(launch_position) != 3 or len(launch_direction) != 3:
         raise ValueError('launch position and direction must have three components')
+    if not all(math.isfinite(x) for x in launch_position):
+        raise ValueError('launch_position must contain finite values')
+    if camera_width < 64 or camera_height < 64:
+        raise ValueError('camera dimensions must be at least 64 pixels')
     direction = np.asarray(launch_direction, dtype=float)
     if not np.isfinite(direction).all() or np.linalg.norm(direction) < 1e-9:
         raise ValueError('launch_direction must be a finite nonzero vector')
@@ -108,6 +112,12 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     urdf = robot_urdf(cup_radius, cup_depth)
+    from ball_catching_robot.model import Arm
+    arm = Arm(urdf)
+    if np.any(np.array(initial_pose) < arm.lower + .02) or np.any(np.array(initial_pose) > arm.upper - .02):
+        raise ValueError('initial_pose must be within joint limits with 0.02 rad margin')
+    if arm.pose(initial_pose).M[2, 2] < .9999:
+        raise ValueError('initial_pose must keep the cup opening upward in world coordinates')
     robot_path = directory / 'robot.urdf'
     robot_path.write_text(urdf)
     model_xml = subprocess.run(['ign', 'sdf', '-p', str(robot_path)],

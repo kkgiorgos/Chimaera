@@ -9,7 +9,7 @@ offset bracket to keep its opening clear of the wrist.
 ## Build and run
 
 Run from the repository root with native ROS/Gazebo and Python OpenCV, NumPy,
-PyKDL, SciPy, and pytest installed. The existing FR3 description dependency is
+PyKDL, and pytest installed. The existing FR3 description dependency is
 `ros/franka_ws/src/franka_description` (version 1.6.1). No libfranka build, MoveIt,
 Docker, or guest is required.
 
@@ -51,7 +51,7 @@ python3 ros/ball_catching_ws/scripts/run_trial.py \
 
 Launch arguments also expose `initial_pose` (seven joint angles, JSON array),
 `launch_position`, `launch_direction`, `launch_speed`, `retention`, `camera_hz`,
-`physics_step`, `cup_radius`, `cup_depth`, `trial_timeout`, `auto_throw`, `gui`,
+`camera_width`, `camera_height`, `physics_step`, `cup_radius`, `cup_depth`, `trial_timeout`, `auto_throw`, `gui`,
 `robot`, `output`, and `partition`. Direction is normalized; speed is its magnitude.
 The cup defaults to a 0.12 m inner wall radius and 0.14 m depth. Ball radius is
 0.0335 m and mass 0.057 kg in the simulator; the robot infers ball radius from
@@ -64,8 +64,9 @@ ros2 service call /experiment/throw std_srvs/srv/Trigger '{}'
 ```
 
 One launch is one trial. Restart to reset the robot, ball, filter, and scorer.
-Custom starting poses must preserve the upward cup orientation; their numeric
-validation and operating envelope are described below.
+Custom starting poses are checked against joint limits and must preserve the
+upward cup orientation. The runner also accepts `--initial-pose` and
+`--resolution WIDTH HEIGHT`.
 
 ## Components and interfaces
 
@@ -104,7 +105,8 @@ transport capacity and gem5 synchronization are future integration work.
 
 ## Records, checks, and current scope
 
-Each recorded trial keeps `experiment.json`, generated `world.sdf`/`robot.urdf`,
+Each recorded trial keeps `experiment.json`, `metadata.json` (source revision,
+working-tree status, invocation, ROS domain and wall duration), generated `world.sdf`/`robot.urdf`,
 `ground_truth.csv`, `perception.jsonl`, `interception.jsonl`, `control.jsonl`,
 `result.json`, and launch/runtime logs. Capture times, observation age, planning
 wall duration, target revisions, desired/actual joints, and effort commands help
@@ -112,11 +114,22 @@ explain catches and misses. Scoring requires the complete ball to remain within
 the cup for a continuous configurable duration (default 1.0 simulated second).
 Entry alone is insufficient; bounce-out resets the retention timer. Timeout is
 four simulated seconds after launch by default.
+Containment uses the actual polygonal wall geometry with a 2 mm contact-solver
+tolerance. Ground truth records the cup orientation as well as position.
 
 ```zsh
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
   PYTHONPATH=ros/ball_catching_ws/src/ball_catching_robot:ros/ball_catching_ws/src/ball_catching_sim:$PYTHONPATH \
   OPENBLAS_NUM_THREADS=1 python3 -m pytest -q ros/ball_catching_ws/tests
+
+# Enable/build the native scorer test, then run it:
+colcon --log-base ros/ball_catching_ws/log build \
+  --base-paths ros/ball_catching_ws/src \
+  --build-base ros/ball_catching_ws/build --install-base ros/ball_catching_ws/install \
+  --cmake-args -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+colcon --log-base ros/ball_catching_ws/log test \
+  --build-base ros/ball_catching_ws/build --install-base ros/ball_catching_ws/install \
+  --packages-select ball_catching_sim
 ```
 
 The initial implementation demonstrates physical retention and visual feedback,
@@ -135,3 +148,6 @@ Quintic trajectory feasibility is sampled along the path. Physics enforces
 actuator effort limits; planning limits are not a claim that every disturbed
 physical trajectory remains within all bounds. Contact parameters are simplified
 simulation assumptions, not a calibrated tennis-ball material model.
+
+See [native validation](../../docs/ball-catching-validation.md) for tested
+directions, speeds, and the limits of those results.

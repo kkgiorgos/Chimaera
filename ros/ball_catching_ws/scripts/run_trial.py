@@ -7,6 +7,7 @@ from pathlib import Path
 import signal
 import subprocess
 import time
+from datetime import datetime, timezone
 
 
 def main():
@@ -18,6 +19,7 @@ def main():
     parser.add_argument('--initial-pose', type=float, nargs=7)
     parser.add_argument('--retention', type=float, default=1.)
     parser.add_argument('--camera-hz', type=float, default=90.)
+    parser.add_argument('--resolution', type=int, nargs=2, default=[640, 480], metavar=('WIDTH', 'HEIGHT'))
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--wall-timeout', type=float, default=120.)
     args = parser.parse_args()
@@ -30,6 +32,7 @@ def main():
                'launch_position:=' + json.dumps(args.position),
                'launch_direction:=' + json.dumps(args.direction), f'launch_speed:={args.speed}',
                f'retention:={args.retention}', f'camera_hz:={args.camera_hz}',
+               f'camera_width:={args.resolution[0]}', f'camera_height:={args.resolution[1]}',
                f'partition:=ball-catching-{os.getpid()}']
     if args.initial_pose:
         command += ['initial_pose:=' + json.dumps(args.initial_pose)]
@@ -39,6 +42,17 @@ def main():
     environment['ROS_LOG_DIR'] = str(output / 'ros_logs')
     # Rendering logs/cache belong to the trial, keeping headless workers isolated.
     environment['IGN_LOG_PATH'] = str(output / 'gazebo_logs')
+    repository = Path(__file__).resolve().parents[3]
+    revision = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=repository,
+                              capture_output=True, text=True)
+    dirty = subprocess.run(['git', 'status', '--porcelain'], cwd=repository,
+                           capture_output=True, text=True)
+    metadata = dict(started_at=datetime.now(timezone.utc).isoformat(),
+                    git_revision=revision.stdout.strip() if revision.returncode == 0 else None,
+                    working_tree_dirty=bool(dirty.stdout.strip()) if dirty.returncode == 0 else None,
+                    ros_distro=environment.get('ROS_DISTRO'),
+                    ros_domain_id=environment['ROS_DOMAIN_ID'], command=command)
+    (output / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
     started = time.monotonic()
     result = None
     with (output / 'launch.log').open('w') as log:
@@ -60,13 +74,17 @@ def main():
                 raise RuntimeError(f'Application exited with {process.returncode}; inspect launch.log')
         finally:
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGINT)
+                # ROS launch forwards SIGINT to its children. Signaling the
+                # whole group as well would deliver it twice during teardown.
+                process.send_signal(signal.SIGINT)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGTERM)
                     process.wait(timeout=10)
     print(json.dumps(result, indent=2))
+    metadata.update(wall_seconds=time.monotonic() - started, result=result)
+    (output / 'metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
     return 0 if result['success'] else 1
 
 

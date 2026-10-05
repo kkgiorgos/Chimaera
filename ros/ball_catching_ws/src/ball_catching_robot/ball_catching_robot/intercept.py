@@ -88,7 +88,9 @@ class Intercept(Node):
                 continue
             point = position + velocity * dt + 0.5 * GRAVITY * dt ** 2
             point[2] = height
-            if not (0.12 < point[0] < 0.78 and abs(point[1]) < 0.60 and 0.35 < height < 1.05):
+            # Broad geometric rejection only; IK and joint motion constraints
+            # decide feasibility, including poses on either side of the base.
+            if not (0.12 < np.linalg.norm(point[:2]) < 1.10 and 0.20 < height < 1.30):
                 continue
             target = self.arm.inverse(point, self.rotation, self.q)
             if target is None:
