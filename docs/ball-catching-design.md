@@ -1,6 +1,7 @@
 # FR3 ball-catching design
 
-Status: requirements captured; control and calibration decisions pending.
+Status: core requirements, calibration, control approach, and future compute
+boundary agreed; implementation and experimental parameter selection pending.
 
 ## Objective and accepted requirements
 
@@ -21,12 +22,15 @@ Model a tennis ball with gravity during flight and physical contact at impact;
 omit aerodynamic drag and spin effects initially. Use a simple scene and
 visually distinctive ball. The robot may know gravity; ball position, velocity,
 launch time, and size must not be supplied from experiment configuration or
-simulator ground truth. Camera calibration and robot/cup geometry require a
-separate clarification because metric stereo reconstruction and robot control
-need those quantities.
+simulator ground truth. Known equipment configuration includes camera
+intrinsics, stereo baseline/extrinsics, camera-to-base transforms, and FR3/cup
+geometry. These quantities are part of robot calibration, not privileged ball
+state.
 
 Continually revise the interception target from visual observations. Keep the
-cup orientation fixed while moving its position. Investigate vertical velocity
+cup orientation fixed upward in world coordinates while moving its position;
+coordinate wrist motion to preserve that orientation despite the rigid
+attachment. Investigate vertical velocity
 matching if contact tests show excessive bounce. Success requires physical entry
 and retention, with the retention duration still to be chosen. Cup dimensions,
 contact parameters, camera settings, initial arm pose, and operating envelope
@@ -45,8 +49,10 @@ remain to be established experimentally.
    interception times. Account for image age and command delay.
 6. Select a reachable interception position/time under fixed orientation and
    joint motion limits. Replan while preserving command continuity.
-7. Track the resulting joint motion using joint feedback. Controller type and
-   actuator command interface are pending.
+7. Track continuously revised, time-constrained joint trajectories with an
+   effort-based feedback controller. Enforce joint position, velocity,
+   acceleration, and torque limits; avoid discontinuities at target revisions.
+   The specific controller implementation and gains remain to be validated.
 
 No active stage may consume throw settings, scoring data, privileged poses, or
 simulator-only state. Diagnostic observations can be recorded for offline
@@ -61,12 +67,13 @@ Application code must depend on ROS sensor and actuator contracts rather than
 Gazebo APIs. Use stamped data and explicit simulation-time behavior from the
 beginning. Separate ROS adapters from algorithm code.
 
-Future guest placement follows the computer being modeled. Vision, filtering,
-prediction, IK, motion generation, and any control loop implemented on that
-computer belong in the guest. Physics, rendering, launch generation, scoring,
-and actuator behavior belong on the host. A loop representing embedded robot
-firmware can remain host-side, but that choice must be explicit rather than
-silently excluding controller computation from architecture measurements.
+The agreed future guest includes vision, filtering, prediction, IK, motion
+generation, and effort-feedback control. Physics, rendering, launch generation,
+scoring, and motor actuation belong on the host. Host actuation must apply
+received torque commands and expose joint feedback without secretly performing
+the application's trajectory tracking. Local control should use the same
+sensor/actuator boundary so guest integration does not require moving controller
+logic out of a Gazebo-specific plugin.
 
 Candidate boundary data: stereo images, CameraInfo, joint feedback, time,
 static calibration/robot configuration, and actuator commands. Topic names,
@@ -93,8 +100,8 @@ criterion must be validated against a longer observation period.
 
 ## Implementation milestones
 
-1. Resolve calibration, control fidelity, and guest placement; validate the
-   existing FR3 sources and dependencies against native Humble/Fortress.
+1. Validate the existing FR3 sources and dependencies against native
+   Humble/Fortress and choose the effort-feedback controller implementation.
 2. Bring up FR3, a collision-capable cup, stereo cameras, and configurable throws;
    verify physical retention/contact and a separate ground-truth scorer.
 3. Implement and validate stereo detection, reconstruction, and ballistic
