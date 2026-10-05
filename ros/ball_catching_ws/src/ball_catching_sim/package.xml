@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ball_catching_sim</name><version>0.1.0</version>
+  <description>Fortress FR3 actuation, stereo scene, throws and passive scoring.</description>
+  <maintainer email="kkgiorgos@users.noreply.github.com">Chimaera contributors</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <depend>rclcpp</depend><depend>sensor_msgs</depend><depend>std_msgs</depend>
+  <depend>std_srvs</depend><depend>geometry_msgs</depend>
+  <depend>ignition-gazebo6</depend>
+  <exec_depend>franka_description</exec_depend><exec_depend>xacro</exec_depend>
+  <exec_depend>ros_gz_bridge</exec_depend><exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>ball_catching_robot</exec_depend><exec_depend>launch_ros</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>
