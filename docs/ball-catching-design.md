@@ -2,6 +2,8 @@
 
 Status: native implementation demonstrated with visual catches at 3–5 m/s;
 operating-envelope characterization and gem5 integration remain future work.
+Robot perception, estimation, interception, and effort control use C++17/rclcpp;
+Python is limited to launch, scene generation, and experiment orchestration.
 See [implementation instructions](../ros/ball_catching_ws/README.md) and
 [native validation](ball-catching-validation.md).
 

@@ -8,8 +8,10 @@ offset bracket to keep its opening clear of the wrist.
 
 ## Build and run
 
-Run from the repository root with native ROS/Gazebo and Python OpenCV, NumPy,
-PyKDL, and pytest installed. The existing FR3 description dependency is
+Run from the repository root with native ROS/Gazebo, a C++17 compiler, Eigen3,
+Orocos KDL, ROS URDF, OpenCV development libraries, json-c, and pkg-config.
+Python NumPy/xacro are used for scene generation and pytest for scene tests.
+Robot computation runs entirely in C++. The existing FR3 description dependency is
 `ros/franka_ws/src/franka_description` (version 1.6.1). No libfranka build, MoveIt,
 Docker, or guest is required.
 
@@ -71,7 +73,9 @@ upward cup orientation. The runner also accepts `--initial-pose` and
 ## Components and interfaces
 
 `ball_catching_robot` contains three independently executable ROS processes:
-`perception`, `intercept`, and `effort_control`. `robot.launch.py` starts robot
+`perception`, `intercept`, and `effort_control`, built with `ament_cmake` and
+`rclcpp`. Eigen/KDL implement the arm model, trajectories, and filtering;
+OpenCV implements classical image processing. `robot.launch.py` starts robot
 compute alone with a URDF path, initial pose, and stereo calibration. It accepts
 no experiment settings. `ball_catching_sim` generates the world and supplies a
 Fortress system plugin for actuation, trial lifecycle, and passive scoring.
@@ -118,19 +122,27 @@ Containment uses the actual polygonal wall geometry with a 2 mm contact-solver
 tolerance. Ground truth records the cup orientation as well as position.
 
 ```zsh
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-  PYTHONPATH=ros/ball_catching_ws/src/ball_catching_robot:ros/ball_catching_ws/src/ball_catching_sim:$PYTHONPATH \
-  OPENBLAS_NUM_THREADS=1 python3 -m pytest -q ros/ball_catching_ws/tests
-
-# Enable/build the native scorer test, then run it:
+# Enable/build the native robot and scorer tests:
 colcon --log-base ros/ball_catching_ws/log build \
-  --base-paths ros/ball_catching_ws/src \
+  --base-paths ros/franka_ws/src/franka_description ros/ball_catching_ws/src \
   --build-base ros/ball_catching_ws/build --install-base ros/ball_catching_ws/install \
   --cmake-args -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
 colcon --log-base ros/ball_catching_ws/log test \
   --build-base ros/ball_catching_ws/build --install-base ros/ball_catching_ws/install \
-  --packages-select ball_catching_sim
+  --packages-select ball_catching_robot ball_catching_sim
+colcon --log-base ros/ball_catching_ws/log test-result \
+  --test-result-base ros/ball_catching_ws/build --verbose
+source ros/ball_catching_ws/install/local_setup.zsh
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+  PYTHONPATH=ros/ball_catching_ws/src/ball_catching_sim:$PYTHONPATH \
+  OPENBLAS_NUM_THREADS=1 python3 -m pytest -q ros/ball_catching_ws/tests
 ```
+
+The C++ tests include numerical comparisons against reference outputs saved
+from the former Python implementation. Scene generation invokes the native
+`validate_model` utility for joint limits and upward-cup validation. Launch files,
+world generation, and experiment orchestration remain Python; they contain no
+robot perception, estimation, planning, or control implementation.
 
 The initial implementation demonstrates physical retention and visual feedback,
 but does not establish a maximum catch speed or guaranteed success for every
