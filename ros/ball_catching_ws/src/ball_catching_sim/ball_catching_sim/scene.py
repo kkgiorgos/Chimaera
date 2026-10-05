@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 import xacro
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 NEUTRAL = [0.0, -math.pi / 4, 0.0, -3 * math.pi / 4, 0.0, math.pi / 2, math.pi / 4]
 
@@ -112,14 +112,13 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     urdf = robot_urdf(cup_radius, cup_depth)
-    from ball_catching_robot.model import Arm
-    arm = Arm(urdf)
-    if np.any(np.array(initial_pose) < arm.lower + .02) or np.any(np.array(initial_pose) > arm.upper - .02):
-        raise ValueError('initial_pose must be within joint limits with 0.02 rad margin')
-    if arm.pose(initial_pose).M[2, 2] < .9999:
-        raise ValueError('initial_pose must keep the cup opening upward in world coordinates')
     robot_path = directory / 'robot.urdf'
     robot_path.write_text(urdf)
+    validator = Path(get_package_prefix('ball_catching_robot')) / 'lib/ball_catching_robot/validate_model'
+    validation = subprocess.run([str(validator), str(robot_path), *map(str, initial_pose)],
+                                capture_output=True, text=True)
+    if validation.returncode:
+        raise ValueError(validation.stderr.strip())
     model_xml = subprocess.run(['ign', 'sdf', '-p', str(robot_path)],
                                check=True, capture_output=True, text=True).stdout
     sdf = ET.Element('sdf', version='1.8')

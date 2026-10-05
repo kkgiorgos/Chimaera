@@ -14,14 +14,13 @@ def start(context):
               'robot_file': get('robot_file'), 'output': get('output'),
               'initial_pose': json.loads(get('initial_pose'))}
     calibration = json.loads(get('calibration'))
-    numerical_env = {'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'}
     nodes = [Node(package='ball_catching_robot', executable='perception',
                  parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output'],
-                              **calibration}], additional_env=numerical_env, output='screen'),
+                              **calibration}], output='screen'),
             Node(package='ball_catching_robot', executable='intercept', parameters=[common],
-                 additional_env=numerical_env, output='screen'),
+                 output='screen'),
             Node(package='ball_catching_robot', executable='effort_control', parameters=[common],
-                 additional_env=numerical_env, output='screen')]
+                 output='screen')]
     return [*nodes, *[RegisterEventHandler(OnProcessExit(target_action=node,
         on_exit=[EmitEvent(event=Shutdown(reason='Robot component exited'))])) for node in nodes]]
 

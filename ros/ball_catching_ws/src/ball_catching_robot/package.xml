@@ -4,13 +4,15 @@
   <description>Classical stereo perception, interception, and FR3 effort control.</description>
   <maintainer email="kkgiorgos@users.noreply.github.com">Chimaera contributors</maintainer>
   <license>Apache-2.0</license>
-  <buildtool_depend>ament_python</buildtool_depend>
-  <exec_depend>rclpy</exec_depend><exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend><exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>trajectory_msgs</exec_depend><exec_depend>std_msgs</exec_depend>
-  <exec_depend>builtin_interfaces</exec_depend>
-  <exec_depend>python3-numpy</exec_depend><exec_depend>python3-opencv</exec_depend>
-  <exec_depend>python3-pykdl</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend><depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend><depend>geometry_msgs</depend>
+  <depend>trajectory_msgs</depend><depend>std_msgs</depend>
+  <depend>builtin_interfaces</depend>
+  <depend>eigen</depend><depend>orocos_kdl</depend><depend>urdf</depend>
+  <depend>libopencv-dev</depend><depend>libjson-c-dev</depend>
+  <test_depend>ament_cmake_gtest</test_depend><test_depend>franka_description</test_depend>
+  <test_depend>xacro</test_depend><test_depend>python3-numpy</test_depend>
   <exec_depend>launch_ros</exec_depend>
-  <export><build_type>ament_python</build_type></export>
+  <export><build_type>ament_cmake</build_type></export>
 </package>
