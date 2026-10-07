@@ -1,0 +1,32 @@
+# Ramulator is optional. Pass RAMULATOR2_ROOT explicitly to enable it.
+import os
+
+from SCons.Script import ARGUMENTS
+
+Import('*')
+
+ramulator_root = ARGUMENTS.get('RAMULATOR2_ROOT', '')
+if not ramulator_root:
+    Return()
+
+ramulator_root = os.path.abspath(os.path.join(
+    Dir('#').abspath, os.path.expanduser(ramulator_root)))
+for required in ('src/ramulator/base/base.h', 'libramulator.so'):
+    if not os.path.isfile(os.path.join(ramulator_root, required)):
+        raise RuntimeError(
+            'RAMULATOR2_ROOT is missing %s; see ext/ramulator2/README.md'
+            % required)
+
+env.Append(LIBS=['ramulator'], LIBPATH=[ramulator_root],
+           RPATH=[ramulator_root])
+
+SimObject('Ramulator2.py', sim_objects=['Ramulator2'])
+SimObject('Ramulator2VectorPorts.py', sim_objects=['Ramulator2VectorPorts'])
+# Keep gem5 at C++17; only this source includes Ramulator's C++20 headers.
+Source('ramulator2_base.cc', append={
+    'CXXFLAGS': ['-std=c++20'],
+    'CPPPATH': [os.path.join(ramulator_root, 'src')],
+})
+Source('ramulator2.cc')
+Source('ramulator2_vector_ports.cc')
+DebugFlag('Ramulator2')

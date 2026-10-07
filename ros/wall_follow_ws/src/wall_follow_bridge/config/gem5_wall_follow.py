@@ -59,6 +59,8 @@ parser.add_argument("--l1i-size", default="16KiB")
 parser.add_argument("--l2-size", default="256KiB")
 parser.add_argument("--l1-assoc", type=int, default=8)
 parser.add_argument("--l2-assoc", type=int, default=16)
+parser.add_argument("--memory-backend", choices=("gem5", "ramulator2"), default="gem5")
+parser.add_argument("--ramulator-config", help="Exported Ramulator 2.1 JSON configuration")
 parser.add_argument("--image")
 parser.add_argument("--kernel")
 parser.add_argument("--controller-file", help="Inject this run's controller YAML into the guest")
@@ -66,6 +68,12 @@ add_chimaera_arguments(parser, guest_command="/opt/chimaera/wall_follow/guest_st
 args = parser.parse_args()
 if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
     parser.error("core count and cache associativity must be positive")
+if args.memory_backend == "ramulator2" and not args.ramulator_config:
+    parser.error("--memory-backend ramulator2 requires --ramulator-config")
+if args.ramulator_config and args.memory_backend != "ramulator2":
+    parser.error("--ramulator-config requires --memory-backend ramulator2")
+if args.memory_backend == "ramulator2" and args.cpu_type == "kvm":
+    parser.error("Ramulator timing requires --cpu-type timing or o3; KVM is used only for boot")
 files = list(args.guest_file)
 if args.controller_file:
     files.append("/tmp/chimaera-controller.yaml=" + args.controller_file)
@@ -90,7 +98,11 @@ cache_hierarchy = MESITwoLevelCacheHierarchy(
     num_l2_banks=1,
 )
 
-memory = SingleChannelDDR3_1600(size="3GiB")
+if args.memory_backend == "ramulator2":
+    from gem5.components.memory.ramulator2 import Ramulator2Memory
+    memory = Ramulator2Memory(configuration=args.ramulator_config, size="3GiB")
+else:
+    memory = SingleChannelDDR3_1600(size="3GiB")
 
 processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=args.num_cores) if args.cpu_type == "kvm" else SimpleSwitchableProcessor(
     starting_core_type=CPUTypes.KVM,
