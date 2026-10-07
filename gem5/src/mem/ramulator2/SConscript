@@ -18,7 +18,7 @@ for required in ('src/ramulator/base/base.h', 'libramulator.so'):
             % required)
 
 env.Append(LIBS=['ramulator'], LIBPATH=[ramulator_root],
-           RPATH=[ramulator_root])
+           RPATH=[ramulator_root, '/opt/chimaera/ramulator2'])
 
 SimObject('Ramulator2.py', sim_objects=['Ramulator2'])
 SimObject('Ramulator2VectorPorts.py', sim_objects=['Ramulator2VectorPorts'])

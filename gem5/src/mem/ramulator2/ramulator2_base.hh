@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "mem/abstract_mem.hh"
+#include "base/statistics.hh"
 #include "params/AbstractMemory.hh"
 
 namespace Ramulator
@@ -107,6 +108,22 @@ class Ramulator2Base : public AbstractMemory
 
     unsigned int nbrOutstandingReads;
     unsigned int nbrOutstandingWrites;
+
+    struct ContentionStats : public statistics::Group
+    {
+        statistics::Scalar aggressorAccepted, aggressorRejected, aggressorBytes;
+        statistics::Scalar aggressorCompleted, aggressorLatencyTicks;
+        statistics::Scalar cpuReads, cpuReadLatencyTicks, cpuRetries;
+        ContentionStats(statistics::Group *parent);
+    } contentionStats;
+    std::string aggressorPattern = "none";
+    unsigned int aggressorInterval = 4, aggressorStride = 4096;
+    unsigned int aggressorReadPercent = 80, aggressorMaxPending = 128;
+    unsigned int aggressorDutyPercent = 100, aggressorPeriod = 12000;
+    Addr aggressorWindow = 268435456;
+    uint64_t aggressorState = 1, aggressorIndex = 0, aggressorCycle = 0;
+    unsigned int aggressorPending = 0;
+    void injectAggressor();
 
     Ramulator2Base(const AbstractMemoryParams &p,
                    const std::string &ramulator_config, size_t num_ports,

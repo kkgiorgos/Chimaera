@@ -73,6 +73,26 @@ for(const [key] of data.architecture_metrics) {
  elements.get('architecture-metric').events.change();
  validate(elements.get('architecture-chart'));
 }
+// Memory controls must retain finite charts and available task/traffic points.
+const hasMemory=data.runs.some(r=>r.config['hardware.memory_backend']==='ramulator2');
+assert.equal(elements.get('memory-section').hidden,!hasMemory);
+if(hasMemory) {
+ for(const [key] of data.memory_metrics) {
+  elements.get('memory-metric').value=key;
+  elements.get('memory-metric').events.change();
+  validate(elements.get('memory-chart'));
+  validate(elements.get('traffic-task-chart'));
+  const available=data.runs.filter(r=>Number.isFinite(r.metrics[key])).length;
+  assert.equal(elements.get('memory-chart').children[0].children.filter(n=>n.tag==='rect').length,available);
+ }
+ assert.equal(elements.get('memory-table').children[0].tag,'table');
+ for(const [key] of data.task_metrics) {
+  elements.get('bar-metric').value=key;
+  elements.get('bar-metric').events.change();
+  const available=data.runs.filter(r=>Number.isFinite(r.metrics.gem5_aggressor_gbps)&&Number.isFinite(r.metrics[key])).length;
+  assert.equal(elements.get('traffic-task-chart').children[0].children.filter(n=>n.tag==='circle').length,available);
+ }
+}
 assert.equal(vm.runInContext("fmt(1000000000)",context),'1e+9');
 assert.equal(vm.runInContext("fmt(.0000000012345)",context),'1.2345e-9');
 assert.equal(vm.runInContext("fmt(-.000000001)",context),'-1e-9');

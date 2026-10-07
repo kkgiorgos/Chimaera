@@ -310,6 +310,13 @@ def main():
                 for path in (root/'build/X86/gem5.opt', image, kernel):
                     if not path.is_file():
                         raise ValueError(f'Missing gem5 resource: {path}')
+                for run in plan['runs']:
+                    parameters = run['parameters']
+                    if parameters['memory_backend'] == 'ramulator2':
+                        path = Path(parameters['ramulator_config']).expanduser()
+                        path = path if path.is_absolute() else args.config.parent / path
+                        if json.loads(path.read_text()).get('frontend', {}).get('impl') != 'External':
+                            raise ValueError('Ramulator export must use the External frontend')
     except (OSError, ValueError, TypeError) as exc:
         parser.error(str(exc))
     if args.dry_run:
@@ -358,12 +365,24 @@ def main():
             source_sha256={str(p.relative_to(WORKSPACE/'src/wall_follow_robot')):
                 hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in sorted((WORKSPACE/'src/wall_follow_robot').rglob('*')) if p.suffix in ('.hpp', '.cpp')}), indent=2))
+        if args.gem5 and params['memory_backend'] == 'ramulator2':
+            memory_path = Path(params['ramulator_config']).expanduser()
+            if not memory_path.is_absolute():
+                memory_path = args.config.parent / memory_path
+            memory_config = memory_path.read_bytes()
+            (directory/'ramulator.json').write_bytes(memory_config)
+            experiment_file = directory/'experiment.json'
+            experiment = json.loads(experiment_file.read_text())
+            experiment['ramulator_sha256'] = hashlib.sha256(memory_config).hexdigest()
+            experiment_file.write_text(json.dumps(experiment, indent=2))
         controller = {k: params[k] for k in DEFAULTS}
         (directory/'controller.yaml').write_text(json.dumps({'wall_follower': {'ros__parameters': controller}}, indent=2))
         launch_args = dict(world=str(directory/'world.sdf'), parameters_file=str(directory/'controller.yaml'),
                            output_dir=str(directory), duration=params['duration'], gui=params['gui'], wall_timeout=params['wall_timeout'])
         if args.gem5:
             launch_args.update({k: params[k] for k in HARDWARE_DEFAULTS})
+            if params['memory_backend'] == 'ramulator2':
+                launch_args['ramulator_config'] = str(directory/'ramulator.json')
             launch_args.update({k: v for k, v in plan['gem5'].items()}, outdir=str(directory/'gem5'),
                                timing_socket=str(Path('/tmp/chimaera_time.sock')),
                                physics_step_ns=round(params['physics_step'] * 1e9), status_bar=False)

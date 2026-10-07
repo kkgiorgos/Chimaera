@@ -39,6 +39,7 @@ Ramulator2Base::Ramulator2Base(const AbstractMemoryParams &p,
       maxOutstanding(max_outstanding),
       nbrOutstandingReads(0),
       nbrOutstandingWrites(0),
+      contentionStats(this),
       tickEvent([this] { tick(); }, name())
 {
     fatal_if(maxOutstanding < 2,
@@ -50,6 +51,73 @@ Ramulator2Base::Ramulator2Base(const AbstractMemoryParams &p,
         writeRamulatorStats(simout.resolve(name() + ".ramulator_stats.yaml"),
                             StatsWriteMode::Final);
     });
+}
+
+Ramulator2Base::ContentionStats::ContentionStats(statistics::Group *parent)
+    : statistics::Group(parent),
+      ADD_STAT(aggressorAccepted, statistics::units::Count::get(), "Accepted synthetic requests"),
+      ADD_STAT(aggressorRejected, statistics::units::Count::get(), "Offers blocked by queue capacity"),
+      ADD_STAT(aggressorBytes, statistics::units::Byte::get(), "Accepted synthetic traffic bytes"),
+      ADD_STAT(aggressorCompleted, statistics::units::Count::get(), "Completed synthetic requests"),
+      ADD_STAT(aggressorLatencyTicks, statistics::units::Tick::get(), "Synthetic completion latency sum"),
+      ADD_STAT(cpuReads, statistics::units::Count::get(), "Completed CPU-side DRAM reads"),
+      ADD_STAT(cpuReadLatencyTicks, statistics::units::Tick::get(), "CPU-side DRAM read latency sum"),
+      ADD_STAT(cpuRetries, statistics::units::Count::get(), "CPU-side rejected submissions")
+{}
+
+void
+Ramulator2Base::injectAggressor()
+{
+    // An independent device ingress: no gem5 packets, cache pollution, CPU
+    // instructions or backing-store writes. Addresses are above guest RAM.
+    const uint64_t cycle = aggressorCycle++;
+    if (aggressorPattern == "none" || drainState() != DrainState::Running ||
+        cycle % aggressorInterval ||
+        cycle % aggressorPeriod >=
+            uint64_t(aggressorPeriod) * aggressorDutyPercent / 100) {
+        return;
+    }
+    if (aggressorPending >= aggressorMaxPending) {
+        ++contentionStats.aggressorRejected;
+        return;
+    }
+    const unsigned int bytes = ramulator2_memorysystem->get_tx_bytes();
+    fatal_if(aggressorWindow % bytes || aggressorStride % bytes,
+             "Aggressor window and stride must align to DRAM transactions");
+    Addr offset;
+    if (aggressorPattern == "random") {
+        aggressorState ^= aggressorState << 13;
+        aggressorState ^= aggressorState >> 7;
+        aggressorState ^= aggressorState << 17;
+        offset = (aggressorState % (aggressorWindow / bytes)) * bytes;
+    } else {
+        offset = (aggressorIndex * (aggressorPattern == "stream" ? bytes :
+                                  aggressorStride)) % aggressorWindow;
+    }
+    const Addr address = getAddrRange().size() + offset;
+    const bool read = aggressorIndex % 100 < aggressorReadPercent;
+    const Tick submitted = curTick();
+    ++aggressorPending; // Writes may complete synchronously.
+    const bool accepted = ramulator2_frontend->receive_external_requests(
+        // External advertises one source to controller statistics. Distinguish
+        // guest/device ownership in our callbacks and counters, not source_id.
+        read ? 0 : 1, address, 0, -1,
+        [this, submitted](Ramulator::Request &) {
+            --aggressorPending;
+            ++contentionStats.aggressorCompleted;
+            contentionStats.aggressorLatencyTicks += curTick() - submitted;
+            if (!nbrOutstanding()) {
+                signalDrainDone();
+            }
+        }, bytes);
+    if (accepted) {
+        ++aggressorIndex;
+        ++contentionStats.aggressorAccepted;
+        contentionStats.aggressorBytes += bytes;
+    } else {
+        --aggressorPending;
+        ++contentionStats.aggressorRejected;
+    }
 }
 
 Ramulator2Base::~Ramulator2Base()
@@ -148,7 +216,8 @@ unsigned int
 Ramulator2Base::nbrOutstanding() const
 {
     unsigned int count =
-        nbrOutstandingReads + nbrOutstandingWrites + submittingRequest;
+        nbrOutstandingReads + nbrOutstandingWrites + submittingRequest +
+        aggressorPending;
     for (const auto &state : portStates) {
         count += state->responseQueue.size();
     }
@@ -188,9 +257,10 @@ Ramulator2Base::tick()
     }
     processingTick = true;
     ramulator2_memorysystem->tick();
+    injectAggressor();
     for (size_t i = 0; i < portStates.size(); ++i) {
         auto &state = *portStates[i];
-        if (state.retryReq && nbrOutstanding() < maxOutstanding) {
+        if (state.retryReq && nbrOutstanding() - aggressorPending < maxOutstanding) {
             state.retryReq = false;
             getMemoryPort(i).sendRetryReq();
         }
@@ -238,7 +308,8 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
     // A write occupies a backend slot and, until acknowledged, a response
     // slot. Reserve both so downstream backpressure cannot exceed the cap.
     const unsigned int slots = pkt->isWrite() && pkt->needsResponse() ? 2 : 1;
-    if (nbrOutstanding() + slots > maxOutstanding) {
+    if (nbrOutstanding() - aggressorPending + slots > maxOutstanding) {
+        ++contentionStats.cpuRetries;
         state.retryReq = true;
         return false;
     }
@@ -265,11 +336,14 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
     } else {
         ++nbrOutstandingWrites;
     }
-    auto callback = [this, pkt, port_id, read](Ramulator::Request &req) {
+    const Tick submitted = curTick();
+    auto callback = [this, pkt, port_id, read, submitted](Ramulator::Request &req) {
         if (read) {
             const auto erased = outstandingReads.erase(pkt);
             panic_if(erased != 1, "Unknown Ramulator2 read completion");
             --nbrOutstandingReads;
+            ++contentionStats.cpuReads;
+            contentionStats.cpuReadLatencyTicks += curTick() - submitted;
             accessAndRespond(pkt, port_id);
         } else {
             --nbrOutstandingWrites;
@@ -282,6 +356,7 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
         read ? 0 : 1, address, 0, getIngressId(port_id), callback,
         pkt->getSize());
     if (!accepted) {
+        ++contentionStats.cpuRetries;
         if (read) {
             outstandingReads.erase(pkt);
             --nbrOutstandingReads;

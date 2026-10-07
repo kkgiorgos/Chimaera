@@ -5,7 +5,7 @@
 <body>
 <header><div><div class="eyebrow">CHIMAERA / ROBOTICS BENCHMARK</div><h1>Compare experiments</h1><p>Follow the data. Find the trade-offs.</p></div><span class="badge">LOCAL · OFFLINE</span></header>
 <div class="layout">
-<aside><h2>Configurations <span id="total" class="muted"></span></h2><label for="search">Find configurations or architectures</label><input id="search" type="search" placeholder="Search configurations, settings…">
+<aside><h2>Configurations <span id="total" class="muted"></span></h2><label for="search">Find workloads and settings</label><input id="search" type="search" placeholder="Search configurations, settings…">
 <div class="actions"><button id="select-visible">Select shown</button><button id="clear">Clear selection</button></div>
 <p id="selection-count" aria-live="polite"></p><div id="run-list"></div>
 <p class="hint">Checkboxes control every chart and table. Your selection is saved in the page URL.</p></aside>
@@ -16,9 +16,12 @@
 <div id="content">
 
 <section><div class="section-heading"><div><h2>Sweep comparison</h2><p>Bars show each configuration's mean and sample standard deviation. Labels include the swept settings.</p></div><label>Group bars by <select id="x-axis"></select></label></div></section>
+<section id="memory-section" hidden><div class="section-heading"><div><h2>Shared memory contention</h2><p>One CPU and memory configuration; competing device traffic varies across workloads.</p></div><label>Memory metric <select id="memory-metric"></select></label></div>
+<p class="hint">Synthetic device traffic enters Ramulator directly, bypassing CPU caches. It shares the controller with the guest and uses a disjoint address window. GPU-like access patterns model DRAM contention only; GPU compute, page migration and coherence are not simulated. Achieved GB/s uses accepted bytes per simulated ROI second. Read latency covers all guest DRAM clients. Command gaps measure host receipts in simulated time, with gaps above 1.5 control periods flagged; they are not controller execution times. Host scan age describes the host's latest scan, not the scan used by the controller.</p>
+<p class="hint">Baseline deltas below are descriptive changes in repetition means; two repeats are a screening sample, not a statistical significance test.</p><div id="baseline-impact" class="table-wrap"></div><div id="memory-chart" class="chart"></div><div id="traffic-task-chart" class="chart"></div><div id="memory-table" class="table-wrap"></div></section>
 <section><div class="section-heading"><div><h2>Robot task</h2><p>Equal-weight repetition means ± sample standard deviation; inspect counts and coverage too.</p></div><label>Chart metric <select id="bar-metric"></select></label></div>
 <p id="task-note" class="notice" hidden></p><div id="bar-chart" class="chart"></div><div id="metrics-table" class="table-wrap"></div></section>
-<section><div class="section-heading"><div><h2>Architecture</h2><p>Whole gem5 workload region, including guest OS and bridge activity.</p></div><label>Metric <select id="architecture-metric"></select></label></div><p class="hint">IPC = total instructions / summed core-cycles (cycle-weighted core average), not system throughput. System throughput = total instructions / simulated seconds. L1 misses sum across cores; L2 misses sum across banks. MPKI = total misses / total instructions × 1,000. Ratios are computed per run, then averaged across repetitions.</p><div id="architecture-chart" class="chart"></div><div id="architecture-table" class="table-wrap"></div></section>
+<section><div class="section-heading"><div><h2>Guest CPU and cache counters</h2><p>Whole gem5 workload region, including guest OS and bridge activity.</p></div><label>Metric <select id="architecture-metric"></select></label></div><p class="hint">IPC = total instructions / summed core-cycles (cycle-weighted core average), not system throughput. System throughput = total instructions / simulated seconds. L1 misses sum across cores; L2 misses sum across banks. MPKI = total misses / total instructions × 1,000. Ratios are computed per run, then averaged across repetitions.</p><div id="architecture-chart" class="chart"></div><div id="architecture-table" class="table-wrap"></div></section>
 <section><div class="section-heading"><div><h2>Simulation performance</h2><p id="timing-scope"></p></div>
 <label>Timing metric <select id="timing-metric"></select></label></div>
 <p id="timing-note" class="hint"></p><div id="timing-chart" class="chart"></div>

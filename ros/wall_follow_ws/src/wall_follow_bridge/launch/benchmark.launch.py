@@ -33,7 +33,8 @@ def start(context):
                '--guest-command', session['deploy']['guest_root'] + '/guest_start',
                '--controller-file', get('parameters_file')]
     for name in HARDWARE_DEFAULTS:
-        command += ['--' + name.replace('_', '-'), get(name)]
+        if get(name):
+            command += ['--' + name.replace('_', '-'), get(name)]
     for name in ('image', 'kernel'):
         if get(name):
             command += ['--' + name, get(name)]

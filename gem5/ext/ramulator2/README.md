@@ -102,3 +102,16 @@ cache lines. DRAM periods round to the nearest gem5 tick. gem5 checkpoints
 preserve backing-store data, but Ramulator's internal bank/queue state is not
 serialized: restore starts a fresh DRAM model. Full ROS/Gazebo experiments
 require their usual workspace builds and guest artifacts.
+
+## Synthetic accelerator ingress
+
+The single-port wrapper optionally offers independent device requests with
+`aggressor_pattern` (`none`, `stream`, `stride`, `random`), interval, byte stride,
+read percentage, burst duty/period, outstanding cap, address-window size and seed.
+`Ramulator2Memory(..., aggressor={...})` accepts these SimObject parameter names.
+They bypass CPU caches and share Ramulator's controller with guest traffic.
+Addresses sit above exposed guest RAM and must fit in the configured capacity.
+Issuing stops during drain and atomic boot. CPU and device counters are separate
+in gem5 statistics. See the [wall-follow DSE guide](../../../docs/wall-follow-memory-contention.md)
+for semantics, parameters, limitations and container commands. The vector-port
+wrapper retains its existing behavior and does not expose this device source.

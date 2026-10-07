@@ -2,6 +2,7 @@
 """Export a wall-follow sweep as jobs for the generic Docker runner."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -11,9 +12,38 @@ sys.path.insert(0, str(DIRECTORY.parents[1] / 'ros/wall_follow_ws/scripts'))
 from run_experiments import make_plan
 
 
+def memory_inputs(experiment, config_path):
+    """Freeze custom exports relative to the experiment; keep SDK presets portable."""
+    experiment = json.loads(json.dumps(experiment))
+    files = {}
+    def freeze(name):
+        if not name or name == '/opt/chimaera/ramulator2/ddr4-2400.json':
+            return name
+        path = Path(name).expanduser()
+        path = path if path.is_absolute() else config_path.parent / path
+        content = path.read_bytes()
+        if json.loads(content).get('frontend', {}).get('impl') != 'External':
+            raise ValueError('Ramulator export must use the External frontend')
+        digest = hashlib.sha256(content).hexdigest()
+        files[digest + '.json'] = content
+        return '/assets/memory-configs/' + digest + '.json'
+
+    bundles = [experiment.get('fixed', {})]
+    for name, choices in experiment.get('sweep', {}).items():
+        if isinstance(choices[0], dict):
+            bundles.extend(choices)
+        elif name == 'ramulator_config':
+            experiment['sweep'][name] = [freeze(value) for value in choices]
+    for bundle in bundles:
+        if 'ramulator_config' in bundle:
+            bundle['ramulator_config'] = freeze(bundle['ramulator_config'])
+    return experiment, files
+
+
 def configure(args):
     content = args.config.read_bytes()
     plan = make_plan(json.loads(content), args.architecture, gem5=not args.local)
+    experiment, memory_files = memory_inputs(json.loads(content), args.config.resolve())
     if any(run['parameters']['gui'] for run in plan['runs']):
         raise ValueError('container sweeps require gui=false')
     command = ['python3', '/assets/workspace/scripts/run_experiments.py',
@@ -38,7 +68,14 @@ def configure(args):
     if output.exists():
         raise ValueError('configuration output already exists; choose a new directory')
     output.mkdir(parents=True)
-    (output / 'experiment.json').write_bytes(content)
+    (output / 'source-experiment.json').write_bytes(content)
+    (output / 'experiment.json').write_text(json.dumps(experiment, indent=2) + '\n')
+    if memory_files:
+        memory_dir = output / 'memory-configs'
+        memory_dir.mkdir()
+        for name, payload in memory_files.items():
+            (memory_dir / name).write_bytes(payload)
+        mounts.append(dict(source='memory-configs', target='/assets/memory-configs'))
     jobs = []
     for run in plan['runs']:
         name = run['id']

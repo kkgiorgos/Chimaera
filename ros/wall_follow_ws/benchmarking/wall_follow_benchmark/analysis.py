@@ -14,7 +14,22 @@ def summarize(rows, warmup=0.):
     covered = float(dt[valid].sum())
     weighted = lambda values: float(np.sum(values[valid]*dt[valid])/covered) if covered else None
     wall = col('wall_elapsed')
-    return dict(rmse_m=np.sqrt(weighted(error**2)) if covered else None,
+    gaps = np.diff(t)
+    gap_keep = (t[1:] > warmup) & (t[:-1] >= warmup) & (gaps > 0)
+    gap_values = gaps[gap_keep]
+    hz = col('control_hz')[1:][gap_keep]
+    valid_hz = np.isfinite(hz) & (hz > 0)
+    late = gap_values[valid_hz] > 1.5 / hz[valid_hz]
+    scan_age = col('host_scan_age')
+    scan_valid = (t >= warmup) & np.isfinite(scan_age) & (scan_age >= 0)
+
+    first_command = col('sim_time')[0]
+    return dict(first_command_sim_s=float(first_command) if np.isfinite(first_command) else None,
+                command_gap_p95_ms=float(np.percentile(gap_values, 95) * 1000) if len(gap_values) else None,
+                command_gap_max_ms=float(gap_values.max() * 1000) if len(gap_values) else None,
+                command_late_fraction=float(late.mean()) if len(late) else None,
+                host_scan_age_p95_ms=float(np.percentile(scan_age[scan_valid], 95) * 1000) if scan_valid.any() else None,
+                rmse_m=np.sqrt(weighted(error**2)) if covered else None,
                 mae_m=weighted(abs(error)), max_abs_error_m=float(np.max(abs(error[valid]))) if covered else None,
                 gt_coverage=covered/total if total else None,
                 path_m=float(col('path_m')[-1]-np.interp(max(warmup,t[0]),t,col('path_m'))) if total else None,

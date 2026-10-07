@@ -1,0 +1,71 @@
+{
+  "repetitions": 2,
+  "fixed": {
+    "duration": 4.0,
+    "wall_timeout": 10800.0,
+    "gui": false,
+    "cpu_type": "timing",
+    "cpu_clock": "3GHz",
+    "num_cores": 2,
+    "memory_backend": "ramulator2",
+    "ramulator_config": "/opt/chimaera/ramulator2/ddr4-2400.json",
+    "arena_width": 4.0,
+    "arena_height": 4.0,
+    "control_hz": 20.0,
+    "lidar_hz": 20.0,
+    "lidar_samples": 720,
+    "noise_std": 0.0
+  },
+  "sweep": {
+    "workload": [
+      {
+        "aggressor_pattern": "none",
+        "aggressor_interval": 4,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "stream",
+        "aggressor_interval": 16,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "stream",
+        "aggressor_interval": 4,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "stride",
+        "aggressor_interval": 16,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "stride",
+        "aggressor_interval": 4,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "random",
+        "aggressor_interval": 16,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "random",
+        "aggressor_interval": 4,
+        "aggressor_read_percent": 80,
+        "aggressor_duty_percent": 100
+      },
+      {
+        "aggressor_pattern": "stream",
+        "aggressor_interval": 1,
+        "aggressor_read_percent": 20,
+        "aggressor_duty_percent": 25
+      }
+    ]
+  }
+}

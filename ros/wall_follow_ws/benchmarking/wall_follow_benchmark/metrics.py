@@ -1,5 +1,10 @@
 """Focused presentation metrics; raw diagnostic metrics remain in exports."""
 TASK = {
+    'first_command_sim_s': 'First command receipt (world simulated s)',
+    'command_gap_p95_ms': 'Command receipt gap p95 (simulated ms)',
+    'command_gap_max_ms': 'Maximum command receipt gap (simulated ms)',
+    'command_late_fraction': 'Command gaps > 1.5 control periods (fraction)',
+    'host_scan_age_p95_ms': 'Host scan age at command receipt p95 (ms)',
     'rmse_m': 'Wall tracking RMSE (m)',
     'mae_m': 'Wall tracking MAE (m)',
     'max_abs_error_m': 'Maximum wall error (m)',
@@ -28,4 +33,14 @@ SIMULATION = {
     'timing_elapsed_wall_seconds': 'Co-simulation elapsed wall time (s)',
     'timing_startup_wall_seconds': 'Startup wall time (s)',
     'real_time_factor': 'Collection rate (sim s / wall s)',
+}
+
+MEMORY = {
+    'gem5_aggressor_gbps': 'Achieved aggressor traffic (GB/s)',
+    'gem5_cpu_dram_read_ns': 'Guest DRAM read latency mean (ns)',
+    'gem5_aggressor_blocked_fraction': 'Aggressor offers blocked (fraction)',
+    'gem5_aggressor_requests': 'Accepted aggressor transactions',
+    'gem5_aggressor_rejected': 'Blocked aggressor offers',
+    'gem5_cpu_dram_reads': 'Completed guest DRAM reads',
+    'gem5_cpu_dram_retries': 'Guest DRAM request retries',
 }

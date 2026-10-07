@@ -21,6 +21,7 @@ from m5.objects import (
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", required=True)
 parser.add_argument("--vector", action="store_true")
+parser.add_argument("--aggressor", choices=("stream", "stride", "random"))
 args = parser.parse_args()
 config = json.loads(Path(args.config).read_text())
 system = System(mem_mode="timing", mem_ranges=[AddrRange("32MiB")])
@@ -56,6 +57,9 @@ else:
         range=system.mem_ranges[0],
         ramulator_config=json.dumps(config),
         max_outstanding=2,
+        aggressor_pattern=args.aggressor or "none",
+        aggressor_interval=1,
+        aggressor_max_pending=2,
     )
     system.memory.port = system.membus.mem_side_ports
 

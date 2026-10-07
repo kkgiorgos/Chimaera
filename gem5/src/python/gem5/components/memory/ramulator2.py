@@ -23,7 +23,8 @@ class Ramulator2Memory(AbstractMemorySystem):
     """
 
     def __init__(
-        self, configuration: str, size: str, max_outstanding: int = 256
+        self, configuration: str, size: str, max_outstanding: int = 256,
+        aggressor: dict = None
     ) -> None:
         super().__init__()
         try:
@@ -57,9 +58,15 @@ class Ramulator2Memory(AbstractMemorySystem):
                 f"Exposed memory ({self._size}) exceeds DRAM capacity "
                 f"({capacity})"
             )
+        aggressor = aggressor or {}
+        if aggressor.get('aggressor_pattern', 'none') != 'none':
+            window = aggressor.get('aggressor_window', 268435456)
+            if self._size + window > capacity:
+                raise ValueError('Aggressor address window exceeds DRAM capacity')
         self.mem_ctrl = Ramulator2(
             ramulator_config=json.dumps(config),
             max_outstanding=max_outstanding,
+            **aggressor,
         )
 
     def incorporate_memory(self, board: AbstractBoard) -> None:

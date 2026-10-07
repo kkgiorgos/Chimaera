@@ -21,6 +21,7 @@ from m5.objects import (
 parser = argparse.ArgumentParser()
 parser.add_argument("--config", required=True)
 parser.add_argument("--binary", required=True)
+parser.add_argument("--aggressor", choices=("stream", "stride", "random"))
 args = parser.parse_args()
 binary = str(Path(args.binary).resolve())
 system = System(mem_mode="atomic", mem_ranges=[AddrRange("512MiB")])
@@ -33,6 +34,9 @@ system.memory = Ramulator2(
     range=system.mem_ranges[0],
     ramulator_config=Path(args.config).read_text(),
     max_outstanding=2,
+    aggressor_pattern=args.aggressor or "none",
+    aggressor_interval=1,
+    aggressor_max_pending=2,
 )
 system.memory.port = system.membus.mem_side_ports
 system.cpu = AtomicSimpleCPU(cpu_id=0)
@@ -56,6 +60,7 @@ atomic_stats = Path(m5.options.outdir) / (
 )
 text = atomic_stats.read_text()
 assert "total_num_read_requests: 0" in text, text
+assert "total_num_write_requests: 0" in text, text
 m5.switchCpus(system, [(system.cpu, system.switched_cpu)])
 m5.stats.reset()
 event = m5.simulate(100_000_000_000)

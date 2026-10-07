@@ -5,7 +5,9 @@ import re
 
 METRICS = ('sim_seconds', 'instructions', 'cycles', 'ipc', 'l1d_misses',
            'l1i_misses', 'l2_misses', 'l1i_mpki', 'l1d_mpki', 'l2_mpki',
-           'instructions_per_sim_second')
+           'instructions_per_sim_second', 'aggressor_gbps', 'aggressor_requests',
+           'aggressor_rejected', 'aggressor_blocked_fraction', 'cpu_dram_read_ns',
+           'cpu_dram_reads', 'cpu_dram_retries')
 
 
 def summarize(path):
@@ -46,6 +48,21 @@ def summarize(path):
     for level in ('l1i', 'l1d', 'l2'):
         misses = result[f'{level}_misses']
         result[f'{level}_mpki'] = 1000 * misses / instructions if instructions and misses is not None else None
+    prefix = r'board\.memory\.mem_ctrl\.'
+    counter = lambda name: total(prefix + name)
+    accepted, rejected = counter('aggressorAccepted'), counter('aggressorRejected')
+    read_count, latency = counter('cpuReads'), counter('cpuReadLatencyTicks')
+    frequency = last.get('simFreq')
+    byte_count = counter('aggressorBytes')
+    result.update(
+        aggressor_requests=accepted, aggressor_rejected=rejected,
+        aggressor_gbps=byte_count / seconds / 1e9
+            if byte_count is not None and seconds and seconds > 0 else None,
+        aggressor_blocked_fraction=rejected / (accepted + rejected)
+            if accepted is not None and rejected is not None and accepted + rejected else None,
+        cpu_dram_reads=read_count, cpu_dram_retries=counter('cpuRetries'),
+        cpu_dram_read_ns=latency / read_count / frequency * 1e9
+            if latency is not None and read_count and frequency else None)
     return result
 
 

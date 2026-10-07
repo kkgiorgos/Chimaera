@@ -15,6 +15,24 @@ Ramulator2::Ramulator2(const Params &p)
     : Ramulator2Base(p, p.ramulator_config, 1, p.max_outstanding),
       port(name() + ".port", *this, 0)
 {
+    aggressorPattern = p.aggressor_pattern;
+    aggressorInterval = p.aggressor_interval;
+    aggressorStride = p.aggressor_stride;
+    aggressorReadPercent = p.aggressor_read_percent;
+    aggressorMaxPending = p.aggressor_max_pending;
+    aggressorWindow = p.aggressor_window;
+    aggressorState = p.aggressor_seed;
+    aggressorDutyPercent = p.aggressor_duty_percent;
+    aggressorPeriod = p.aggressor_period;
+    fatal_if(aggressorPattern != "none" && aggressorPattern != "stream" &&
+             aggressorPattern != "stride" && aggressorPattern != "random",
+             "Unknown Ramulator aggressor pattern");
+    fatal_if(!aggressorInterval || !aggressorMaxPending || !aggressorPeriod ||
+             !aggressorState || aggressorReadPercent > 100 ||
+             aggressorDutyPercent > 100 || aggressorWindow < 64 ||
+             aggressorWindow % 64 || !aggressorStride || aggressorStride % 64,
+             "Invalid Ramulator aggressor configuration");
+
     DPRINTF(Ramulator2, "Instantiated single-port Ramulator2\n");
 }
 

@@ -26,7 +26,9 @@ def main():
     parser.add_argument(
         "--case", action="append",
         choices=("configuration", "single", "vector", "mode-switch",
-                 "timing-se", "o3-se", "full-system"),
+                 "timing-se", "o3-se", "full-system",
+                 "aggressor-stream", "aggressor-stride", "aggressor-random",
+                 "aggressor-drain"),
         help="Run only selected cases (repeatable)",
     )
     parser.add_argument(
@@ -60,6 +62,10 @@ def main():
             ["--binary", str(binary), "--cpu-type", "o3"],
         ),
     ]
+    cases += [("aggressor-" + pattern, tests / "memory.py", ["--aggressor", pattern])
+              for pattern in ("stream", "stride", "random")]
+    cases.append(("aggressor-drain", tests / "mode_switch.py",
+                  ["--binary", str(binary), "--aggressor", "random"]))
     if args.full_system or "full-system" in (args.case or []):
         cases.append((
             "full-system", tests / "full_system.py",
@@ -100,11 +106,15 @@ def main():
         assert len(stats) == 1, stats
         reads, writes = request_counts(stats[0])
         assert reads > 0, (name, reads, writes)
-        if name in ("single", "vector"):
+        if name in ("single", "vector", "aggressor-stream", "aggressor-stride", "aggressor-random"):
             assert writes > 0, (name, reads, writes)
             assert len(list(directory.glob("*.ramulator_stats.*.yaml"))) >= 2
             assert "RAMULATOR_MEMORY_OK" in (directory / "run.log").read_text()
-        if name == "mode-switch":
+        if name.startswith("aggressor-"):
+            counters = (directory / "stats.txt").read_text()
+            assert int(re.findall(r"system.memory.aggressorAccepted\s+(\d+)", counters)[-1]) > 0
+            assert int(re.findall(r"system.memory.aggressorRejected\s+(\d+)", counters)[-1]) > 0
+        if name in ("mode-switch", "aggressor-drain"):
             assert "RAMULATOR_MODE_SWITCH_OK" in (
                 directory / "run.log"
             ).read_text()

@@ -61,6 +61,11 @@ parser.add_argument("--l1-assoc", type=int, default=8)
 parser.add_argument("--l2-assoc", type=int, default=16)
 parser.add_argument("--memory-backend", choices=("gem5", "ramulator2"), default="gem5")
 parser.add_argument("--ramulator-config", help="Exported Ramulator 2.1 JSON configuration")
+for name, default in dict(pattern='none', interval=4, stride=4096, read_percent=80,
+                          max_pending=128, window=268435456, seed=1,
+                          duty_percent=100, period=12000).items():
+    parser.add_argument('--aggressor-' + name.replace('_', '-'),
+                        type=str if name == 'pattern' else int, default=default)
 parser.add_argument("--image")
 parser.add_argument("--kernel")
 parser.add_argument("--controller-file", help="Inject this run's controller YAML into the guest")
@@ -74,6 +79,8 @@ if args.ramulator_config and args.memory_backend != "ramulator2":
     parser.error("--ramulator-config requires --memory-backend ramulator2")
 if args.memory_backend == "ramulator2" and args.cpu_type == "kvm":
     parser.error("Ramulator timing requires --cpu-type timing or o3; KVM is used only for boot")
+if args.aggressor_pattern != 'none' and args.memory_backend != 'ramulator2':
+    parser.error('aggressor requires Ramulator2')
 files = list(args.guest_file)
 if args.controller_file:
     files.append("/tmp/chimaera-controller.yaml=" + args.controller_file)
@@ -100,7 +107,9 @@ cache_hierarchy = MESITwoLevelCacheHierarchy(
 
 if args.memory_backend == "ramulator2":
     from gem5.components.memory.ramulator2 import Ramulator2Memory
-    memory = Ramulator2Memory(configuration=args.ramulator_config, size="3GiB")
+    memory = Ramulator2Memory(configuration=args.ramulator_config, size="3GiB",
+        aggressor={key: value for key, value in vars(args).items()
+                   if key.startswith('aggressor_')})
 else:
     memory = SingleChannelDDR3_1600(size="3GiB")
 
