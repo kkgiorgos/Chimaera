@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import xacro
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
+from ball_catching_sim.flight import BALL_RADIUS, COURT_LENGTH, COURT_WIDTH, NET_HEIGHT, drag_factor
 
 NEUTRAL = [0.0, -math.pi / 4, 0.0, -3 * math.pi / 4, 0.0, math.pi / 2, math.pi / 4]
 
@@ -22,16 +23,35 @@ def numbers(values):
     return ' '.join(str(float(x)) for x in values)
 
 
-def robot_urdf(radius=0.12, depth=0.14):
+def robot_urdf(radius=0.12, depth=0.14, mode='cup'):
+    if mode not in ('cup', 'gripper'):
+        raise ValueError('mode must be cup or gripper')
     description = Path(get_package_share_directory('franka_description'))
     document = xacro.process_file(str(description / 'robots/fr3/fr3.urdf.xacro'),
-                                  mappings={'hand': 'false', 'gazebo': 'true',
+                                  mappings={'hand': str(mode == 'gripper').lower(), 'gazebo': 'true',
                                             'ros2_control': 'false'})
     robot = ET.fromstring(document.toxml())
     # Absolute paths work both in the renderer and the standalone robot process.
     for mesh in robot.findall('.//mesh'):
         mesh.set('filename', mesh.get('filename').replace('package://franka_description/',
                                                         str(description) + '/'))
+    if mode == 'gripper':
+        for name in ('fr3_finger_joint1', 'fr3_finger_joint2'):
+            finger = robot.find(f"joint[@name='{name}']")
+            # Drive each physical finger explicitly. URDF mimic does not supply
+            # a motor coupling in Fortress's effort-controlled physics.
+            mimic = finger.find('mimic')
+            if mimic is not None:
+                finger.remove(mimic)
+            finger.find('limit').set('velocity', '0.05')
+            finger.find('limit').set('effort', '35')
+        child(robot, 'link', name='grasp_center')
+        joint = child(robot, 'joint', name='grasp_center_joint', type='fixed')
+        child(joint, 'parent', link='fr3_hand')
+        child(joint, 'child', link='grasp_center')
+        child(joint, 'origin', xyz='0 0 0.10365', rpy='0 0 0')
+        child(child(robot, 'gazebo', reference='fr3_hand_joint'), 'preserveFixedJoint', 'true')
+        return ET.tostring(robot, encoding='unicode')
     cup = child(robot, 'link', name='catch_cup')
     inertial = child(cup, 'inertial')
     child(inertial, 'origin', xyz=f'0 0 {depth / 2}', rpy='0 0 0')
@@ -88,15 +108,21 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
              launch_direction=(-1, 0, 0), launch_speed=3.0, retention=1.0,
              camera_hz=90.0, camera_width=640, camera_height=480,
              physics_step=0.001, cup_radius=0.12, cup_depth=0.14,
-             auto_throw=True, trial_timeout=4.0, output=''):
+             auto_throw=True, trial_timeout=4.0, output='', mode='cup', court=False,
+             drag_coefficient=0., air_density=1.225, grip_friction=1.0, present=False, allowed_bounces=0,
+             court_restitution=.745, court_tangent_ratio=.6, camera_position=(-.65, 0., 1.)):
     if len(initial_pose) != 7 or not all(math.isfinite(x) for x in initial_pose):
         raise ValueError('initial_pose must contain seven finite joint angles')
+    if any(abs(q-home) > 1e-8 for q, home in zip(initial_pose, NEUTRAL)):
+        raise ValueError('Every trial must start from the fixed upright home pose')
     if len(launch_position) != 3 or len(launch_direction) != 3:
         raise ValueError('launch position and direction must have three components')
     if not all(math.isfinite(x) for x in launch_position):
         raise ValueError('launch_position must contain finite values')
     if camera_width < 64 or camera_height < 64:
         raise ValueError('camera dimensions must be at least 64 pixels')
+    if len(camera_position) != 3 or not all(math.isfinite(x) for x in camera_position):
+        raise ValueError('camera_position needs three finite coordinates')
     direction = np.asarray(launch_direction, dtype=float)
     if not np.isfinite(direction).all() or np.linalg.norm(direction) < 1e-9:
         raise ValueError('launch_direction must be a finite nonzero vector')
@@ -106,12 +132,19 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
                             trial_timeout=trial_timeout).items():
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f'{name} must be finite and positive')
+    if not math.isfinite(grip_friction) or grip_friction <= 0 or grip_friction > 2:
+        raise ValueError('grip friction must be finite in (0, 2]')
+    if allowed_bounces not in range(5) or (allowed_bounces and (not court or mode != 'gripper')):
+        raise ValueError('zero to four bounces require a gripper court scene')
+    if not all(math.isfinite(x) and 0 < x <= 1 for x in (court_restitution, court_tangent_ratio)):
+        raise ValueError('court impact coefficients must be in (0, 1]')
+    drag = drag_factor(drag_coefficient, air_density)
     if cup_radius <= 0.0335 or cup_depth <= 0.067:
         raise ValueError('cup must accommodate the tennis ball')
     velocity = direction / np.linalg.norm(direction) * launch_speed
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    urdf = robot_urdf(cup_radius, cup_depth)
+    urdf = robot_urdf(cup_radius, cup_depth, mode)
     robot_path = directory / 'robot.urdf'
     robot_path.write_text(urdf)
     validator = Path(get_package_prefix('ball_catching_robot')) / 'lib/ball_catching_robot/validate_model'
@@ -128,7 +161,8 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
     child(physics, 'max_step_size', physics_step)
     child(physics, 'real_time_factor', '1')
     for filename, name in [('physics', 'Physics'), ('user-commands', 'UserCommands'),
-                           ('scene-broadcaster', 'SceneBroadcaster'), ('sensors', 'Sensors')]:
+                           ('scene-broadcaster', 'SceneBroadcaster'), ('sensors', 'Sensors'),
+                           ('contact', 'Contact')]:
         plugin = child(world, 'plugin', filename=f'ignition-gazebo-{filename}-system',
                        name=f'ignition::gazebo::systems::{name}')
         if name == 'Sensors':
@@ -152,7 +186,55 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
             child(child(shape, 'material'), 'diffuse', '0.25 0.25 0.25 1')
     arm = ET.fromstring(model_xml).find('model')
     arm.set('name', 'fr3')
+    if mode == 'gripper':
+        for name in ('fr3_leftfinger', 'fr3_rightfinger'):
+            finger = arm.find(f"link[@name='{name}']")
+            for collision in finger.findall('collision'):
+                surface = collision.find('surface')
+                if surface is None:
+                    surface = child(collision, 'surface')
+                friction = surface.find('friction')
+                if friction is not None:
+                    surface.remove(friction)
+                ode = child(child(surface, 'friction'), 'ode')
+                child(ode, 'mu', grip_friction)
+                child(ode, 'mu2', grip_friction)
+            sensor = child(finger, 'sensor', name=name + '_contacts', type='contact')
+            child(sensor, 'always_on', 'true')
+            child(sensor, 'update_rate', '1000')
+            contact = child(sensor, 'contact')
+            # SDFormat contact sensors accept one collision. The final stock
+            # collision is the rubber gripping tip, not the screw or carriage.
+            child(contact, 'collision', finger.findall('collision')[-1].get('name'))
     world.append(arm)
+    if court:
+        # Robot base is at the receiving baseline; court extends along +x.
+        court_model = child(world, 'model', name='tennis_court')
+        child(court_model, 'static', 'true')
+        court_link = child(court_model, 'link', name='court')
+        def box(name, xyz, size, color, collision=False):
+            for kind in ('visual', 'collision') if collision else ('visual',):
+                shape = child(court_link, kind, name=name)
+                child(shape, 'pose', numbers(xyz) + ' 0 0 0')
+                child(child(shape, 'geometry'), 'box')
+                child(shape.find('geometry/box'), 'size', numbers(size))
+                if kind == 'visual':
+                    material = child(shape, 'material')
+                    child(material, 'diffuse', color)
+                    child(material, 'ambient', color)
+        box('surface', [COURT_LENGTH/2, 0, .001], [COURT_LENGTH, COURT_WIDTH, .002], '.04 .18 .35 1')
+        for x in (0, COURT_LENGTH, COURT_LENGTH/2 - 6.4, COURT_LENGTH/2 + 6.4):
+            box('line_x_' + str(x), [x, 0, .003], [.05, COURT_WIDTH, .002], '.9 .9 .9 1')
+        for y in (-COURT_WIDTH/2, COURT_WIDTH/2):
+            box('line_y_' + str(y), [COURT_LENGTH/2, y, .003], [COURT_LENGTH, .05, .002], '.9 .9 .9 1')
+        box('service_center', [COURT_LENGTH/2, 0, .003], [12.8, .05, .002], '.9 .9 .9 1')
+        # Segments approximate the centre strap and rising net height toward
+        # the posts. Collision is physical; neither launch nor control ignores it.
+        for i in range(24):
+            y = -COURT_WIDTH/2 + (i+.5)*COURT_WIDTH/24
+            height = NET_HEIGHT + (1.07 - NET_HEIGHT)*(2*y/COURT_WIDTH)**2
+            box(f'net_{i}', [COURT_LENGTH/2, y, height/2], [.02, COURT_WIDTH/24, height],
+                '.12 .14 .16 .65', collision=True)
     ball = child(world, 'model', name='tennis_ball')
     # Park outside the camera field until the host launches it.
     child(ball, 'pose', '-5 0 0.04 0 0 0')
@@ -176,14 +258,20 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
             child(bounce, 'restitution_coefficient', '0.35')
             child(bounce, 'threshold', '0.05')
             friction = child(child(surface, 'friction'), 'ode')
-            child(friction, 'mu', '0.6')
-            child(friction, 'mu2', '0.6')
+            child(friction, 'mu', grip_friction if mode == 'gripper' else .6)
+            child(friction, 'mu2', grip_friction if mode == 'gripper' else .6)
+    if mode == 'gripper':
+        sensor = child(link, 'sensor', name='ball_contacts', type='contact')
+        child(sensor, 'always_on', 'true')
+        contact = child(sensor, 'contact')
+        child(contact, 'collision', 'ball')
     # Parallel cameras looking along world +x. Optical axes: right=-y, down=-z.
-    camera_x, camera_z, baseline, hfov = -0.65, 1.0, 0.30, 1.35
+    camera_x, camera_y, camera_z = camera_position
+    baseline, hfov = .30, 1.35
     for side, y in [('left', baseline / 2), ('right', -baseline / 2)]:
         camera = child(world, 'model', name=side + '_camera')
         child(camera, 'static', 'true')
-        child(camera, 'pose', f'{camera_x} {y} {camera_z} 0 0 0')
+        child(camera, 'pose', f'{camera_x} {camera_y+y} {camera_z} 0 0 0')
         sensor = child(child(camera, 'link', name='camera'), 'sensor', name=side, type='camera')
         child(sensor, 'always_on', 'true')
         child(sensor, 'update_rate', camera_hz)
@@ -196,18 +284,20 @@ def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
         child(image, 'format', 'R8G8B8')
         clip = child(spec, 'clip')
         child(clip, 'near', '0.05')
-        child(clip, 'far', '8')
+        child(clip, 'far', '35' if court else '8')
     plugin = child(world, 'plugin', filename='libball_catching_host.so',
                    name='ball_catching::Host')
     for name, value in dict(initial_pose=numbers(initial_pose), launch_position=numbers(launch_position),
                             launch_velocity=numbers(velocity), retention=retention,
                             cup_radius=cup_radius, cup_depth=cup_depth,
                             auto_throw=str(auto_throw).lower(), trial_timeout=trial_timeout,
-                            output=output).items():
+                            output=output, mode=mode, drag_factor=drag,
+                            present=str(present).lower(), allowed_bounces=allowed_bounces,
+                            court_restitution=court_restitution, court_tangent_ratio=court_tangent_ratio).items():
         child(plugin, name, value)
     path = directory / 'world.sdf'
     path.write_text(ET.tostring(sdf, encoding='unicode'))
     focal = camera_width / (2 * math.tan(hfov / 2))
     calibration = dict(focal=focal, cx=camera_width / 2, cy=camera_height / 2,
-                       baseline=baseline, camera_origin=[camera_x, baseline / 2, camera_z])
+                       baseline=baseline, camera_origin=[camera_x, camera_y+baseline / 2, camera_z])
     return path, robot_path, urdf, calibration

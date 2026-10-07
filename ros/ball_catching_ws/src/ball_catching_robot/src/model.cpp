@@ -30,7 +30,8 @@ Arm::Arm(const std::string &xml) : impl_(std::make_unique<Impl>()) {
   if (!model.initString(xml)) throw std::invalid_argument("Invalid robot URDF");
   std::vector<urdf::JointConstSharedPtr> path;
   std::set<std::string> pathNames;
-  auto link = model.getLink("cup_rim");
+  gripper = bool(model.getLink("grasp_center"));
+  auto link = model.getLink(gripper ? "grasp_center" : "cup_rim");
   while (link && link->name != "fr3_link0") {
     auto joint = link->parent_joint;
     if (!joint) break;
@@ -38,7 +39,7 @@ Arm::Arm(const std::string &xml) : impl_(std::make_unique<Impl>()) {
     pathNames.insert(joint->name);
     link = model.getLink(joint->parent_link_name);
   }
-  if (!link || link->name != "fr3_link0") throw std::invalid_argument("Missing FR3-to-cup chain");
+  if (!link || link->name != "fr3_link0") throw std::invalid_argument("Missing FR3-to-tool chain");
   std::function<KDL::RigidBodyInertia(urdf::LinkConstSharedPtr)> body;
   body = [&](urdf::LinkConstSharedPtr child) {
     auto inertia = KDL::RigidBodyInertia::Zero();
@@ -54,8 +55,17 @@ Arm::Arm(const std::string &xml) : impl_(std::make_unique<Impl>()) {
     }
     // Include fixed side branches such as the rigid mounting bracket.
     for (const auto &joint : child->child_joints)
-      if (joint->type == urdf::Joint::FIXED && !pathNames.count(joint->name))
-        inertia = inertia + frame(joint->parent_to_joint_origin_transform) * body(model.getLink(joint->child_link_name));
+      if (
+        !pathNames.count(joint->name) &&
+        (joint->type == urdf::Joint::FIXED || (gripper && joint->type == urdf::Joint::PRISMATIC))) {
+        auto origin = frame(joint->parent_to_joint_origin_transform);
+        // Finger travel changes their contribution only slightly. Include both
+        // fingers at nominal open width in the seven-joint arm dynamics model.
+        if (joint->type == urdf::Joint::PRISMATIC)
+          origin = origin * KDL::Frame(KDL::Vector(
+                              joint->axis.x * .04, joint->axis.y * .04, joint->axis.z * .04));
+        inertia = inertia + origin * body(model.getLink(joint->child_link_name));
+      }
     return inertia;
   };
   std::reverse(path.begin(), path.end());
@@ -116,6 +126,12 @@ Mat7 Arm::mass(const Vec7 &q) const {
   if (impl_->dynamics->JntToMass(joints(q), matrix) < 0) throw std::runtime_error("Mass calculation failed");
   return matrix.data;
 }
+Eigen::Matrix<double, 6, 7> Arm::jacobian(const Vec7 & q) const
+{
+  KDL::Jacobian result(7);
+  if (impl_->jacobian->JntToJac(joints(q), result) < 0) throw std::runtime_error("Jacobian failed");
+  return result.data;
+}
 std::pair<Vec7, Vec7> Arm::speedLimits(const Vec7 &q) const {
   // FR3 interface specification; position and direction affect speed bounds.
   const Vec7 offset((Vec7() << .6599, .2517, .2000, .3533, .5757, .4878, .4628).finished());
@@ -130,7 +146,7 @@ std::pair<Vec7, Vec7> Arm::speedLimits(const Vec7 &q) const {
 void Arm::validatePose(const Vec7 &q) const {
   if (!q.allFinite() || (q.array() < lower.array() + .02).any() || (q.array() > upper.array() - .02).any())
     throw std::invalid_argument("initial_pose must be within joint limits with 0.02 rad margin");
-  if (pose(q).M(2, 2) < .9999)
+  if (!gripper && pose(q).M(2, 2) < .9999)
     throw std::invalid_argument("initial_pose must keep the cup opening upward in world coordinates");
 }
 }

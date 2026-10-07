@@ -5,10 +5,19 @@
 #include <stdexcept>
 
 namespace ball_catching {
-Quintic::Quintic(double startTime, double interval, const MotionState &initial, const Vec7 &target)
-    : start(startTime), duration(interval) {
-  if (!std::isfinite(start) || !std::isfinite(duration) || duration <= 0 ||
-      !initial.q.allFinite() || !initial.dq.allFinite() || !initial.ddq.allFinite() || !target.allFinite())
+Quintic::Quintic(
+  double startTime, double interval, const MotionState & initial, const Vec7 & target)
+: Quintic(startTime, interval, initial, MotionState{target, Vec7::Zero(), Vec7::Zero()})
+{
+}
+Quintic::Quintic(
+  double startTime, double interval, const MotionState & initial, const MotionState & target)
+: start(startTime), duration(interval)
+{
+  if (
+    !std::isfinite(start) || !std::isfinite(duration) || duration <= 0 || !initial.q.allFinite() ||
+    !initial.dq.allFinite() || !initial.ddq.allFinite() || !target.q.allFinite() ||
+    !target.dq.allFinite() || !target.ddq.allFinite())
     throw std::invalid_argument("Invalid quintic endpoints or duration");
   coefficients_.row(0) = initial.q.transpose();
   coefficients_.row(1) = initial.dq.transpose();
@@ -17,9 +26,9 @@ Quintic::Quintic(double startTime, double interval, const MotionState &initial, 
   Eigen::Matrix3d a;
   a << t*t*t, std::pow(t, 4), std::pow(t, 5), 3*t*t, 4*t*t*t, 5*std::pow(t, 4), 6*t, 12*t*t, 20*t*t*t;
   Eigen::Matrix<double, 3, 7> b;
-  b.row(0) = (target - initial.q - initial.dq*t - initial.ddq*t*t/2).transpose();
-  b.row(1) = (-initial.dq - initial.ddq*t).transpose();
-  b.row(2) = -initial.ddq.transpose();
+  b.row(0) = (target.q - initial.q - initial.dq * t - initial.ddq * t * t / 2).transpose();
+  b.row(1) = (target.dq - initial.dq - initial.ddq * t).transpose();
+  b.row(2) = (target.ddq - initial.ddq).transpose();
   coefficients_.bottomRows<3>() = a.partialPivLu().solve(b);
 }
 MotionState Quintic::sample(double now) const {

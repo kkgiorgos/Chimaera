@@ -17,4 +17,12 @@ int main() {
   assert(!retention.Update(true, 2., 1.));
   assert(!retention.Update(true, 2.9, 1.));
   assert(retention.Update(true, 3., 1.));
+  using ball_catching::physicallyGrasped;
+  assert(physicallyGrasped(0, 0, 0, .01, .8, true, true, false));
+  assert(!physicallyGrasped(0, 0, 0, .01, .8, true, false, false));
+  assert(!physicallyGrasped(0, 0, 0, .01, .8, true, true, true));
+  assert(!physicallyGrasped(0, 0, 0, 2., .8, true, true, false));
+  assert(!physicallyGrasped(.1, 0, 0, .01, .8, true, true, false));
+  assert(!physicallyGrasped(0, 0, 0, .01, .02, true, true, false));
+  assert(!physicallyGrasped(NAN, 0, 0, .01, .8, true, true, false));
 }

@@ -15,6 +15,16 @@ inline bool contained(double x, double y, double z, double radius, double depth,
   return true;
 }
 
+inline bool physicallyGrasped(
+  double x, double y, double z, double relativeSpeed, double height, bool leftContact,
+  bool rightContact, bool floorTouched)
+{
+  return std::isfinite(x) && std::isfinite(y) && std::isfinite(z) && std::isfinite(relativeSpeed) &&
+         relativeSpeed >= 0 && std::isfinite(height) && !floorTouched && leftContact &&
+         rightContact && std::abs(x) < .025 && std::abs(y) < .01 && std::abs(z) < .035 &&
+         relativeSpeed < .25 && height > .0335;
+}
+
 class Retention {
  public:
   bool Update(bool inside, double time, double duration) {
