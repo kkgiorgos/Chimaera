@@ -10,6 +10,11 @@ from ament_index_python.packages import get_package_share_directory, get_package
 from ball_catching_sim.flight import BALL_RADIUS, COURT_LENGTH, COURT_WIDTH, NET_HEIGHT, drag_factor
 
 NEUTRAL = [0.0, -math.pi / 4, 0.0, -3 * math.pi / 4, 0.0, math.pi / 2, math.pi / 4]
+CUP_HOME = [0.0, 0.0, 0.0, -0.14, 0.0, 0.50, math.pi / 4]
+
+
+def home_pose(mode):
+    return list(CUP_HOME if mode == 'cup' else NEUTRAL)
 
 
 def child(parent, tag, text=None, **attributes):
@@ -104,16 +109,17 @@ def robot_urdf(radius=0.12, depth=0.14, mode='cup'):
     return ET.tostring(robot, encoding='unicode')
 
 
-def generate(directory, *, initial_pose=NEUTRAL, launch_position=(1.8, 0, 1.6),
+def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
              launch_direction=(-1, 0, 0), launch_speed=3.0, retention=1.0,
              camera_hz=90.0, camera_width=640, camera_height=480,
              physics_step=0.001, cup_radius=0.12, cup_depth=0.14,
              auto_throw=True, trial_timeout=4.0, output='', mode='cup', court=False,
              drag_coefficient=0., air_density=1.225, grip_friction=1.0, present=False, allowed_bounces=0,
              court_restitution=.745, court_tangent_ratio=.6, camera_position=(-.65, 0., 1.)):
+    initial_pose = home_pose(mode) if initial_pose is None else initial_pose
     if len(initial_pose) != 7 or not all(math.isfinite(x) for x in initial_pose):
         raise ValueError('initial_pose must contain seven finite joint angles')
-    if any(abs(q-home) > 1e-8 for q, home in zip(initial_pose, NEUTRAL)):
+    if any(abs(q-home) > 1e-8 for q, home in zip(initial_pose, home_pose(mode))):
         raise ValueError('Every trial must start from the fixed upright home pose')
     if len(launch_position) != 3 or len(launch_direction) != 3:
         raise ValueError('launch position and direction must have three components')

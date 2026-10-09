@@ -1,6 +1,6 @@
 import math
 import pytest
-from ball_catching_sim.scene import generate
+from ball_catching_sim.scene import generate, NEUTRAL
 
 
 @pytest.mark.parametrize('options', [dict(launch_speed=0), dict(retention=-1),
@@ -19,4 +19,10 @@ def test_prepared_catching_pose_is_rejected_for_every_mode(tmp_path, mode):
     prepared = [-1.37723, -1.10247, .784482, -2.10488, 2.74689, 2.49007, 2.19599]
     with pytest.raises(ValueError, match='fixed upright home'):
         generate(tmp_path, mode=mode, initial_pose=prepared)
+    assert not (tmp_path/'robot.urdf').exists()
+
+
+def test_cup_cannot_start_from_the_previous_bent_home(tmp_path):
+    with pytest.raises(ValueError, match='fixed upright home'):
+        generate(tmp_path, mode='cup', initial_pose=NEUTRAL)
     assert not (tmp_path/'robot.urdf').exists()

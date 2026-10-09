@@ -55,7 +55,7 @@ using 14 m/s practice lobs and a side-offset 1280×960
 stereo pair. The robot visually detects a rebound and reacquires its flight.
 [Physics choices and every adjustable default](../../docs/ball-court-practice.md)
 are documented, including the 25 ms earlier closure used for motor startup.
-Every profile and mode starts from fixed upright home
+Every gripper profile starts from fixed home
 `[0°, −45°, 0°, −135°, 0°, 90°, 45°]`. Custom initial poses are rejected.
 The robot can plan an approach toward its workspace centre once images show an
 incoming ball, then refine the actual interception. All movement happens during
@@ -76,10 +76,27 @@ python3 ros/ball_catching_ws/scripts/run_trial.py \
   --output ros/ball_catching_ws/results/custom \
   --present
 
-# Retain the original cup example:
+# Original flat cup challenge (use the lofted suite below for demonstrations):
 python3 ros/ball_catching_ws/scripts/run_trial.py \
   --output ros/ball_catching_ws/results/cup --mode cup
 ```
+
+The cup now starts from a tall vertical home, with an 8° elbow bend required by
+joint limits, and rotates its opening upward during the visual approach. It
+matches part of the incoming velocity and follows a bounded braking segment
+instead of stopping abruptly at interception. Run the adapted lofted examples
+and generate one dashboard with:
+
+```zsh
+python3 ros/ball_catching_ws/scripts/run_cup_examples.py \
+  --output ros/ball_catching_ws/results/cup-vertical-demo
+```
+
+Use `--cases fast` for just the 5 m/s loft and `--flat` for the older flat
+challenge geometry. The lofts and camera placement give the arm physical flight
+time to move from vertical home. The dashboard includes split perception
+timings, distributions and cadence, planned braking markers, and an interactive
+pipeline reference. See [cup home, braking and timing definitions](../../docs/ball-cup-home-braking.md).
 
 A single success does not qualify a five-throw parameter point. `--present`
 raises/turns the held ball as far as a feasible bounded trajectory permits;
@@ -105,7 +122,7 @@ Other runner options include `--position X Y Z`, `--camera-hz`,
 `--court-tangent-ratio`, and `--wall-timeout`. `--direction X Y Z` selects an
 explicit, normalized direction instead of an aimed trajectory; combine it with
 `--no-court` for diagnostic throws. Those manual throws do not receive the
-court experiment's geometric preflight checks. Every run still starts upright;
+court experiment's geometric preflight checks. Every run starts from its mode's fixed home;
 reachability-check orientation options never change the initial pose.
 For manual triggering, launch with `auto_throw:=false`, then call
 `ros2 service call /experiment/throw std_srvs/srv/Trigger '{}'`.

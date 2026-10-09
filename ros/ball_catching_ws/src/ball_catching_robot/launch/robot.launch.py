@@ -13,14 +13,16 @@ def start(context):
     get = lambda name: LaunchConfiguration(name).perform(context)
     common = {'use_sim_time': get('use_sim_time').lower() == 'true',
               'robot_file': get('robot_file'), 'output': get('output'),
-              'initial_pose': json.loads(get('initial_pose'))}
-    upright = [0., -math.pi/4, 0., -3*math.pi/4, 0., math.pi/2, math.pi/4]
+              'initial_pose': None}
+    gripper = get('mode') == 'gripper'
+    upright = [0., -math.pi/4, 0., -3*math.pi/4, 0., math.pi/2, math.pi/4] if gripper \
+        else [0., 0., 0., -.14, 0., .50, math.pi/4]
+    common['initial_pose'] = json.loads(get('initial_pose')) if get('initial_pose') != 'auto' else upright
     if len(common['initial_pose']) != 7 or any(
             not math.isfinite(q) or abs(q-home) > 1e-8
             for q, home in zip(common['initial_pose'], upright)):
         raise ValueError('Robot must start from the fixed upright home pose')
     common['initial_pose'] = upright
-    gripper = get('mode') == 'gripper'
     calibration = json.loads(get('calibration'))
     nodes = [Node(package='ball_catching_robot', executable='perception',
                  parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output'],
@@ -42,7 +44,7 @@ def start(context):
 
 def generate_launch_description():
     defaults = dict(robot_file='', output='', use_sim_time='true', mode='cup', present='false', gripper_motor_lead='0.0', presentation_hold='0.25',
-                    initial_pose='[0.0,-0.7853981634,0.0,-2.3561944902,0.0,1.5707963268,0.7853981634]',
+                    initial_pose='auto',
                     calibration='{"focal":400.0,"cx":320.0,"cy":240.0,"baseline":0.3,"camera_origin":[-0.65,0.15,1.0]}')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],
                               OpaqueFunction(function=start)])

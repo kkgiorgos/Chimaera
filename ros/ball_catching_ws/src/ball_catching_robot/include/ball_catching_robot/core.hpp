@@ -15,6 +15,7 @@ using Vec7 = Eigen::Matrix<double, 7, 1>;
 using Mat6 = Eigen::Matrix<double, 6, 6>;
 using Mat7 = Eigen::Matrix<double, 7, 7>;
 inline const Vec3 gravity(0., 0., -9.81);
+Vec7 uprightHome(bool gripper = false);
 
 class Arm
 {
@@ -30,6 +31,7 @@ public:
   Eigen::Matrix<double, 6, 7> jacobian(const Vec7 & q) const;
   std::pair<Vec7, Vec7> speedLimits(const Vec7 & q) const;
   void validatePose(const Vec7 & q) const;
+  void validateHome(const Vec7 & q) const;
   std::vector<std::string> names;
   Vec7 lower, upper, velocity, effort;
   Vec7 acceleration = Vec7::Constant(10.);
@@ -56,6 +58,12 @@ public:
 private:
   Eigen::Matrix<double, 6, 7> coefficients_;
 };
+
+// Follow the visually estimated incoming velocity, then brake with continuous
+// joint position, velocity and acceleration while keeping the cup upright.
+std::optional<std::vector<Quintic>> cupCatchTrajectory(
+  const Arm & arm, double start, double flightTime, const MotionState & initial,
+  const Vec7 & target, const Vec3 & incomingVelocity, double matchingSpeed, double brakeTime);
 
 struct Circle
 {

@@ -23,9 +23,17 @@ def _stats(values):
     values = sorted(x for x in values if isinstance(x, (float, int)) and math.isfinite(x))
     if not values:
         return None
-    return dict(median_ms=statistics.median(values)*1000,
+    return dict(minimum_ms=values[0]*1000, mean_ms=statistics.mean(values)*1000,
+                median_ms=statistics.median(values)*1000,
                 p95_ms=values[min(len(values)-1, math.ceil(.95*len(values))-1)]*1000,
+                p99_ms=values[min(len(values)-1, math.ceil(.99*len(values))-1)]*1000,
                 maximum_ms=values[-1]*1000, samples=len(values))
+
+
+def _cadence(records, field):
+    times = sorted(set(r[field] for r in records if field in r))
+    gaps = [b-a for a, b in zip(times, times[1:]) if b > a]
+    return dict(rate_hz=1/statistics.mean(gaps), gaps=_stats(gaps)) if gaps else None
 
 
 def load_trial(directory):
@@ -33,8 +41,11 @@ def load_trial(directory):
     result = json.loads((directory / 'result.json').read_text())
     config = json.loads((directory / 'experiment.json').read_text())
     upright = [0., -math.pi/4, 0., -3*math.pi/4, 0., math.pi/2, math.pi/4]
+    vertical = [0., 0., 0., -.14, 0., .50, math.pi/4]
     initial = config.get('initial_pose', [])
-    start_condition = ('upright_home' if len(initial) == 7 and
+    start_condition = ('vertical_home' if len(initial) == 7 and
+                       all(abs(q-home) < 1e-6 for q, home in zip(initial, vertical))
+                       else 'upright_home' if len(initial) == 7 and
                        all(abs(q-home) < 1e-6 for q, home in zip(initial, upright))
                        else 'historical_prepared_pose' if initial else 'unrecorded')
     launch = result['launch_time']
@@ -120,6 +131,56 @@ def load_trial(directory):
     if arrival_record and 'ball_vx' in arrival_record:
         speed = math.sqrt(sum(arrival_record['ball_v' + axis]**2 for axis in 'xyz'))
     actual_plans = [r for r in plans if r.get('status') == 'planned']
+    braking = next((r for r in reversed(actual_plans)
+                    if 'braking_start_time' in r and 'braking_end_time' in r), None)
+    home_error = max(abs(rows[0][f'fr3_joint{i+1}']-q) for i, q in enumerate(initial)) \
+        if start_condition in ('vertical_home', 'upright_home') and \
+        all(f'fr3_joint{i+1}' in rows[0] for i in range(7)) else None
+    control_records = [r for r in (control_timing or controls) if r['time'] >= launch]
+    detailed_perception = any('image_conversion_wall_seconds' in r for r in perception)
+    details = []
+    for name, stage, records, source, field, clock, timestamp in [
+            ('Perception callback · total', 'perception', perception, 'perception.jsonl',
+             'processing_wall_seconds', 'wall', 'capture_time'),
+            ('Image preparation', 'perception', perception, 'perception.jsonl',
+             'image_conversion_wall_seconds', 'wall', 'capture_time'),
+            ('Detection + stereo' if detailed_perception else 'Image preparation + detection (legacy)',
+             'perception', perception, 'perception.jsonl', 'detection_wall_seconds', 'wall', 'capture_time'),
+            ('State estimation' if detailed_perception else 'Estimation + geometry publish (legacy)',
+             'perception', perception, 'perception.jsonl', 'estimation_wall_seconds', 'wall', 'capture_time'),
+            ('State + geometry publication', 'perception', perception, 'perception.jsonl',
+             'publication_wall_seconds', 'wall', 'capture_time'),
+            ('Interception search', 'planning', plans, 'interception.jsonl',
+             'planning_wall_seconds', 'wall', 'time'),
+            ('Arm control update', 'control', control_records,
+             'control_timing.jsonl' if control_timing else 'control.jsonl',
+             'processing_wall_seconds', 'wall', 'time'),
+            ('Capture → matched stereo callback', 'transport', perception, 'perception.jsonl',
+             'observation_age', 'simulation', 'capture_time')]:
+        timed = [r for r in records if isinstance(r.get(field), (int, float))]
+        durations = [r[field] for r in timed]
+        if field == 'observation_age':
+            timed = perception
+            durations = [r['receive_time']-r['capture_time'] for r in perception]
+        cadence = _cadence(timed, timestamp)
+        # These are the rates expected of the recorded stream: camera frames
+        # for perception, admitted searches for planning (60 ms gate), and
+        # the effort controller timer. The planner's outer timer is 30 Hz.
+        desired_hz = (config.get('camera_hz', 90.) if stage == 'perception' else
+                      1. / .06 if stage == 'planning' else
+                      250. if stage == 'control' and config.get('mode') == 'cup' else None)
+        details.append(dict(name=name, stage=stage, source=source,
+                            field='receive_time - capture_time' if field == 'observation_age' else field, clock=clock,
+                            stats=_stats(durations), cadence=cadence,
+                            desired_hz=desired_hz,
+                            achieved_hz=cadence['rate_hz'] if cadence else None,
+                            rate_percent=(100 * cadence['rate_hz'] / desired_hz
+                                          if cadence and desired_hz else None)))
+    if config.get('mode') != 'cup':
+        details.append(dict(name='Gripper control update', stage='control', source='gripper.jsonl',
+                            field='processing_wall_seconds', clock='wall',
+                            stats=_stats([r.get('processing_wall_seconds') for r in grips]),
+                            cadence=_cadence(grips, 'time')))
     post_track = None
     if last_bounce is not None:
         reset = max([last_bounce, *[r['capture_time'] for r in perception
@@ -127,6 +188,18 @@ def load_trial(directory):
         post_track = next((r['capture_time'] for r in tracked if r['capture_time'] > reset), None)
     approaches = [r for r in plans if r.get('status') == 'visual_approach']
     summary = dict(start_condition=start_condition,
+                   timing_detail=details,
+                   perception_counts=dict(pairs=len(perception),
+                                          detected=sum('observation' in r for r in perception),
+                                          tracked=len(tracked)),
+                   planning_counts=dict(updates=len(plans), planned=len(actual_plans),
+                                        infeasible=sum(r.get('status') == 'no_feasible_intercept' for r in plans)),
+                   home_error_at_launch_degrees=math.degrees(home_error) if home_error is not None else None,
+                   braking_start_seconds=braking['braking_start_time']-launch if braking else None,
+                   braking_end_seconds=braking['braking_end_time']-launch if braking else None,
+                   braking_duration=braking['braking_end_time']-braking['braking_start_time'] if braking else None,
+                   planned_cup_speed=math.sqrt(sum(v*v for v in braking['cup_velocity']))
+                       if braking and 'cup_velocity' in braking else None,
                    visual_approach_seconds=approaches[0]['time']-launch if approaches else None,
                    visual_approach_duration=approaches[0]['duration'] if approaches else None,
                    hand_position_at_launch=hand_start, hand_displacement_to_flight_end=hand_displacement,

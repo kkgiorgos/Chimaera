@@ -50,4 +50,41 @@ bool Quintic::feasible(const Arm &arm) const {
   }
   return true;
 }
+std::optional<std::vector<Quintic>> cupCatchTrajectory(
+  const Arm & arm, double start, double flightTime, const MotionState & initial,
+  const Vec7 & target, const Vec3 & incomingVelocity, double matchingSpeed, double brakeTime)
+{
+  if (arm.gripper || !incomingVelocity.allFinite() || incomingVelocity.norm() < 1e-9 ||
+      !std::isfinite(matchingSpeed) || matchingSpeed <= 0 ||
+      !std::isfinite(brakeTime) || brakeTime <= 0)
+    throw std::invalid_argument("Invalid cup velocity or braking duration");
+  const auto jacobian = arm.jacobian(target);
+  Vec6 twist = Vec6::Zero();
+  twist.head<3>() = incomingVelocity * std::min(1., matchingSpeed / incomingVelocity.norm());
+  Vec7 dq = jacobian.transpose() *
+            (jacobian * jacobian.transpose() + .0001 * Mat6::Identity()).ldlt().solve(twist);
+  const auto [lo, hi] = arm.speedLimits(target);
+  double scale = 1.;
+  for (int i = 0; i < 7; ++i) {
+    const double limit = dq[i] >= 0 ? hi[i] : -lo[i];
+    scale = std::min(scale, .75 * limit / std::max(std::abs(dq[i]), 1e-9));
+  }
+  dq *= scale;
+  if ((jacobian * dq).head<3>().dot(incomingVelocity.normalized()) < .05) return {};
+  const MotionState caught{target, dq, Vec7::Zero()};
+  Quintic approach(start, flightTime, initial, caught);
+  Quintic brake(start + flightTime, brakeTime, caught, (target + dq * brakeTime / 2).eval());
+  if (!approach.feasible(arm) || !brake.feasible(arm)) return {};
+  const double initialTilt = std::acos(std::clamp(arm.pose(initial.q).M(2, 2), -1., 1.));
+  for (const auto & segment : {approach, brake}) {
+    for (int i = 0; i <= 30; ++i) {
+      const auto pose = arm.pose(segment.sample(segment.start + segment.duration * i / 30.).q);
+      // Upright throughout approach and braking; keep the rim safely above the
+      // floor. Bounds apply to commanded motion, not idealized physics poses.
+      const double tilt = segment.start == start ? .08 + initialTilt * (1. - i / 30.) : .08;
+      if (pose.M(2, 2) < std::cos(tilt) || pose.p.z() < .25) return {};
+    }
+  }
+  return std::vector<Quintic>{approach, brake};
+}
 }

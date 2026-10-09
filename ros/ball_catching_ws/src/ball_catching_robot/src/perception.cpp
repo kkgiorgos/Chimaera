@@ -79,16 +79,20 @@ private:
       else
         images[i] = view;
     }
+    const double conversionSeconds = elapsed(started);
+    const auto detectionStarted = WallClock::now();
     const double capture = seconds(msg->header.stamp);
     const auto detection = stereo_.detect(
       images[0], images[1],
       estimateDrag_ ? dragFilter_.predict(capture) : filter_.predict(capture));
-    const double detectionSeconds = elapsed(started);
+    const double detectionSeconds = elapsed(detectionStarted);
     if (!detection) {
       record_.write(
         {{"capture_time", capture},
          {"receive_time", lastImages_},
-         {"processing_wall_seconds", detectionSeconds},
+         {"processing_wall_seconds", elapsed(started)},
+         {"image_conversion_wall_seconds", conversionSeconds},
+         {"detection_wall_seconds", detectionSeconds},
          {"status", "no_detection"}});
       return;
     }
@@ -98,18 +102,45 @@ private:
       estimateDrag_
         ? dragFilter_.observe(detection->point, capture, stereo_.observationNoise(detection->point))
         : filter_.observe(detection->point, capture);
+    const double estimationSeconds = elapsed(estimationStarted);
+    const auto publicationStarted = WallClock::now();
     geometry_msgs::msg::Vector3Stamped geometry;
     geometry.header.stamp = msg->header.stamp;
     geometry.header.frame_id = "ball";
     geometry.vector.x = detection->radius;
     geometry.vector.y = estimateDrag_ ? dragFilter_.drag() : 0.;
     geometry_->publish(geometry);
+    if (estimate) {
+      nav_msgs::msg::Odometry state;
+      state.header.stamp = msg->header.stamp;
+      state.header.frame_id = "world";
+      state.child_frame_id = "ball";
+      auto & p = state.pose.pose.position;
+      p.x = (*estimate)[0];
+      p.y = (*estimate)[1];
+      p.z = (*estimate)[2];
+      state.pose.pose.orientation.w = 1;
+      auto & v = state.twist.twist.linear;
+      v.x = (*estimate)[3];
+      v.y = (*estimate)[4];
+      v.z = (*estimate)[5];
+      const Mat6 covariance = estimateDrag_ ? dragFilter_.covariance() : filter_.covariance();
+      for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) {
+          state.pose.covariance[i * 6 + j] = covariance(i, j);
+          state.twist.covariance[i * 6 + j] = covariance(i + 3, j + 3);
+        }
+      state_->publish(state);
+    }
+    const double publicationSeconds = elapsed(publicationStarted);
     record_.write(
       {{"capture_time", capture},
        {"receive_time", lastImages_},
        {"processing_wall_seconds", elapsed(started)},
+       {"image_conversion_wall_seconds", conversionSeconds},
        {"detection_wall_seconds", detectionSeconds},
-       {"estimation_wall_seconds", elapsed(estimationStarted)},
+       {"estimation_wall_seconds", estimationSeconds},
+       {"publication_wall_seconds", publicationSeconds},
        {"observation", values(detection->point)},
        {"drag", geometry.vector.y},
        {"track_reset", estimateDrag_ && dragFilter_.resets() != resetsBefore ? 1. : 0.},
@@ -118,27 +149,6 @@ private:
                          ? Field(values(Vec6(dragFilter_.covariance().diagonal().cwiseSqrt())))
                          : Field(nullptr)},
        {"state", estimate ? Field(values(*estimate)) : Field(nullptr)}});
-    if (!estimate) return;
-    nav_msgs::msg::Odometry state;
-    state.header.stamp = msg->header.stamp;
-    state.header.frame_id = "world";
-    state.child_frame_id = "ball";
-    auto & p = state.pose.pose.position;
-    p.x = (*estimate)[0];
-    p.y = (*estimate)[1];
-    p.z = (*estimate)[2];
-    state.pose.pose.orientation.w = 1;
-    auto & v = state.twist.twist.linear;
-    v.x = (*estimate)[3];
-    v.y = (*estimate)[4];
-    v.z = (*estimate)[5];
-    const Mat6 covariance = estimateDrag_ ? dragFilter_.covariance() : filter_.covariance();
-    for (int i = 0; i < 3; ++i)
-      for (int j = 0; j < 3; ++j) {
-        state.pose.covariance[i * 6 + j] = covariance(i, j);
-        state.twist.covariance[i * 6 + j] = covariance(i + 3, j + 3);
-      }
-    state_->publish(state);
   }
   Stereo stereo_;
   BallFilter filter_;

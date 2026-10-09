@@ -14,7 +14,7 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-from ball_catching_sim.scene import generate, robot_urdf, NEUTRAL
+from ball_catching_sim.scene import generate, robot_urdf, home_pose
 from ball_catching_sim.flight import aimed_throw, bounced_throw, drag_factor, court_net_height, COURT_LENGTH, NET_HEIGHT
 
 
@@ -28,7 +28,8 @@ def start(context):
     temporary = tempfile.TemporaryDirectory(prefix='ball-catching-')
     scene_directory = output or temporary.name
     mode = get('mode')
-    initial_pose = json.loads(get('initial_pose')) if get('initial_pose') != 'auto' else NEUTRAL
+    home = home_pose(mode)
+    initial_pose = json.loads(get('initial_pose')) if get('initial_pose') != 'auto' else home
     validator = Path(get_package_prefix('ball_catching_robot')) / 'lib/ball_catching_robot/validate_model'
     orientation = get('home_orientation')
     if orientation not in ('upward', 'forward'):
@@ -37,10 +38,10 @@ def start(context):
         if get('home_pitch') != 'auto':
             return ['--pitched-target', get('home_pitch'), *map(str, target)]
         return ['--upward-target' if orientation == 'upward' else '--target', *map(str, target)]
-    if len(initial_pose) != 7 or any(not math.isfinite(q) or abs(q-home) > 1e-8
-                                     for q, home in zip(initial_pose, NEUTRAL)):
+    if len(initial_pose) != 7 or any(not math.isfinite(q) or abs(q-home_angle) > 1e-8
+                                     for q, home_angle in zip(initial_pose, home)):
         raise ValueError('Every trial must start from the fixed upright home pose')
-    initial_pose = list(NEUTRAL)
+    initial_pose = home
     options = dict(initial_pose=initial_pose,
                    launch_position=json.loads(get('launch_position')),
                    launch_direction=json.loads(get('launch_direction')),
@@ -77,7 +78,7 @@ def start(context):
         options['launch_direction'] = list(planned.direction)
     world, robot_file, urdf, calibration = generate(scene_directory, **options)
     if output:
-        record = {**options, 'start_condition': 'upright_home',
+        record = {**options, 'start_condition': 'vertical_home' if mode == 'cup' else 'upright_home',
                   'arc': get('arc') if planned else None, 'target_pitch': get('home_pitch'),
                   'gripper_motor_lead': float(get('gripper_motor_lead')),
                   'presentation_hold': max(.25, options['retention']+.05),

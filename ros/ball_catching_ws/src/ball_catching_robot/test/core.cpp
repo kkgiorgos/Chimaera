@@ -128,6 +128,44 @@ TEST(Motion, NonzeroTerminalVelocityAndContinuousBraking)
   EXPECT_LT((brake.sample(1.).dq - end.dq).norm(), 1e-10);
   EXPECT_LT(brake.sample(1.4).dq.norm(), 1e-10);
 }
+TEST(Motion, CupFollowsIncomingBallAndBrakesUprightWithinLimits)
+{
+  Arm arm(robot());
+  const auto home = uprightHome();
+  const Vec3 incoming(-3., .2, -5.);
+  const auto motion = cupCatchTrajectory(
+    arm, 2., 1.8, {home, Vec7::Zero(), Vec7::Zero()}, neutral(), incoming, .35, .4);
+  ASSERT_TRUE(motion);
+  ASSERT_EQ(motion->size(), 2u);
+  const auto & approach = motion->front();
+  const auto & brake = motion->back();
+  const auto entry = approach.sample(brake.start);
+  const auto braking = brake.sample(brake.start);
+  const Vec3 velocity = (arm.jacobian(entry.q) * entry.dq).head<3>();
+  EXPECT_GT(velocity.dot(incoming.normalized()), .1);
+  EXPECT_LT((incoming - velocity).norm(), incoming.norm());
+  EXPECT_LT((entry.q - braking.q).norm(), 1e-10);
+  EXPECT_LT((entry.dq - braking.dq).norm(), 1e-10);
+  EXPECT_LT((entry.ddq - braking.ddq).norm(), 1e-10);
+  const auto stopped = brake.sample(brake.start + brake.duration);
+  EXPECT_LT(stopped.dq.norm(), 1e-10);
+  EXPECT_LT(stopped.ddq.norm(), 1e-10);
+  for (const auto & segment : *motion) {
+    EXPECT_TRUE(segment.feasible(arm));
+    for (int i = 0; i <= 100; ++i) {
+      const auto pose = arm.pose(segment.sample(segment.start + segment.duration * i / 100.).q);
+      const double tilt = segment.start == approach.start ? .08 + .36 * (1. - i / 100.) : .08;
+      EXPECT_GE(pose.M(2, 2), std::cos(tilt));
+      EXPECT_GE(pose.p.z(), .25);
+    }
+  }
+  EXPECT_FALSE(cupCatchTrajectory(
+    arm, 0., .01, {home, Vec7::Zero(), Vec7::Zero()}, home + Vec7::Constant(.5), incoming, 1., .4));
+  EXPECT_THROW(
+    cupCatchTrajectory(
+      arm, 0., 1., {home, Vec7::Zero(), Vec7::Zero()}, home, Vec3::Zero(), .35, .4),
+    std::invalid_argument);
+}
 TEST(Filter, MatchesPythonOnNoisyObservations)
 {
   Reference reference;
@@ -287,8 +325,20 @@ TEST(Arm, StartingPoseValidation)
   EXPECT_THROW(arm.validatePose(Vec7::Zero()), std::invalid_argument);
   auto q = neutral();
   q[4] = .5;
-  EXPECT_THROW(arm.validatePose(q), std::invalid_argument);
+  EXPECT_THROW(arm.validateHome(q), std::invalid_argument);
   EXPECT_THROW(Arm("<robot/>"), std::invalid_argument);
+}
+TEST(Arm, HomeCannotBeReplacedWithAnUprightPreparedPose)
+{
+  Arm arm(robot());
+  arm.validateHome(uprightHome());
+  EXPECT_THROW(arm.validateHome(neutral()), std::invalid_argument);
+  auto prepared = uprightHome();
+  prepared[0] = .1;
+  arm.validatePose(prepared);
+  EXPECT_THROW(arm.validateHome(prepared), std::invalid_argument);
+  EXPECT_THROW(arm.validateHome(Vec7::Constant(NAN)), std::invalid_argument);
+  EXPECT_GT(arm.pose(uprightHome()).p.z(), 1.1);
 }
 
 TEST(Flight, VisualGroundReversalReacquiresWithoutKnowingRestitution)

@@ -7,7 +7,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from report import load_trial
+from report import load_trial, _stats, _cadence
 from run_experiment import prepare_point
 
 
@@ -19,6 +19,19 @@ def test_seeded_targets_are_shared_across_speed_points():
     assert [t['target'] for t in slow] == [t['target'] for t in fast]
     assert len({tuple(t['target']) for t in slow}) == 5
     assert all(t['predicted_arrival_speed'] < 40. for t in fast)
+
+
+def test_detailed_timing_statistics_convert_seconds_and_cadence_uses_timestamps():
+    stats = _stats([.001, .002, .003, .010, None, float('nan')])
+    assert stats['samples'] == 4
+    assert stats['minimum_ms'] == 1.
+    assert stats['median_ms'] == 2.5
+    assert stats['mean_ms'] == 4.
+    assert stats['p95_ms'] == stats['p99_ms'] == stats['maximum_ms'] == 10.
+    cadence = _cadence([dict(time=t) for t in [1.0, 1.01, 1.03, 1.03]], 'time')
+    assert cadence['rate_hz'] == pytest.approx(1/.015)
+    assert cadence['gaps']['p95_ms'] == pytest.approx(20.)
+    assert _cadence([dict(time=1.)], 'time') is None
 
 
 def test_impossible_point_and_invalid_jitter_are_rejected():
@@ -43,6 +56,9 @@ def test_report_uses_incoming_velocity_and_separates_reaction_window(tmp_path):
     (tmp_path / 'experiment.json').write_text(json.dumps(dict(launch_speed=20.,
         launch_position=[23.77, 0, 2.5], target=[.5, 0, .8],
         initial_pose=[-1.37723, -1.10247, .784482, -2.10488, 2.74689, 2.49007, 2.19599])))
+    (tmp_path / 'interception.jsonl').write_text(json.dumps(dict(time=1.5, status='planned',
+        intercept_time=2.5, braking_start_time=2.5, braking_end_time=2.9,
+        cup_velocity=[-.3, 0., -.4]))+'\n')
     (tmp_path / 'perception.jsonl').write_text(json.dumps(dict(capture_time=2., receive_time=2.01,
         processing_wall_seconds=.003, state=[0]*6))+'\n')
     fields = ['time', 'ball_x', 'ball_y', 'ball_z', 'launched', 'ball_vx', 'ball_vy', 'ball_vz',
@@ -61,6 +77,18 @@ def test_report_uses_incoming_velocity_and_separates_reaction_window(tmp_path):
     assert trial['frames'][0]['joints']['fr3_joint1'] == .1
     assert trial['summary']['processing']['Planning'] is None
     assert trial['summary']['start_condition'] == 'historical_prepared_pose'
+    assert trial['summary']['braking_start_seconds'] == 1.5
+    assert trial['summary']['braking_end_seconds'] == 1.9
+    assert trial['summary']['braking_duration'] == pytest.approx(.4)
+    assert trial['summary']['planned_cup_speed'] == .5
+    assert trial['summary']['home_error_at_launch_degrees'] is None
+    details = {r['name']: r for r in trial['summary']['timing_detail']}
+    assert details['Perception callback · total']['stats']['p95_ms'] == 3.
+    assert details['Perception callback · total']['clock'] == 'wall'
+    age = details['Capture → matched stereo callback']
+    assert age['stats']['median_ms'] == pytest.approx(10.)
+    assert age['clock'] == 'simulation'
+    assert details['Image preparation']['stats'] is None
 
 
 def test_report_does_not_call_post_palm_stop_the_arrival_speed(tmp_path):

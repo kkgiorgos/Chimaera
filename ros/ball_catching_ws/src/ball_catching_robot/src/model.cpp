@@ -146,7 +146,16 @@ std::pair<Vec7, Vec7> Arm::speedLimits(const Vec7 &q) const {
 void Arm::validatePose(const Vec7 &q) const {
   if (!q.allFinite() || (q.array() < lower.array() + .02).any() || (q.array() > upper.array() - .02).any())
     throw std::invalid_argument("initial_pose must be within joint limits with 0.02 rad margin");
-  if (!gripper && pose(q).M(2, 2) < .9999)
-    throw std::invalid_argument("initial_pose must keep the cup opening upward in world coordinates");
+}
+Vec7 uprightHome(bool gripper) {
+  if (!gripper)
+    return (Vec7() << 0., 0., 0., -.14, 0., .50, .7853981633974483).finished();
+  return (Vec7() << 0., -.7853981633974483, 0., -2.356194490192345, 0.,
+          1.5707963267948966, .7853981633974483).finished();
+}
+void Arm::validateHome(const Vec7 &q) const {
+  validatePose(q);
+  if ((q - uprightHome(gripper)).cwiseAbs().maxCoeff() > 1e-8)
+    throw std::invalid_argument("Robot must start from the fixed upright home pose");
 }
 }

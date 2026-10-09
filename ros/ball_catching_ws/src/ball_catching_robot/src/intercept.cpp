@@ -16,10 +16,10 @@ public:
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
     record_(declare_parameter<std::string>("output", ""), "interception")
   {
-    const auto home = jointVector(declare_parameter<std::vector<double>>(
-      "initial_pose",
-      {0., -.7853981633974483, 0., -2.356194490192345, 0., 1.5707963267948966, .7853981633974483}));
-    arm_.validatePose(home);
+    const auto home = jointVector(
+      declare_parameter<std::vector<double>>("initial_pose", values(uprightHome(arm_.gripper))));
+    arm_.validateHome(home);
+    home_ = home;
     present_ = declare_parameter("present", false);
     presentationHold_ = declare_parameter("presentation_hold", .25);
     if (!std::isfinite(presentationHold_) || presentationHold_ < .25)
@@ -28,7 +28,7 @@ public:
     if (!std::isfinite(motorLead_) || motorLead_ < 0 || motorLead_ > .1)
       throw std::invalid_argument("Gripper motor lead must be 0–100 ms");
     const auto pose = arm_.pose(home);
-    rotation_ = pose.M;
+    rotation_ = arm_.gripper ? pose.M : arm_.pose(uprightHome(true)).M;
     height_ = pose.p.z();
     commands_ =
       create_publisher<trajectory_msgs::msg::JointTrajectory>("/robot/joint_trajectory", 1);
@@ -89,7 +89,10 @@ private:
       planGrasp(time);
       return;
     }
-    if (!feedback_.valid || !ball_ || !radius_ || time < holdUntil_) return;
+    if (
+      !feedback_.valid || !ball_ || !radius_ || time < holdUntil_ ||
+      (cupInterceptTime_ > 0 && time >= cupInterceptTime_ - .025))
+      return;
     const double age = time - ball_->time;
     if (age < 0 || age > .1 || time - feedback_.time > .05 || time - lastPlan_ < .06) return;
     const Vec3 position = ball_->position + ball_->velocity * age + .5 * gravity * age * age;
@@ -103,13 +106,15 @@ private:
       return;
     }
     const auto started = WallClock::now();
-    const MotionState initial = trajectory_ ? trajectory_->sample(time)
-                                            : MotionState{feedback_.q, feedback_.dq, Vec7::Zero()};
-    std::optional<Quintic> best;
-    Vec3 bestPoint;
-    Vec7 bestTarget;
+    lastPlan_ = time;
+    const MotionState initial = desired(time);
+    std::vector<Quintic> best;
+    Vec3 bestPoint, bestVelocity;
+    int inverseSolutions = 0;
     double score = std::numeric_limits<double>::infinity();
-    for (double height : {height_, height_ + .10, height_ - .10, height_ - .20, height_ + .20}) {
+    for (double height :
+         {height_, height_ + .05, height_ - .05, height_ + .10, height_ - .10, height_ + .15,
+          height_ - .15, height_ + .20, height_ - .20}) {
       const double discriminant =
         velocity.z() * velocity.z() + 2 * 9.81 * (position.z() - height - *radius_ - .005);
       if (discriminant < 0) continue;
@@ -119,48 +124,52 @@ private:
       point.z() = height;
       const double distance = point.head<2>().norm();
       if (distance <= .12 || distance >= 1.10 || height <= .20 || height >= 1.30) continue;
-      const auto target = arm_.inverse(point, rotation_, feedback_.q);
+      auto target = arm_.inverse(point, rotation_, feedback_.q, 120);
+      // A nearly straight arm is an IK singularity. A second numerical seed
+      // selects a bent-elbow solution without changing the physical start pose.
+      if (!target) target = arm_.inverse(point, rotation_, uprightHome(true), 120);
       if (!target) continue;
-      Quintic trajectory(time, dt, initial, *target);
-      const double cost = (*target - initial.q).norm();
-      if (cost < score && trajectory.feasible(arm_)) {
-        score = cost;
-        best = trajectory;
-        bestPoint = point;
-        bestTarget = *target;
+      ++inverseSolutions;
+      const Vec3 incoming = velocity + gravity * dt;
+      for (double matchingSpeed : {1.5, 1., .7, .35, .2, .1}) {
+        for (double brakeTime : {.25, .4, .6}) {
+          const auto candidate = cupCatchTrajectory(
+            arm_, time, dt, initial, *target, incoming, matchingSpeed, brakeTime);
+          if (!candidate) continue;
+          const auto catchState = candidate->front().sample(time + dt);
+          const Vec3 cupVelocity = (arm_.jacobian(*target) * catchState.dq).head<3>();
+          const double cost =
+            (*target - initial.q).norm() + .10 * dt + .8 * (incoming - cupVelocity).norm();
+          if (cost < score) {
+            score = cost;
+            best = *candidate;
+            bestPoint = point;
+            bestVelocity = cupVelocity;
+          }
+        }
       }
     }
-    if (!best) {
+    if (best.empty()) {
       record_.write(
         {{"time", time},
          {"capture_time", ball_->time},
          {"status", "no_feasible_intercept"},
+         {"inverse_solutions", static_cast<double>(inverseSolutions)},
          {"planning_wall_seconds", elapsed(started)}});
       return;
     }
-    trajectory_ = best;
-    lastPlan_ = time;
-    trajectory_msgs::msg::JointTrajectory msg;
-    // Keep planning time despite computation/transport delays.
-    msg.header.stamp = stamp;
-    msg.joint_names = arm_.names;
-    trajectory_msgs::msg::JointTrajectoryPoint first, last;
-    first.positions = values(initial.q);
-    first.velocities = values(initial.dq);
-    first.accelerations = values(initial.ddq);
-    last.positions = values(bestTarget);
-    last.velocities = values(Vec7::Zero().eval());
-    last.accelerations = last.velocities;
-    last.time_from_start = rclcpp::Duration::from_seconds(best->duration);
-    msg.points = {first, last};
-    commands_->publish(msg);
+    publish(best);
+    cupInterceptTime_ = best.back().start;
     record_.write(
       {{"time", time},
        {"capture_time", ball_->time},
        {"status", "planned"},
        {"target", values(bestPoint)},
-       {"target_joints", values(bestTarget)},
-       {"intercept_time", time + best->duration},
+       {"target_joints", values(best.front().sample(cupInterceptTime_).q)},
+       {"intercept_time", cupInterceptTime_},
+       {"cup_velocity", values(bestVelocity)},
+       {"braking_start_time", best.back().start},
+       {"braking_end_time", best.back().start + best.back().duration},
        {"planning_wall_seconds", elapsed(started)}});
   }
   void publish(const std::vector<Quintic> & segments)
@@ -186,7 +195,7 @@ private:
   }
   MotionState desired(double time) const
   {
-    MotionState s{feedback_.q, feedback_.dq, Vec7::Zero()};
+    MotionState s{home_, Vec7::Zero(), Vec7::Zero()};
     for (const auto & segment : graspTrajectories_) {
       s = segment.sample(time);
       if (time <= segment.start + segment.duration) break;
@@ -424,12 +433,13 @@ private:
   Arm arm_;
   Recorder record_;
   Feedback feedback_;
+  Vec7 home_;
   KDL::Rotation rotation_;
   double height_, lastPlan_{-1}, holdUntil_{-1};
   std::optional<Ball> ball_;
   std::optional<double> radius_;
-  std::optional<Quintic> trajectory_;
   std::vector<Quintic> graspTrajectories_;
+  double cupInterceptTime_{-1};
   double motorLead_{0}, presentationHold_{.25};
   double drag_{0}, interceptTime_{-1}, graspTime_{-1};
   bool grasped_{false}, present_{false}, presented_{false}, approached_{false};

@@ -11,13 +11,12 @@ public:
   EffortControl()
   : Node("ball_effort_control"),
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
-    home_(jointVector(declare_parameter<std::vector<double>>(
-      "initial_pose", {0., -.7853981633974483, 0., -2.356194490192345, 0., 1.5707963267948966,
-                       .7853981633974483}))),
+    home_(jointVector(
+      declare_parameter<std::vector<double>>("initial_pose", values(uprightHome(arm_.gripper))))),
     record_(declare_parameter<std::string>("output", ""), "control"),
     timing_(get_parameter("output").as_string(), "control_timing")
   {
-    arm_.validatePose(home_);
+    arm_.validateHome(home_);
     const double hz = declare_parameter("control_hz", 250.);
     if (!std::isfinite(hz) || hz <= 0)
       throw std::invalid_argument("control_hz must be positive and finite");

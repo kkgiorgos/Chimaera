@@ -71,6 +71,11 @@ were kept outside the final validation set.
 
 ## Reproduce and inspect
 
+These are archived results from the earlier bent cup home. The current cup
+demonstration uses vertical home, speed matching and braking; see
+[the updated cup example](ball-cup-home-braking.md). The old flat launches remain
+available as challenges, but historical outcomes do not qualify the new start.
+
 Follow [the native workspace instructions](../ros/ball_catching_ws/README.md).
 The C++ trial records on this development machine are under
 `ros/ball_catching_ws/results/cpp-{default,repeat,diagonal,fast,pose,miss}`.
