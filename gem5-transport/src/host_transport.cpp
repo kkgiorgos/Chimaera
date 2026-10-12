@@ -38,9 +38,12 @@ class HostTransport::Implementation {
 public:
     Implementation(std::string g2h, std::string h2g)
         : incoming_(std::move(g2h)), outgoing_(std::move(h2g)) {
-        if (cancel_fd_.fd < 0) { system_failure("eventfd"); return; }
-        if (open(incoming_)) open(outgoing_);
+        if (cancel_fd_.fd < 0) system_failure("eventfd");
+        else if (open(incoming_)) open(outgoing_);
+        initialization_ = failure_;
     }
+
+    SendResult initialization_result() const { return initialization_; }
 
     void cancel() noexcept {
         const std::uint64_t value = 1;
@@ -81,6 +84,7 @@ private:
     Listener incoming_;
     Listener outgoing_;
     SendResult failure_;
+    SendResult initialization_;
     Connection cancel_fd_{::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)};
 
     bool ready(int fd, short events) {
@@ -182,6 +186,9 @@ private:
 HostTransport::HostTransport(std::string g2h, std::string h2g)
     : implementation_(std::make_unique<Implementation>(std::move(g2h), std::move(h2g))) {}
 HostTransport::~HostTransport() = default;
+SendResult HostTransport::initialization_result() const {
+    return implementation_->initialization_result();
+}
 SendResult HostTransport::send(std::span<const std::byte> data) {
     return implementation_->send(data);
 }

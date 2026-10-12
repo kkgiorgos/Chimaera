@@ -95,6 +95,7 @@ def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_p
         bundle.write_bytes(b'guest-payload')
         return bundle
     monkeypatch.setattr(runner, 'prepare_bundle', stage)
+    monkeypatch.setattr(runner, 'check_local_transport', lambda: pytest.fail('Preparation must not require free sockets'))
     monkeypatch.setattr(runner, 'calibrate', lambda *args: pytest.fail('Preparation must not simulate calibration'))
     monkeypatch.setattr(runner, 'gem5_trial', lambda *args: pytest.fail('Preparation must not boot gem5'))
     monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
@@ -152,6 +153,7 @@ def test_prepared_suite_resumes_into_a_real_trial(tmp_path, monkeypatch):
         (directory / 'result.json').write_text('{"success": true}')
     monkeypatch.setattr(runner, 'prepare_bundle', stage)
     monkeypatch.setattr(runner, 'gem5_trial', trial)
+    monkeypatch.setattr(runner, 'check_local_transport', lambda: None)
     monkeypatch.setattr(runner, 'calibrate', lambda *args: {})
     monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
     monkeypatch.setattr(runner.subprocess, 'check_output', lambda *args, **kwargs: 'test-revision\n')

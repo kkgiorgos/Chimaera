@@ -18,7 +18,7 @@ import tarfile
 import time
 
 from benchmark_metrics import command_metrics, memory_metrics, read_stats, controller_counters
-from benchmark_status import guest_failure
+from benchmark_status import check_local_transport, guest_failure, host_failure
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 REPOSITORY = WORKSPACE.parents[1]
@@ -453,6 +453,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                     raise TimeoutError('Attempt exceeded wall time; inspect logs')
                 time.sleep(.01)
             if not (directory / 'result.json').exists():
+                failure = guest_failure(roi / 'board.pc.com_1.device') or host_failure(directory / 'launch.log')
+                if failure:
+                    raise RuntimeError('Co-simulation failed: ' + failure)
                 raise RuntimeError('Co-simulation exited without task result; inspect launch.log and guest serial')
         finally:
             stop(process)
@@ -504,6 +507,11 @@ def main():
         return 0
     if not args.output:
         parser.error('--output is required unless --dry-run')
+    if not (args.native_preflight or args.calibrate_only or args.prepare_only):
+        try:
+            check_local_transport()
+        except RuntimeError as error:
+            parser.error(str(error))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     manifest_path = output / 'experiment_manifest.json'

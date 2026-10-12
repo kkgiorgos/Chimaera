@@ -22,6 +22,8 @@ struct Gem5HostController::Impl {
         : transport(std::move(g2h), std::move(h2g)), timing(t), poll(p) {
         if (poll.count() <= 0 || poll > std::chrono::hours(1))
             throw std::invalid_argument("poll interval must be positive and at most one hour");
+        const auto initialization = transport.initialization_result();
+        if (!initialization.ok()) throw std::runtime_error(initialization.message);
         worker = std::thread([this] { serve(); });
     }
     ~Impl() { close(); }

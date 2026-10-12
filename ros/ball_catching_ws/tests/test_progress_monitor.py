@@ -67,3 +67,18 @@ def test_guest_failure_is_visible_even_while_host_time_keeps_advancing(tmp_path)
     assert state['host_running_after_guest_failure']
     assert 'outcome' not in state
     assert 'guest work has failed' in display(state)
+
+
+def test_boot_panic_replaces_an_uninformative_saved_reason(tmp_path):
+    attempt = tmp_path / 'case-003-attempt-001'
+    attempt.mkdir()
+    (tmp_path / 'experiment_manifest.json').write_text(json.dumps(dict(
+        points=[dict(id='case-003', status='infrastructure_failure',
+                     reason='Co-simulation exited without task result; inspect logs')])))
+    failure = '[gem5.opt-5] src/chimaera/util.cc:47: panic: connect: Connection refused'
+    (attempt / 'launch.log').write_text(failure + '\n'
+        + '[gazebo_host_bridge-4] Host bridge: startup cancelled\n')
+    state = snapshot(tmp_path)
+    assert state['phase'] == 'Co-simulation component failed'
+    assert state['reason'] == failure
+    assert 'outcome' not in state

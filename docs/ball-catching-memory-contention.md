@@ -102,6 +102,14 @@ uses the fixed `hardware.cpu_type` (`timing` by default, or `o3`). The guest ove
 injected during boot into gem5's COW disk overlay. The original image remains
 read-only; no offline mount or deployment is necessary.
 
+Before a coupled run, the suite checks that the three fixed paths
+`/tmp/chimaera_{g2h,h2g,time}.sock` are free. Occupied paths stop the invocation
+before calibration or guest boot. Preparation, plan inspection and memory-only
+calibration do not require these paths. The suite does not remove endpoints;
+after a forced shutdown, check ownership with `ss -xapn` before clearing stale
+files. The host controller also checks the actual bind result during construction
+and reports a startup failure immediately.
+
 Catch and miss are completed outcomes and return success at suite level.
 Infrastructure failures return 2, stop subsequent expensive attempts and retain
 logs. `--resume` retains completed trials and creates a fresh attempt for an
@@ -473,3 +481,35 @@ were executed by these configuration checks. The original failed logs remain
 under the previous output.
 Full ball-catching execution, freshness deadlines under O3 and binary task
 results still await the user's run; these isolated checks do not establish them.
+
+### Stale-socket startup repair, 2026-10-12
+
+The next two user attempts failed during KVM boot, before workbegin or the O3
+switch. Both aborted in the first `chimaeraSend` with
+`src/chimaera/util.cc:47: panic: connect: Connection refused`. The earlier forced
+shutdown had left unowned `chimaera_g2h.sock` and `chimaera_time.sock` files.
+The host's G2H bind failed on that stale path, but its controller stored the
+error in the I/O worker and waited for the timing server. The guest then tried
+to connect to a socket file without a listener. These attempts produced no
+coupling intervals, ball launch or task outcome and did not exercise O3.
+
+After checking the host's Unix-socket table and process list, the agent removed
+only those two unowned socket files. A suite preflight now rejects occupied
+transport or timing paths before expensive execution. The transport exposes an
+immutable initialization result, and the host controller throws immediately if
+either listener could not bind. Existing socket files are preserved, including
+when the other endpoint has already opened successfully. The runner and monitor
+also surface explicit simulator panics and host bridge errors from `launch.log`.
+
+Validation passed 66 ball-catching Python checks, three transport suites and all
+six ROS bridge suites. The checks cover both active and stale G2H/H2G sockets.
+Four probes against the actual rebuilt Gazebo host executable reported the bind
+error within their five-second test limit despite a 900-second startup timeout;
+these probes use neither gem5 nor Gazebo. Existing short native physics checks
+also passed. The gem5 binary and CPU configuration were unchanged by this repair;
+no full guest benchmark was run by the agent.
+
+The failed setup and both attempts are archived under
+`results/cpu-comparison-640-fixed/previous-setup/{o3,timing}`. Fresh matched bundles
+and manifests use the same `results/cpu-comparison-640-fixed/{o3,timing}/run.sh`
+launcher paths, with current runner and installed bridge fingerprints.

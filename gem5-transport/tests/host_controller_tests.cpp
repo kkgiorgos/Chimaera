@@ -2,6 +2,7 @@
 #include "../src/controller_protocol.hpp"
 #include "../src/framing.hpp"
 #include <cstring>
+#include <filesystem>
 #include <future>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -67,6 +68,32 @@ int main() {
         try { Gem5HostController invalid(timing, Duration{}, g2h, h2g); }
         catch (const std::invalid_argument&) { invalid_poll = true; }
         expect(invalid_poll);
+        // Startup must report occupied endpoints before waiting for gem5's
+        // timing server, without removing either active or stale socket files.
+        for (const bool outgoing : {false, true}) {
+            const auto blocked = outgoing ? h2g : g2h;
+            const auto addr = address(blocked);
+            {
+                Socket occupied(::socket(AF_UNIX, SOCK_STREAM, 0));
+                expect(::bind(occupied.fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) == 0);
+                expect(::listen(occupied.fd, 1) == 0);
+                const auto reject = [&] {
+                    bool rejected = false;
+                    try { Gem5HostController invalid(timing, Duration(1), g2h, h2g); }
+                    catch (const std::runtime_error& error) {
+                        rejected = std::string(error.what()).find("bind " + blocked) != std::string::npos;
+                    }
+                    expect(rejected);
+                    expect(std::filesystem::exists(blocked));
+                    expect(!std::filesystem::exists(outgoing ? g2h : h2g));
+                };
+                reject(); // Active listener is preserved.
+                ::close(occupied.fd);
+                occupied.fd = -1;
+                reject(); // The same path now names a stale, unowned socket.
+            }
+            expect(::unlink(blocked.c_str()) == 0);
+        }
         Gem5HostController host(timing, Duration(1), g2h, h2g);
         const Message first{std::byte{1}}, second{std::byte{2}};
         expect(!host.take());

@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import time
 
-from benchmark_status import guest_failure
+from benchmark_status import guest_failure, host_failure
 
 
 def read_json(path):
@@ -82,10 +82,12 @@ def snapshot(path, case='case-003'):
         state.update(phase='Task scored', outcome='CATCH' if result['success'] else 'MISS')
     if point.get('reason'):
         state['reason'] = point['reason']
-    failure = guest_failure(attempt / 'gem5/board.pc.com_1.device')
+    guest_error = guest_failure(attempt / 'gem5/board.pc.com_1.device')
+    failure = guest_error or host_failure(attempt / 'launch.log')
     if failure and 'outcome' not in state:
-        state.update(status='infrastructure_failure', phase='Guest application failed',
-                     reason=state.get('reason', failure),
+        phase = 'Guest application failed' if guest_error else 'Co-simulation component failed'
+        reason = state.get('reason', failure) if guest_error else failure
+        state.update(status='infrastructure_failure', phase=phase, reason=reason,
                      host_running_after_guest_failure=point.get('status') == 'running')
     return state
 

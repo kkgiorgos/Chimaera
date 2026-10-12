@@ -16,6 +16,10 @@ public:
     HostTransport(const HostTransport&) = delete;
     HostTransport& operator=(const HostTransport&) = delete;
 
+    // Immutable result of opening both listeners. Check before starting I/O
+    // so bind failures cannot be hidden behind a later timing-server wait.
+    [[nodiscard]] SendResult initialization_result() const;
+
     [[nodiscard]] SendResult send(std::span<const std::byte> data) override;
     [[nodiscard]] ReceiveResult receive() override;
 

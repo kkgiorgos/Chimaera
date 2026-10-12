@@ -1,0 +1,44 @@
+from pathlib import Path
+import sys
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+import benchmark_status
+import run_memory_suite as runner
+
+
+@pytest.mark.parametrize('endpoint', [0, 1, 2])
+def test_occupied_transport_paths_are_preserved(tmp_path, monkeypatch, endpoint):
+    paths = tuple(tmp_path / name for name in ('g2h', 'h2g', 'time'))
+    monkeypatch.setattr(benchmark_status, 'LOCAL_TRANSPORT_PATHS', paths)
+    benchmark_status.check_local_transport()
+    paths[endpoint].write_bytes(b'occupied')
+    with pytest.raises(RuntimeError, match='Local Chimaera socket paths already exist'):
+        benchmark_status.check_local_transport()
+    assert paths[endpoint].read_bytes() == b'occupied'
+
+
+def test_dangling_symlink_is_an_occupied_transport_path(tmp_path, monkeypatch):
+    path = tmp_path / 'g2h'
+    path.symlink_to(tmp_path / 'missing')
+    monkeypatch.setattr(benchmark_status, 'LOCAL_TRANSPORT_PATHS', (path,))
+    with pytest.raises(RuntimeError, match=str(path)):
+        benchmark_status.check_local_transport()
+    assert path.is_symlink()
+
+
+def test_preflight_stops_before_output_or_simulation(tmp_path, monkeypatch, capsys):
+    path = tmp_path / 'g2h'
+    path.write_bytes(b'occupied')
+    monkeypatch.setattr(benchmark_status, 'LOCAL_TRANSPORT_PATHS', (path,))
+    output = tmp_path / 'suite'
+    monkeypatch.setattr(runner, 'calibrate', lambda *args: pytest.fail('Do not calibrate with occupied sockets'))
+    monkeypatch.setattr(runner, 'prepare_bundle', lambda *args: pytest.fail('Do not stage a blocked guest'))
+    monkeypatch.setattr(sys, 'argv', ['run_memory_suite.py', '--output', str(output), '--case', 'case-003'])
+    with pytest.raises(SystemExit) as error:
+        runner.main()
+    assert error.value.code == 2
+    assert 'Local Chimaera socket paths already exist' in capsys.readouterr().err
+    assert not output.exists()
+    assert path.read_bytes() == b'occupied'

@@ -112,6 +112,11 @@ transport. Owned sockets are removed on normal destruction only if their file
 identity still matches. Existing paths are never unlinked at startup. After a
 forced kill, use `ss -xapn` to check ownership before removing stale paths.
 Startup failures are stored too, so recreate a failed instance.
+`HostTransport::initialization_result()` reports whether both listeners opened.
+The host controller checks it before starting its I/O thread and throws on a
+bind failure, allowing applications to stop before waiting for the gem5 timing
+server. A failed bind preserves existing endpoints and cleans up any listener
+that the failed instance successfully opened.
 
 The simulator's m5 handlers panic on socket failures; the adapter cannot turn
 those panics into guest result errors. The libm5 mapping helper can also exit

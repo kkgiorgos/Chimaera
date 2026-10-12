@@ -21,6 +21,36 @@ WORLD = '''<sdf version="1.8"><world name="wall_arena">
 </world></sdf>'''
 
 
+def check_occupied_transport(binary, config):
+    # Exercise the real host executable without gem5 or Gazebo. Endpoint bind
+    # errors must surface before its otherwise long timing-server startup wait.
+    for name in ('g2h', 'h2g'):
+        path = Path('/tmp/chimaera_' + name + '.sock')
+        for active in (True, False):
+            with tempfile.TemporaryDirectory() as directory, socket.socket(socket.AF_UNIX) as owner:
+                root = Path(directory)
+                owner.bind(str(path))
+                owner.listen(1)
+                identity = path.stat()
+                if not active:
+                    owner.close()
+                try:
+                    env = dict(os.environ, ROS_DOMAIN_ID='196', ROS_LOCALHOST_ONLY='1',
+                               ROS_LOG_DIR=str(root / 'logs'))
+                    command = [binary, '--ros-args', '-p', f'config_file:={config}',
+                               '-p', f'timing_socket:={root / "missing.sock"}',
+                               '-p', 'startup_timeout_s:=900', '-p', 'gazebo_world:=wall_arena']
+                    result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=5)
+                    assert result.returncode == 1, result.stdout + result.stderr
+                    assert 'Host bridge: bind ' + str(path) in result.stderr, result.stderr
+                    current = path.stat()
+                    assert (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino)
+                finally:
+                    current = path.stat()
+                    if (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino):
+                        path.unlink()
+
+
 def check(binary, config, extra, expected, cancel=False):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -117,6 +147,7 @@ def check(binary, config, extra, expected, cancel=False):
 
 
 if __name__ == '__main__':
+    check_occupied_transport(sys.argv[1], sys.argv[2])
     check(sys.argv[1], sys.argv[2], [], None)
     check(sys.argv[1], sys.argv[2], ['-p', 'physics_step_ns:=2000000'], 'Gazebo step mismatch')
     check(sys.argv[1], sys.argv[2], ['-p', 'physics_step_ns:=1500000'],
