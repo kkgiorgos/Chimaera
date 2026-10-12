@@ -277,7 +277,7 @@ and zero controller admission retries. Records are in
 `results/memory-suite-640-20261012`.
 
 The user then requested a mechanism to avoid stale images and selected the
-two-camera-period budget documented above. Freshness validation passed 47 Python
+two-camera-period budget documented above. Freshness validation passed 48 Python
 workflow/report checks, 22 native test results and six ROS bridge suites. It covers
 atomic replacement of complete pairs, both full RGB resolutions, mismatched and
 missing-camera arrivals, expiry before and during ROS copying, unchanged control

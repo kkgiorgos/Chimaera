@@ -99,6 +99,41 @@ def test_each_tuple_gets_its_own_simulated_freshness_budget(tmp_path, monkeypatc
     assert reduced['bridge']['simulation_time_from_readfile'] is True
 
 
+def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(WORKSPACE.parent / 'chimaera_ros_ws/src/chimaera_ros_bridge'))
+    import tarfile
+    import ament_index_python.packages
+    import chimaera_ros.runner
+    from run_memory_suite import prepare_bundle, GUEST_ROOT
+    prefix = tmp_path / 'bridge'
+    clock = prefix / 'lib/libchimaera_gem5_clock.so'
+    clock.parent.mkdir(parents=True)
+    clock.write_bytes(b'clock-test-payload')
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: str(prefix))
+    def stage(manifest, staged):
+        root = staged / GUEST_ROOT.lstrip('/')
+        (root / 'runtime').mkdir(parents=True)
+        (root / 'runtime/guest_bridge').write_bytes(b'bridge')
+        binaries = root / 'app/lib/ball_catching_robot'
+        binaries.mkdir(parents=True)
+        (binaries / 'perception').write_bytes(b'perception')
+        return root
+    monkeypatch.setattr(chimaera_ros.runner, 'stage', stage)
+    dependency = tmp_path / 'libtest.so'
+    dependency.write_bytes(b'runtime-dependency')
+    monkeypatch.setattr(subprocess, 'run', lambda command, **kwargs: subprocess.CompletedProcess(
+        command, 0, stdout=f'libtest.so => {dependency} (0x1)\n'))
+    data = load(tmp_path, configuration(tmp_path))
+    output = tmp_path / 'bundle'
+    output.mkdir()
+    bundle = prepare_bundle(output, data, plan(data))
+    with tarfile.open(bundle) as archive:
+        root = GUEST_ROOT.lstrip('/')
+        assert archive.extractfile(root + '/lib/libchimaera_gem5_clock.so').read() == clock.read_bytes()
+        assert archive.extractfile(root + '/lib/libtest.so').read() == dependency.read_bytes()
+        assert b'rm -f /tmp/chimaera-sim-time-origin.ns' in archive.extractfile(root + '/guest_start').read()
+
+
 def test_native_preflight_preserves_custom_cup_geometry(tmp_path, monkeypatch):
     data = load(tmp_path, configuration(tmp_path))
     data['fixed'].update(cup_radius=.2, cup_depth=.18)

@@ -277,7 +277,6 @@ def prepare_bundle(output, data, points):
                 continue
             target = libraries / path.name
             if not target.exists():
-                import shutil
                 shutil.copyfile(path, target)
     # Use each trial's injected session, rather than hard-coding its geometry/rates.
     (root / 'guest_start').write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(GUEST_ROOT) + '\n'
