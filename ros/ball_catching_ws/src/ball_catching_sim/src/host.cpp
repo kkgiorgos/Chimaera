@@ -61,6 +61,8 @@ public:
     duration_ = sdf->Get<double>("duration");
     score_.emplace(duration_);
     auto_ = sdf->Get<bool>("auto_throw");
+    feedbackPeriod_ = 1. / (sdf->HasElement("joint_hz") ? sdf->Get<double>("joint_hz") : 250.);
+    warmup_ = sdf->HasElement("warmup") ? sdf->Get<double>("warmup") : 0.;
     std::istringstream poses(sdf->Get<std::string>("initial_pose"));
     for (auto & q : initialQ_) poses >> q;
     output_ = sdf->Get<std::string>("output");
@@ -71,6 +73,9 @@ public:
                   "launched,ball_vx,ball_vy,ball_vz";
       for (size_t i = 0; i < names_.size(); ++i) samples_ << ',' << names_[i];
       samples_ << '\n';
+      commands_.open(output_ + "/commands.csv");
+      if (!commands_) throw std::runtime_error("Cannot open command receipt output");
+      commands_ << "receipt_time,command_time\n" << std::setprecision(17);
     }
     context_ = std::make_shared<rclcpp::Context>();
     context_->init(0, nullptr);
@@ -94,6 +99,10 @@ public:
         std::lock_guard<std::mutex> lock(mutex_);
         std::copy(candidate.begin(), candidate.end(), torque_.begin());
         commandTime_ = rclcpp::Time(msg->header.stamp).seconds();
+        if (commands_) {
+          commands_ << worldTime_ << ',' << commandTime_ << '\n';
+          commands_.flush();
+        }
       });
     readySub_ = node_->create_subscription<std_msgs::msg::Bool>(
       "/robot/ready", 1, [this](std_msgs::msg::Bool::ConstSharedPtr msg) {
@@ -147,6 +156,7 @@ public:
       initialized_ = true;
     }
     std::lock_guard<std::mutex> lock(mutex_);
+    worldTime_ = now;
     // Fortress clears velocity commands to zero but leaves the component:
     // remove it after the launch step so subsequent motion is free ballistic.
     if (launched_ && now > launchTime_) {
@@ -158,12 +168,23 @@ public:
       const double torque = now - stamp <= 0.1 && stamp <= now + 0.002 ? torque_[i] : 0;
       ecm.SetComponentData<gz::components::JointForceCmd>(joints_[i], {torque});
     }
-    if (!launched_ && (requested_ || (auto_ && ready_ && cameras_))) {
+    if (ready_ && cameras_) {
+      if (readySince_ < 0) readySince_ = now;
+    } else {
+      readySince_ = -1;
+    }
+    if (
+      !launched_ && readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_ &&
+      (requested_ || auto_)) {
       ballModel_.SetWorldPoseCmd(
         ecm, ignition::math::Pose3d(initial_, ignition::math::Quaterniond::Identity));
       ball_.SetLinearVelocity(ecm, velocity_);
       launched_ = true;
       launchTime_ = now;
+      if (!output_.empty()) {
+        std::ofstream launch(output_ + "/launch.json");
+        launch << std::setprecision(17) << "{\"launch_time\":" << now << "}\n";
+      }
       RCLCPP_INFO(node_->get_logger(), "Ball launched at simulation time %.3f", now);
     }
   }
@@ -186,7 +207,7 @@ public:
     // Track containment at every physics step. Evaluate on the first step at
     // the deadline, even when it falls between normal 250 Hz feedback samples.
     const auto evaluation = launched ? score_->Update(inside, now, launchTime_) : std::nullopt;
-    if (!evaluation && now - lastPublish_ < 0.004 - 1e-8) return;
+    if (!evaluation && now - lastPublish_ < feedbackPeriod_ - 1e-8) return;
     lastPublish_ = now;
     builtin_interfaces::msg::Time stamp = rclcpp::Time(static_cast<int64_t>(now * 1e9));
     sensor_msgs::msg::JointState state;
@@ -257,6 +278,8 @@ private:
   Vector initial_, velocity_;
   double duration_{2}, radius_{0.12}, depth_{0.14};
   double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
+  double feedbackPeriod_{.004}, warmup_{0}, readySince_{-1}, worldTime_{0};
+  std::ofstream commands_;
   std::optional<DeadlineScore> score_;
   bool initialized_{false}, auto_{true}, ready_{false}, cameras_{false}, requested_{false};
   bool launched_{false}, finished_{false};

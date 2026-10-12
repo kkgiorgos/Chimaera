@@ -43,6 +43,14 @@ def main():
     parser.add_argument('--camera-position', type=float, nargs=3, default=[-.65, 0., 1.])
     parser.add_argument('--camera-hz', type=float, default=90.)
     parser.add_argument('--resolution', type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=[640, 480])
+    parser.add_argument('--control-hz', type=float, default=250.)
+    parser.add_argument('--planner-hz', type=float, default=30.)
+    parser.add_argument('--plan-interval', type=float, default=.06)
+    parser.add_argument('--joint-hz', type=float, default=250.)
+    parser.add_argument('--physics-step', type=float, default=.001)
+    parser.add_argument('--warmup', type=float, default=0.)
+    parser.add_argument('--cup-radius', type=float, default=.12)
+    parser.add_argument('--cup-depth', type=float, default=.14)
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--duration', type=float, default=2.,
                         help='Simulated seconds after launch before final evaluation (default: 2)')
@@ -62,6 +70,9 @@ def main():
                'camera_position:=' + json.dumps(args.camera_position),
                f'camera_width:={args.resolution[0]}', f'camera_height:={args.resolution[1]}',
                f'partition:=ball-catching-{os.getpid()}']
+    command += [f'{name}:={getattr(args, name)}' for name in
+                ('control_hz', 'planner_hz', 'plan_interval', 'joint_hz', 'physics_step', 'warmup',
+                 'cup_radius', 'cup_depth')]
     environment = os.environ.copy()
     # Gazebo partitions alone do not isolate ROS topics between local trials.
     environment['ROS_DOMAIN_ID'] = str(30 + os.getpid() % 170)

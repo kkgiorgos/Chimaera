@@ -117,8 +117,10 @@ def load_trial(directory):
         # for perception, admitted searches for planning (60 ms gate), and
         # the effort controller timer. The planner's outer timer is 30 Hz.
         desired_hz = (config.get('camera_hz', 90.) if stage == 'perception' else
-                      1. / .06 if stage == 'planning' else
-                      250. if stage == 'control' else None)
+                      min(config.get('planner_hz', 30.), 1. / config.get('plan_interval', .06))
+                      if stage == 'planning' and config.get('plan_interval', .06) > 0 else
+                      config.get('planner_hz', 30.) if stage == 'planning' else
+                      config.get('control_hz', 250.) if stage == 'control' else None)
         details.append(dict(name=name, stage=stage, source=source,
                             field='receive_time - capture_time' if field == 'observation_age' else field, clock=clock,
                             stats=_stats(durations), cadence=cadence,
@@ -162,8 +164,10 @@ def load_trial(directory):
         previous = row['time']
         joints = {name: value for name, value in row.items() if name.startswith('fr3_')}
         frames.append(dict(time=row['time']-launch, ball=[row['ball_'+axis] for axis in 'xyz'], joints=joints))
+    benchmark_path = directory / 'benchmark.json'
+    benchmark = json.loads(benchmark_path.read_text()) if benchmark_path.exists() else None
     return dict(id=directory.name, path=str(directory), config=config, result=result,
-                summary=summary, frames=frames)
+                summary=summary, frames=frames, benchmark=benchmark)
 
 
 def create_dashboard(directories, destination, points=None):
@@ -187,8 +191,10 @@ def create_dashboard(directories, destination, points=None):
     template = (dashboard / 'index.html').read_text()
     viewer = (dashboard / 'replay_viewer.js').read_text()
     app = (dashboard / 'dashboard.js').read_text()
+    memory = (dashboard / 'memory_comparison.js').read_text()
     payload = json.dumps(data, separators=(',', ':'), allow_nan=False).replace('</', r'<\/')
     page = template.replace('/* REPLAY_VIEWER */', viewer).replace('/* DASHBOARD_APP */', app)
+    page = page.replace('/* MEMORY_COMPARISON */', memory)
     page = page.replace('/* EXPERIMENT_DATA */', payload)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(page)

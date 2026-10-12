@@ -92,7 +92,8 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
              launch_direction=(-1, 0, 0), launch_speed=3.0,
              camera_hz=90.0, camera_width=640, camera_height=480,
              physics_step=0.001, cup_radius=0.12, cup_depth=0.14,
-             auto_throw=True, duration=2.0, output='', camera_position=(-.65, 0., 1.)):
+             auto_throw=True, duration=2.0, output='', camera_position=(-.65, 0., 1.),
+             joint_hz=250., warmup=0.):
     initial_pose = home_pose() if initial_pose is None else initial_pose
     if len(initial_pose) != 7 or not all(math.isfinite(x) for x in initial_pose):
         raise ValueError('initial_pose must contain seven finite joint angles')
@@ -112,9 +113,13 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
     for name, value in dict(launch_speed=launch_speed,
                             camera_hz=camera_hz, physics_step=physics_step,
                             cup_radius=cup_radius, cup_depth=cup_depth,
-                            duration=duration).items():
+                            duration=duration, joint_hz=joint_hz).items():
         if not math.isfinite(value) or value <= 0:
             raise ValueError(f'{name} must be finite and positive')
+    if not math.isfinite(warmup) or warmup < 0:
+        raise ValueError('warmup must be finite and nonnegative')
+    if joint_hz * physics_step > 1 + 1e-8:
+        raise ValueError('joint_hz must not exceed the physics step rate')
     if cup_radius <= 0.0335 or cup_depth <= 0.067:
         raise ValueError('cup must accommodate the tennis ball')
     velocity = direction / np.linalg.norm(direction) * launch_speed
@@ -214,7 +219,7 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
                             launch_velocity=numbers(velocity),
                             cup_radius=cup_radius, cup_depth=cup_depth,
                             auto_throw=str(auto_throw).lower(), duration=duration,
-                            output=output).items():
+                            output=output, joint_hz=joint_hz, warmup=warmup).items():
         child(plugin, name, value)
     path = directory / 'world.sdf'
     path.write_text(ET.tostring(sdf, encoding='unicode'))

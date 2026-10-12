@@ -45,7 +45,11 @@ public:
         if (msg->vector.x > .005 && msg->vector.x < .15)
           radius_ = radius_ ? .2 * msg->vector.x + .8 * (*radius_) : msg->vector.x;
       });
-    timer_ = timer(*this, 1. / 30, [this] { plan(); });
+    const double hz = declare_parameter("planner_hz", 30.);
+    planInterval_ = declare_parameter("plan_interval", .06);
+    if (!std::isfinite(hz) || hz <= 0 || !std::isfinite(planInterval_) || planInterval_ < 0)
+      throw std::invalid_argument("Invalid planner frequency or search interval");
+    timer_ = timer(*this, 1. / hz, [this] { plan(); });
   }
 
 private:
@@ -63,7 +67,8 @@ private:
       (cupInterceptTime_ > 0 && time >= cupInterceptTime_ - .025))
       return;
     const double age = time - ball_->time;
-    if (age < 0 || age > .1 || time - feedback_.time > .05 || time - lastPlan_ < .06) return;
+    if (age < 0 || age > .1 || time - feedback_.time > .05 || time - lastPlan_ < planInterval_)
+      return;
     const Vec3 position = ball_->position + ball_->velocity * age + .5 * gravity * age * age;
     const Vec3 velocity = ball_->velocity + gravity * age;
     const auto cup = arm_.pose(feedback_.q).p;
@@ -180,7 +185,7 @@ private:
                              1.5707963267948966, .7853981633974483)
                               .finished();
   KDL::Rotation rotation_;
-  double height_, lastPlan_{-1}, holdUntil_{-1};
+  double height_, lastPlan_{-1}, holdUntil_{-1}, planInterval_{.06};
   std::optional<Ball> ball_;
   std::optional<double> radius_;
   std::vector<Quintic> trajectories_;

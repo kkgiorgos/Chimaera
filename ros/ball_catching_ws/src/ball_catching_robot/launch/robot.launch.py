@@ -26,16 +26,19 @@ def start(context):
                  parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output'],
                               **calibration}], output='screen'),
             Node(package='ball_catching_robot', executable='intercept',
-                 parameters=[common],
+                 parameters=[{**common, 'planner_hz': float(get('planner_hz')),
+                              'plan_interval': float(get('plan_interval'))}],
                  output='screen'),
-            Node(package='ball_catching_robot', executable='effort_control', parameters=[common],
+            Node(package='ball_catching_robot', executable='effort_control',
+                 parameters=[{**common, 'control_hz': float(get('control_hz'))}],
                  output='screen')]
     return [*nodes, *[RegisterEventHandler(OnProcessExit(target_action=node,
         on_exit=[EmitEvent(event=Shutdown(reason='Robot component exited'))])) for node in nodes]]
 
 
 def generate_launch_description():
-    defaults = dict(robot_file='', output='', use_sim_time='true',
+    defaults = dict(robot_file='', output='', use_sim_time='true', control_hz='250',
+                    planner_hz='30', plan_interval='0.06',
                     initial_pose='auto',
                     calibration='{"focal":400.0,"cx":320.0,"cy":240.0,"baseline":0.3,"camera_origin":[-0.65,0.15,1.0]}')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],

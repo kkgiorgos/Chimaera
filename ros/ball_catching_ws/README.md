@@ -1,5 +1,8 @@
 # Native FR3 visual cup catching
 
+For local gem5/Ramulator interference experiments, see the
+[memory benchmark guide](../../docs/ball-catching-memory-contention.md).
+
 ROS 2 Humble / Gazebo Fortress application using the upstream FR3 arm with a
 rigid cup, stereo RGB perception, ballistic flight estimation, interception and
 braking, and computed-torque arm control. The robot receives images, calibration,

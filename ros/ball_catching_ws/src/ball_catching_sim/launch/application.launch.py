@@ -34,15 +34,19 @@ def start(context):
                    cup_radius=float(get('cup_radius')), cup_depth=float(get('cup_depth')),
                    auto_throw=get('auto_throw').lower() == 'true',
                    duration=float(get('duration')), output=output,
-                   camera_position=json.loads(get('camera_position')))
+                   camera_position=json.loads(get('camera_position')),
+                   joint_hz=float(get('joint_hz')), warmup=float(get('warmup')))
     world, robot_file, urdf, calibration = generate(scene_directory, **options)
     if output:
-        record = {**options, 'start_condition': 'vertical_home'}
+        record = {**options, 'start_condition': 'vertical_home',
+                  **{key: float(get(key)) for key in ('control_hz', 'planner_hz', 'plan_interval')}}
         (Path(output) / 'experiment.json').write_text(json.dumps(record, indent=2) + '\n')
     plugin_path = str(Path(get_package_prefix('ball_catching_sim')) / 'lib')
     env = {'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': plugin_path + ':' + os.environ.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
            'IGN_PARTITION': get('partition')}
-    command = ['ign', 'gazebo', '-r']
+    command = ['ign', 'gazebo']
+    if get('paused').lower() != 'true':
+        command += ['-r']
     if get('gui').lower() != 'true':
         command += ['-s', '--headless-rendering']
     gazebo = ExecuteProcess(cmd=[*command, str(world)], additional_env=env, output='screen')
@@ -61,7 +65,8 @@ def start(context):
         actions.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(
             str(share / 'launch/robot.launch.py')), launch_arguments={
                 'robot_file': str(robot_file), 'calibration': json.dumps(calibration),
-                'initial_pose': json.dumps(initial_pose), 'output': output}.items()))
+                'initial_pose': json.dumps(initial_pose), 'output': output,
+                **{key: get(key) for key in ('control_hz', 'planner_hz', 'plan_interval')}}.items()))
     for process in [gazebo, bridge]:
         actions.append(RegisterEventHandler(OnProcessExit(target_action=process,
             on_exit=[EmitEvent(event=Shutdown(reason='Simulation component exited'))])))
@@ -69,7 +74,9 @@ def start(context):
 
 
 def generate_launch_description():
-    defaults = dict(gui='true', robot='true', output='', partition='ball-catching',
+    defaults = dict(gui='true', robot='true', paused='false', output='', partition='ball-catching',
+                    control_hz='250', planner_hz='30', plan_interval='0.06',
+                    joint_hz='250', warmup='0',
                     initial_pose='auto', launch_position='[2.08,0.04,2.0]',
                     launch_direction='[-1.0,0.0,0.0]', launch_speed='3.0',
                     camera_hz='90.0', camera_width='640', camera_height='480',
