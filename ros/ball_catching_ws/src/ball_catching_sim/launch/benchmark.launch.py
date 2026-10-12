@@ -23,6 +23,7 @@ def start(context):
     universal = Path(get_package_share_directory('chimaera_ros_bridge'))
     options = {**execution['options'], **execution['rates'], 'robot': False,
                'image_age_periods': execution['fixed']['image_age_periods'],
+               'image_diagnostics': execution['fixed'].get('image_diagnostics', False),
                'paused': True, 'gui': False, 'partition': 'ball-memory-suite',
                'transport_ip': '127.0.0.1'}
     options.pop('name', None)

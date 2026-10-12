@@ -24,7 +24,7 @@ def plan(data, side, package_prefix=None, simulate=False):
     if side == 'guest':
         env.setdefault('ROS_LOG_DIR', '/tmp/chimaera-guest-logs')
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
-                  ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns')}}
+                  ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns', 'image_diagnostics')}}
     if side == 'host':
         parameters.update({key: data['bridge'][key] for key in
                            ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',

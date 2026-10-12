@@ -76,6 +76,10 @@ public:
       commands_.open(output_ + "/commands.csv");
       if (!commands_) throw std::runtime_error("Cannot open command receipt output");
       commands_ << "receipt_time,command_time\n" << std::setprecision(17);
+      readiness_.open(output_ + "/readiness.csv");
+      if (!readiness_) throw std::runtime_error("Cannot open readiness output");
+      readiness_ << "time,arm_ready,perception_ready,warmup_elapsed,warmup_required\n"
+                 << std::setprecision(17);
     }
     context_ = std::make_shared<rclcpp::Context>();
     context_->init(0, nullptr);
@@ -172,6 +176,16 @@ public:
       if (readySince_ < 0) readySince_ = now;
     } else {
       readySince_ = -1;
+    }
+    if (
+      readiness_ &&
+      (now - lastReadiness_ >= .05 || ready_ != loggedReady_ || cameras_ != loggedCameras_)) {
+      readiness_ << now << ',' << ready_ << ',' << cameras_ << ','
+                 << (readySince_ >= 0 ? now - readySince_ : 0.) << ',' << warmup_ << '\n';
+      readiness_.flush();
+      lastReadiness_ = now;
+      loggedReady_ = ready_;
+      loggedCameras_ = cameras_;
     }
     if (
       !launched_ && readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_ &&
@@ -280,6 +294,9 @@ private:
   double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
   double feedbackPeriod_{.004}, warmup_{0}, readySince_{-1}, worldTime_{0};
   std::ofstream commands_;
+  std::ofstream readiness_;
+  double lastReadiness_{-1};
+  bool loggedReady_{false}, loggedCameras_{false};
   std::optional<DeadlineScore> score_;
   bool initialized_{false}, auto_{true}, ready_{false}, cameras_{false}, requested_{false};
   bool launched_{false}, finished_{false};

@@ -88,6 +88,7 @@ int main(int argc, char ** argv)
     auto host = std::make_shared<Bridge>("host", options);
     constexpr int64_t budget = 22222223;
     options.append_parameter_override("max_image_age_ns", budget);
+    options.append_parameter_override("image_diagnostics", true);
     auto guest = std::make_shared<Bridge>("guest", options);
     int64_t time = 0;
     bool available = true, expire_during_copy = false;

@@ -74,12 +74,13 @@ def load_config(path, cpu_type=None):
             raise ValueError(f'{section} must be an object')
     # Older experiment files retain the original Timing CPU behaviour.
     data['hardware'].setdefault('cpu_type', 'timing')
+    data['fixed'].setdefault('image_diagnostics', False)
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
-                  'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s'},
+                  'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -89,6 +90,8 @@ def load_config(path, cpu_type=None):
         if set(data[section]) != keys:
             raise ValueError(f'{section} fields must be: ' + ', '.join(sorted(keys)))
     fixed = data['fixed']
+    if type(fixed['image_diagnostics']) is not bool:
+        raise ValueError('image_diagnostics must be boolean')
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
                 'startup_timeout_s', 'wall_timeout_s', 'camera_width', 'camera_height',
                 'cup_radius', 'cup_depth', 'image_age_periods'):
@@ -226,11 +229,12 @@ def routes():
     return dict(version=1, topics=result)
 
 
-def robot_command(point, calibration, image_age_periods=2.0):
+def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=False):
     return ['ros2', 'launch', 'ball_catching_robot', 'robot.launch.py',
             'robot_file:=/tmp/chimaera-ball.urdf',
             'calibration:=' + json.dumps(calibration or {}),
             f'image_age_periods:={image_age_periods}',
+            f'image_diagnostics:={str(image_diagnostics).lower()}',
             'gem5_clock_library:=' + GUEST_ROOT + '/lib/libchimaera_gem5_clock.so',
             'gem5_time_origin_file:=/tmp/chimaera-sim-time-origin.ns',
             *[f'{key}:={point["rates"][key]}' for key in ('control_hz', 'planner_hz', 'plan_interval', 'camera_hz')]]
@@ -240,7 +244,7 @@ def session(output, data, point, calibration=None):
     from ament_index_python.packages import get_package_prefix
     root = str(Path(get_package_prefix('chimaera_ros_bridge')))
     fixed = data['fixed']
-    robot = robot_command(point, calibration, fixed['image_age_periods'])
+    robot = robot_command(point, calibration, fixed['image_age_periods'], fixed['image_diagnostics'])
     return dict(version=1, routes=str(output / 'routes.json'),
         host=dict(domain_id=71, setup=['/opt/ros/humble/setup.bash'], processes=[]),
         guest=dict(domain_id=72, setup=['/opt/ros/humble/setup.bash',
@@ -253,6 +257,7 @@ def session(output, data, point, calibration=None):
                     max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
                     max_pending_messages=16, m5ops='instruction', wait_for_application=True,
                     max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
+                    image_diagnostics=fixed['image_diagnostics'],
                     simulation_time_from_readfile=True,
                     startup_timeout_s=fixed['startup_timeout_s'], status_bar=False),
         deploy=dict(guest_root=GUEST_ROOT,
@@ -382,6 +387,8 @@ def native_trial(directory, data, point):
     for key in ('camera_hz', 'planner_hz', 'plan_interval', 'control_hz'):
         command += ['--' + key.replace('_', '-'), str(point['rates'][key])]
     command += ['--wall-timeout', str(min(180, fixed['wall_timeout_s']))]
+    if fixed['image_diagnostics']:
+        command += ['--image-diagnostics']
     completed = subprocess.run(command)
     if completed.returncode not in (0, 1) or not (directory / 'result.json').exists():
         raise RuntimeError('Native preflight failed; inspect launch.log')

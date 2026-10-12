@@ -52,6 +52,7 @@ def test_baselines_not_duplicated_across_patterns(tmp_path):
     ('fixed', 'poll_us', 500), ('fixed', 'interval_us', 750),
     ('fixed', 'joint_hz', 100), ('fixed', 'camera_width', 4096),
     ('fixed', 'image_age_periods', 0), ('fixed', 'image_age_periods', float('inf')),
+    ('fixed', 'image_diagnostics', 'true'),
     ('aggressor', 'backpressure', False), ('aggressor', 'stride', 1),
     ('aggressor', 'duty_percent', 50), ('hardware', 'num_cores', 0),
     ('hardware', 'cpu_type', 'kvm'), ('hardware', 'cpu_type', None)])

@@ -69,7 +69,8 @@ class SessionTest(unittest.TestCase):
     def test_invalid_synchronization_and_simulator_configs(self):
         variants = [dict(timing_backend='unknown'), dict(timing_backend='gazebo'),
                     dict(timing_backend='gazebo', gazebo_world='arena', physics_step_ns=3000000),
-                    dict(wait_for_application=1), dict(unknown_bridge_option=True), dict(m5ops='unknown')]
+                    dict(wait_for_application=1), dict(unknown_bridge_option=True), dict(m5ops='unknown'),
+                    dict(image_diagnostics='true')]
         for bridge in variants:
             with self.subTest(bridge=bridge), self.assertRaises(ValueError):
                 self.load(self.data | {'bridge': bridge})
@@ -82,6 +83,13 @@ class SessionTest(unittest.TestCase):
         ]:
             with self.subTest(simulator=simulator), self.assertRaises(ValueError):
                 self.load(self.data | dict(simulator=simulator))
+
+    def test_image_diagnostics_reach_both_bridges(self):
+        self.data['bridge'] = dict(image_diagnostics=True)
+        data = self.load()
+        for side in ('host', 'guest'):
+            command = plan(data, side, '/opt/bridge')['processes'][0]['command']
+            self.assertIn('image_diagnostics:=true', command)
 
     def test_experiment_arguments_are_opaque(self):
         self.data['simulator'] = dict(gem5_root='gem5', config='riscv_experiment.py',

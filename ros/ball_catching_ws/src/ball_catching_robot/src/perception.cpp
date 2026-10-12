@@ -1,4 +1,5 @@
 #include <array>
+#include <cstdio>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
 #include <map>
 #include <nav_msgs/msg/odometry.hpp>
@@ -32,6 +33,7 @@ public:
       periods / cameraHz > 3600)
       throw std::invalid_argument("invalid image freshness budget");
     imageAgeNs_ = static_cast<int64_t>(std::ceil(periods / cameraHz * 1e9));
+    imageDiagnostics_ = declare_parameter<bool>("image_diagnostics", false);
     cv::setNumThreads(1);
     state_ =
       create_publisher<nav_msgs::msg::Odometry>("/robot/ball_state", rclcpp::SensorDataQoS());
@@ -68,7 +70,7 @@ private:
   {
     const int64_t key = rclcpp::Time(msg->header.stamp).nanoseconds();
     if (key <= lastPair_) return;
-    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+    if (!fresh_image(key, imageTime("input", key), imageAgeNs_)) {
       staleInput();
       return;
     }
@@ -80,7 +82,7 @@ private:
     const std::array<sensor_msgs::msg::Image::ConstSharedPtr, 2> pair{
       buffers_[0].at(key), buffers_[1].at(key)};
     for (auto & buffer : buffers_) buffer.erase(buffer.begin(), buffer.upper_bound(key));
-    const auto current = imageClock_.now();
+    const auto current = imageTime("paired", key);
     if (!fresh_image(key, current, imageAgeNs_)) {
       staleInput();
       return;
@@ -106,7 +108,7 @@ private:
         images[i] = view;
     }
     const double conversionSeconds = elapsed(started);
-    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+    if (!fresh_image(key, imageTime("converted", key), imageAgeNs_)) {
       expiredPair();
       return;
     }
@@ -114,7 +116,7 @@ private:
     const double capture = seconds(msg->header.stamp);
     const auto detection = stereo_.detect(images[0], images[1], filter_.predict(capture));
     const double detectionSeconds = elapsed(detectionStarted);
-    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+    if (!fresh_image(key, imageTime("detected", key), imageAgeNs_)) {
       expiredPair();
       return;
     }
@@ -133,7 +135,7 @@ private:
     const auto estimate = candidate.observe(detection->point, capture);
     const double estimationSeconds = elapsed(estimationStarted);
     const auto publicationStarted = WallClock::now();
-    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+    if (!fresh_image(key, imageTime("estimated", key), imageAgeNs_)) {
       expiredPair();
       return;
     }
@@ -166,6 +168,7 @@ private:
       state_->publish(state);
     }
     const double publicationSeconds = elapsed(publicationStarted);
+    if (imageDiagnostics_) imageTime("published", key);
     record_.write(
       {{"capture_time", capture},
        {"receive_time", lastImages_},
@@ -179,6 +182,22 @@ private:
        {"state", estimate ? Field(values(*estimate)) : Field(nullptr)}});
   }
   Stereo stereo_;
+  std::optional<int64_t> imageTime(const char * stage, int64_t capture)
+  {
+    const auto time = imageClock_.now();
+    if (imageDiagnostics_ && time) {
+      auto & last = imageTrace_[stage];
+      if (last.first++ < 3 || *time - last.second >= 100000000) {
+        last.second = *time;
+        std::fprintf(
+          stderr,
+          "CHIMAERA_IMAGE component=perception stage=%s capture_ns=%ld now_ns=%ld age_ns=%ld "
+          "budget_ns=%ld\n",
+          stage, capture, *time, *time - capture, imageAgeNs_);
+      }
+    }
+    return time;
+  }
   void staleInput()
   {
     if (++staleInputs_ == 1) RCLCPP_WARN(get_logger(), "Rejecting stale images before perception");
@@ -193,6 +212,8 @@ private:
   ImageClock imageClock_;
   int64_t imageAgeNs_{}, lastCapture_{-1};
   uint64_t staleInputs_{}, expiredPairs_{};
+  bool imageDiagnostics_{};
+  std::map<std::string, std::pair<uint64_t, int64_t>> imageTrace_;
   int64_t lastPair_{-1};
   double lastImages_{-1};
   std::array<std::map<int64_t, sensor_msgs::msg::Image::ConstSharedPtr>, 2> buffers_;

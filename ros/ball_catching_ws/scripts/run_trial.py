@@ -53,6 +53,7 @@ def main():
     parser.add_argument('--cup-radius', type=float, default=.12)
     parser.add_argument('--cup-depth', type=float, default=.14)
     parser.add_argument('--gui', action='store_true')
+    parser.add_argument('--image-diagnostics', action='store_true')
     parser.add_argument('--duration', type=float, default=2.,
                         help='Simulated seconds after launch before final evaluation (default: 2)')
     parser.add_argument('--wall-timeout', type=float, default=120.)
@@ -71,6 +72,7 @@ def main():
                'camera_position:=' + json.dumps(args.camera_position),
                f'camera_width:={args.resolution[0]}', f'camera_height:={args.resolution[1]}',
                f'partition:=ball-catching-{os.getpid()}']
+    command += [f'image_diagnostics:={str(args.image_diagnostics).lower()}']
     command += [f'{name}:={getattr(args, name)}' for name in
                 ('control_hz', 'planner_hz', 'plan_interval', 'joint_hz', 'physics_step', 'warmup',
                  'cup_radius', 'cup_depth', 'image_age_periods')]

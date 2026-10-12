@@ -5,6 +5,7 @@
 #include <chimaera_ros_bridge/config.hpp>
 #include <chimaera_ros_bridge/stereo_queue.hpp>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -42,6 +43,7 @@ public:
     byte_limit_ = static_cast<std::size_t>(byte_limit);
     queue_limit_ = static_cast<std::size_t>(queue_limit);
     image_age_ns_ = declare_parameter<int64_t>("max_image_age_ns", 0);
+    image_diagnostics_ = declare_parameter<bool>("image_diagnostics", false);
     if (image_age_ns_ < 0 || image_age_ns_ > 3600000000000LL) {
       throw std::invalid_argument("invalid max_image_age_ns");
     }
@@ -138,19 +140,20 @@ public:
       const auto stamp = image_stamp(left.data, left.size);
       if (stamp != image_stamp(right.data, right.size))
         throw std::runtime_error("mismatched stereo timestamps");
-      if (!fresh_image(stamp)) {
+      if (!fresh_image(stamp, "received")) {
         stale_image();
         return;
       }
       auto left_message = serialized(left);
       auto right_message = serialized(right);
       // Allocation/copying itself can consume the age budget on a Timing CPU.
-      if (!fresh_image(stamp)) {
+      if (!fresh_image(stamp, "copied")) {
         stale_image();
         return;
       }
       publishers_.at(left.key)->publish(left_message);
       publishers_.at(right.key)->publish(right_message);
+      if (image_diagnostics_) trace_image("published", stamp);
       received_ += 2;
       last_receive_ = std::chrono::steady_clock::now();
       return;
@@ -201,10 +204,27 @@ private:
     serialized.buffer_length = frame.size;
     return message;
   }
-  bool fresh_image(int64_t stamp) const
+  std::optional<int64_t> trace_image(const char * stage, int64_t stamp)
   {
-    if (image_age_ns_ == 0) return true;
     const auto time = simulation_time ? simulation_time() : std::nullopt;
+    if (image_diagnostics_ && time) {
+      auto & last = image_trace_[stage];
+      if (last.first++ < 3 || *time - last.second >= 100000000) {
+        last.second = *time;
+        std::fprintf(
+          stderr,
+          "CHIMAERA_IMAGE component=bridge stage=%s capture_ns=%ld now_ns=%ld age_ns=%ld "
+          "budget_ns=%ld\n",
+          stage, stamp, *time, *time - stamp, image_age_ns_);
+      }
+    }
+    return time;
+  }
+  bool fresh_image(int64_t stamp, const char * stage)
+  {
+    if (image_age_ns_ == 0 && !image_diagnostics_) return true;
+    const auto time = trace_image(stage, stamp);
+    if (image_age_ns_ == 0) return true;
     return time && *time >= stamp && *time - stamp <= image_age_ns_;
   }
   void stale_image()
@@ -301,6 +321,8 @@ private:
   std::uint64_t received_{};
   int64_t image_age_ns_{};
   uint64_t stale_pairs_{};
+  bool image_diagnostics_{};
+  std::map<std::string, std::pair<uint64_t, int64_t>> image_trace_;
   StereoQueue stereo_;
   std::map<std::string, std::string> stereo_groups_;
   std::chrono::steady_clock::time_point last_receive_{};

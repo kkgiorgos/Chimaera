@@ -4,6 +4,7 @@ import argparse
 import csv
 import json
 import math
+import re
 from pathlib import Path
 import sys
 import time
@@ -37,6 +38,23 @@ def number(value):
         return None
 
 
+def image_stages(path):
+    try:
+        content = path.read_text(errors='replace')
+    except FileNotFoundError:
+        return {}
+    stages = {}
+    pattern = (r'CHIMAERA_IMAGE component=(bridge|perception) stage=(\w+) '
+               r'capture_ns=(-?\d+) now_ns=(-?\d+) age_ns=(-?\d+) budget_ns=(\d+)\r?\n')
+    for component, stage, capture, now, age, budget in re.findall(pattern, content):
+        capture, now, age, budget = map(int, (capture, now, age, budget))
+        if now - capture != age:
+            continue
+        stages[component + '.' + stage] = dict(capture_ns=capture, now_ns=now,
+            age_ms=age / 1e6, budget_ms=budget / 1e6)
+    return stages
+
+
 def snapshot(path, case='case-003'):
     path = Path(path)
     direct = (path / 'execution.json').exists() or (path / 'timing.csv').exists()
@@ -65,6 +83,17 @@ def snapshot(path, case='case-003'):
                      wall_seconds=wall, average_speed=simulated / wall if wall and wall > 0 else None,
                      last_update_age_seconds=max(0, time.time() - (attempt / 'timing.csv').stat().st_mtime))
     commands = read_csv(attempt / 'commands.csv')
+    readiness = read_csv(attempt / 'readiness.csv')
+    if readiness:
+        row = readiness[-1]
+        if row.get('arm_ready') in ('0', '1') and row.get('perception_ready') in ('0', '1'):
+            state['readiness'] = dict(arm=row['arm_ready'] == '1',
+                perception=row['perception_ready'] == '1',
+                warmup_elapsed=number(row.get('warmup_elapsed')),
+                warmup_required=number(row.get('warmup_required')))
+    stages = image_stages(attempt / 'gem5/board.pc.com_1.device')
+    if stages:
+        state['image_stages'] = stages
     state['delivered_commands'] = len(commands)
     if commands:
         receipt, capture = (number(commands[-1].get(key)) for key in ('receipt_time', 'command_time'))
@@ -110,6 +139,18 @@ def display(state):
     if state.get('throw_percent') is not None:
         lines.append(f"Throw: {state['throw_seconds']:.3f} / {state['duration_seconds']:.3f} simulated seconds"
                      + f" ({state['throw_percent']:.1f}%)")
+    if 'readiness' in state and state['phase'] == 'Waiting for robot readiness / warmup':
+        ready = state['readiness']
+        lines.append('Arm ready: ' + ('yes' if ready['arm'] else 'no')
+                     + ' | fresh camera ready: ' + ('yes' if ready['perception'] else 'no'))
+        if ready['warmup_elapsed'] is not None and ready['warmup_required'] is not None:
+            lines.append(f"Continuous ready warmup: {ready['warmup_elapsed']:.3f} / {ready['warmup_required']:.3f} simulated seconds")
+    for component in ('bridge', 'perception'):
+        stages = [(key.split('.', 1)[1], value) for key, value in state.get('image_stages', {}).items()
+                  if key.startswith(component + '.')]
+        if stages:
+            lines.append(component.capitalize() + ' image age (latest sample per stage): '
+                         + ', '.join(f"{stage}={value['age_ms']:.1f} ms" for stage, value in stages))
     if state.get('outcome'):
         lines.append('Result: ' + state['outcome'])
     if state.get('reason'):

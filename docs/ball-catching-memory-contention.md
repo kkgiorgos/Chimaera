@@ -223,6 +223,32 @@ throw retains its outcome even if guest cleanup subsequently exits.
 For guest diagnostics, tail the attempt's `gem5/board.pc.com_1.device`; host and
 simulator output are in `launch.log`.
 
+### Timing recovery diagnostics
+
+Current recovery work uses Timing CPUs. O3 remains an optional model, but a
+working Timing baseline must launch, score a throw and save its DRAM statistics
+before interference comparisons are meaningful. Use a fresh suite after rebuilding
+runner or application artifacts; previous attempts keep their original provenance.
+
+Set `fixed.image_diagnostics` to `true` in a short diagnostic configuration to
+emit `CHIMAERA_IMAGE` records in guest serial. Bridge stages report receipt,
+serialized-message copying and ROS publication. Perception stages report input,
+stereo pairing, conversion, detection, estimation and publication. Each record
+contains capture time, authoritative current simulated time, age and budget in
+nanoseconds. The first three samples per stage and subsequent samples at least
+100 ms apart are logged. Samples from different stages may refer to different
+frames; compare capture timestamps before subtracting stage times.
+
+Diagnostics are disabled by default and their flag is frozen in suite identity.
+Enabled diagnostic runs add logging and clock reads; use them to locate stalls,
+then disable them for task and memory comparisons. Native `run_trial.py` accepts
+`--image-diagnostics` and uses the native ROS simulation clock.
+
+The host saves `readiness.csv` with separate arm/perception flags and the elapsed
+continuous-ready warmup. The monitor displays these flags and sampled image ages,
+so advancing physics alone is no longer the only visible progress signal. These
+records do not change the launch condition or bypass stale-image rejection.
+
 ## Customize the experiment
 
 [memory_contention.json](../ros/ball_catching_ws/experiments/memory_contention.json)
