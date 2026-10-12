@@ -1,16 +1,16 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
+#include <chimaera/outgoing_queue.hpp>
+#include <chimaera_ros_bridge/config.hpp>
 #include <cstdint>
 #include <cstring>
-#include <deque>
 #include <functional>
 #include <map>
 #include <rclcpp/generic_publisher.hpp>
 #include <rclcpp/generic_subscription.hpp>
 #include <set>
 #include <thread>
-#include <chimaera_ros_bridge/config.hpp>
 
 namespace chimaera_ros_bridge
 {
@@ -32,12 +32,14 @@ public:
     }
     const auto byte_limit = declare_parameter<int64_t>("max_serialized_bytes", max_bytes);
     const auto queue_limit = declare_parameter<int64_t>("max_pending_messages", max_messages);
-    if (byte_limit < 4 || byte_limit > 64 * 1024 * 1024 - 2056 ||
-      queue_limit < 1 || queue_limit > 1000000) {
+    if (
+      byte_limit < 4 || byte_limit > 64 * 1024 * 1024 - 2056 || queue_limit < 1 ||
+      queue_limit > 1000000) {
       throw std::invalid_argument("invalid serialized byte or pending message limit");
     }
     byte_limit_ = static_cast<std::size_t>(byte_limit);
     queue_limit_ = static_cast<std::size_t>(queue_limit);
+    outgoing_ = chimaera::control::OutgoingQueue(queue_limit_, queue_limit_ * (byte_limit_ + 2056));
     const auto routes = load_config(path);
     std::set<std::string> resolved_topics;
     // Validate remappings before creating endpoints: aliases must not form loops.
@@ -54,7 +56,8 @@ public:
       if (outgoing) {
         subscriptions_.push_back(create_generic_subscription(
           topic, route.type, route.qos,
-          [this, key = route.key](std::shared_ptr<rclcpp::SerializedMessage> message) {
+          [this, key = route.key,
+           coalesce = route.coalesce](std::shared_ptr<rclcpp::SerializedMessage> message) {
             if (message->size() > byte_limit_) {
               throw std::runtime_error(
                 "bridge outgoing queue or serialized message limit exceeded");
@@ -69,11 +72,8 @@ public:
             std::memcpy(
               bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
               message->size());
-            if (outgoing_.size() >= queue_limit_) {
-              throw std::runtime_error(
-                "bridge outgoing queue or serialized message limit exceeded");
-            }
-            outgoing_.push_back(std::move(bytes));
+            outgoing_.submit(
+              std::move(bytes), coalesce ? std::string_view(key) : std::string_view{});
           }));
       } else {
         publishers_.emplace(route.key, create_generic_publisher(topic, route.type, route.qos));
@@ -86,13 +86,12 @@ public:
 
   std::optional<chimaera::Message> take()
   {
-    if (outgoing_.empty()) {
+    auto entry = outgoing_.take();
+    if (!entry) {
       return std::nullopt;
     }
-    auto bytes = std::move(outgoing_.front());
-    outgoing_.pop_front();
     ++transmitted_;
-    return bytes;
+    return std::move(entry->data);
   }
 
   void submit(chimaera::Message bytes)
@@ -129,11 +128,16 @@ public:
   // Application-driven transfer, shared by host boundaries and guest polls.
   void exchange(chimaera::DataController & controller)
   {
-    while (auto bytes = controller.take()) {submit(std::move(*bytes));}
+    while (auto bytes = controller.take()) {
+      submit(std::move(*bytes));
+    }
     // Service callbacks once per exchange, after delivery and before draining.
-    if (pump) {pump();}
-    while (auto bytes = take()) {
-      controller.submit(std::move(*bytes));
+    if (pump) {
+      pump();
+    }
+    while (auto entry = outgoing_.take()) {
+      ++transmitted_;
+      controller.submit(std::move(entry->data), entry->key);
     }
   }
 
@@ -159,10 +163,14 @@ public:
   bool local_routes_ready() const
   {
     for (const auto & subscription : subscriptions_) {
-      if (subscription->get_publisher_count() == 0) { return false; }
+      if (subscription->get_publisher_count() == 0) {
+        return false;
+      }
     }
     for (const auto & publisher : publishers_) {
-      if (publisher.second->get_subscription_count() == 0) { return false; }
+      if (publisher.second->get_subscription_count() == 0) {
+        return false;
+      }
     }
     return true;
   }
@@ -195,7 +203,7 @@ public:
 
 private:
   std::size_t byte_limit_{max_bytes}, queue_limit_{max_messages};
-  std::deque<chimaera::Message> outgoing_;
+  chimaera::control::OutgoingQueue outgoing_;
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   std::chrono::steady_clock::time_point last_receive_{};

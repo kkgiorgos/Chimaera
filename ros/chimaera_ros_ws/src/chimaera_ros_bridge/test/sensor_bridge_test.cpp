@@ -1,14 +1,17 @@
 #include <unistd.h>
 
+#include <chimaera_ros_bridge/bridge.hpp>
 #include <chrono>
 #include <deque>
 #include <fstream>
 #include <iostream>
+#include <rosgraph_msgs/msg/clock.hpp>
+#include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <std_msgs/msg/int32.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <thread>
-#include <chimaera_ros_bridge/bridge.hpp>
+
 #include "controller_protocol.hpp"
 
 using namespace std::chrono_literals;
@@ -41,7 +44,9 @@ struct QueueController : chimaera::DataController
   std::deque<chimaera::Message> incoming;
   std::optional<chimaera::Message> take() override
   {
-    if (incoming.empty()) {return std::nullopt;}
+    if (incoming.empty()) {
+      return std::nullopt;
+    }
     auto message = std::move(incoming.front());
     incoming.pop_front();
     return message;
@@ -92,8 +97,9 @@ int main(int argc, char ** argv)
         rclcpp::DurabilityPolicy::TransientLocal,
       "transient local QoS mismatch");
     rclcpp::NodeOptions options;
-    options.parameter_overrides({rclcpp::Parameter("config_file", TEST_CONFIG),
-      rclcpp::Parameter("max_serialized_bytes", 131072)});
+    options.parameter_overrides(
+      {rclcpp::Parameter("config_file", TEST_CONFIG),
+       rclcpp::Parameter("max_serialized_bytes", 131072)});
     auto host = std::make_shared<Bridge>("host", options);
     auto guest = std::make_shared<Bridge>("guest", options);
     auto remapped = options;
@@ -133,8 +139,8 @@ int main(int argc, char ** argv)
              guest_sub->get_publisher_count() == 1 && number_sub->get_publisher_count() == 1;
     });
     chimaera::Message saved;
-    for (const auto & sample : std::vector<std::string>{
-           "", "hello", "γειά σου", std::string(131072 - 9, 'x')}) {
+    for (const auto & sample :
+         std::vector<std::string>{"", "hello", "γειά σου", std::string(131072 - 9, 'x')}) {
       for (bool forward : {true, false}) {
         auto & source = forward ? host : guest;
         auto & destination = forward ? guest : host;
@@ -228,15 +234,16 @@ int main(int argc, char ** argv)
     });
     // Queue reads are passive; even a full batch pumps only once per exchange.
     int pump_count = 0;
-    host->pump = [&] {++pump_count;};
+    host->pump = [&] { ++pump_count; };
     require(host->take().has_value() && pump_count == 0, "take pumped callbacks");
     QueueController queued;
     host->exchange(queued);
     require(pump_count == 1 && host->pending() == 0, "batch drain pumped more than once");
-    require(queued.outgoing.drain().size() == Bridge::max_messages - 1, "exchange lost outgoing frames");
+    require(
+      queued.outgoing.drain().size() == Bridge::max_messages - 1, "exchange lost outgoing frames");
     host->exchange(queued);
     require(pump_count == 2, "empty exchange did not pump once");
-    host->pump = [&] {executor.spin_some();};
+    host->pump = [&] { executor.spin_some(); };
     // Received data must be published before the single executor pump.
     QueueController incoming_controller;
     incoming_controller.incoming.push_back(saved);
@@ -247,16 +254,18 @@ int main(int argc, char ** argv)
       ++delivery_pumps;
     };
     guest->exchange(incoming_controller);
-    require(delivery_pumps == 1 && incoming_controller.incoming.empty(), "receive exchange did not pump once");
-    guest->pump = [&] {executor.spin_some();};
+    require(
+      delivery_pumps == 1 && incoming_controller.incoming.empty(),
+      "receive exchange did not pump once");
+    guest->pump = [&] { executor.spin_some(); };
     // Exercise the deployed routes with the largest supported benchmark scan.
     rclcpp::NodeOptions wall_options;
-    wall_options.parameter_overrides({rclcpp::Parameter("config_file", WALL_CONFIG),
-      rclcpp::Parameter("max_serialized_bytes", 131072)});
+    wall_options.parameter_overrides(
+      {rclcpp::Parameter("config_file", WALL_CONFIG),
+       rclcpp::Parameter("max_serialized_bytes", 131072)});
     auto wall_host = std::make_shared<Bridge>("host", wall_options);
     wall_options.arguments(
-      {"--ros-args", "-r", "/robot/scan:=/guest/scan", "-r",
-       "/robot/cmd_vel:=/guest/cmd_vel"});
+      {"--ros-args", "-r", "/robot/scan:=/guest/scan", "-r", "/robot/cmd_vel:=/guest/cmd_vel"});
     auto wall_guest = std::make_shared<Bridge>("guest", wall_options);
     executor.add_node(wall_host);
     executor.add_node(wall_guest);
@@ -318,6 +327,128 @@ int main(int argc, char ** argv)
     require(
       scan_history[0].header.stamp.sec == 43 && scan_history[1].header.stamp.sec == 200,
       "scan timestamps or FIFO delivery changed");
+    // Ball catching uses full RGB frames: exercise the same generic bridge and
+    // bounded controller framing with both images in one boundary batch.
+    write(R"({"version":1,"topics":[
+      {"host_topic":"/test/stereo/left","guest_topic":"/test/guest/left",
+       "type":"sensor_msgs/msg/Image","direction":"host_to_guest",
+       "qos":{"history":"keep_last","depth":2,"reliability":"best_effort","durability":"volatile"}},
+      {"host_topic":"/test/stereo/right","guest_topic":"/test/guest/right",
+       "type":"sensor_msgs/msg/Image","direction":"host_to_guest",
+       "qos":{"history":"keep_last","depth":2,"reliability":"best_effort","durability":"volatile"}},
+      {"host_topic":"/test/clock","guest_topic":"/test/guest/clock",
+       "type":"rosgraph_msgs/msg/Clock","direction":"host_to_guest","coalesce":true,
+       "qos":{"history":"keep_last","depth":128,"reliability":"reliable","durability":"volatile"}}
+    ]})");
+    rclcpp::NodeOptions image_options;
+    image_options.parameter_overrides(
+      {rclcpp::Parameter("config_file", temporary),
+       rclcpp::Parameter("max_serialized_bytes", 8 * 1024 * 1024),
+       rclcpp::Parameter("max_pending_messages", 3)});
+    auto image_host = std::make_shared<Bridge>("host", image_options);
+    auto image_guest = std::make_shared<Bridge>("guest", image_options);
+    executor.add_node(image_host);
+    executor.add_node(image_guest);
+    auto left =
+      peer->create_publisher<sensor_msgs::msg::Image>("/test/stereo/left", rclcpp::SensorDataQoS());
+    auto right = peer->create_publisher<sensor_msgs::msg::Image>(
+      "/test/stereo/right", rclcpp::SensorDataQoS());
+    std::vector<sensor_msgs::msg::Image> received_images;
+    auto receive_image = [&](sensor_msgs::msg::Image::ConstSharedPtr message) {
+      received_images.push_back(*message);
+    };
+    auto left_sub = peer->create_subscription<sensor_msgs::msg::Image>(
+      "/test/guest/left", rclcpp::SensorDataQoS(), receive_image);
+    auto right_sub = peer->create_subscription<sensor_msgs::msg::Image>(
+      "/test/guest/right", rclcpp::SensorDataQoS(), receive_image);
+    until([&] {
+      return left->get_subscription_count() == 1 && right->get_subscription_count() == 1 &&
+             left_sub->get_publisher_count() == 1 && right_sub->get_publisher_count() == 1;
+    });
+    for (const auto & dimensions : {std::pair{640u, 480u}, std::pair{1280u, 960u}}) {
+      received_images.clear();
+      sensor_msgs::msg::Image image;
+      image.header.stamp.sec = 10;
+      image.header.frame_id = "stereo";
+      image.width = dimensions.first;
+      image.height = dimensions.second;
+      image.encoding = "rgb8";
+      image.step = image.width * 3;
+      image.data.resize(image.step * image.height);
+      for (size_t i = 0; i < image.data.size(); ++i) image.data[i] = i % 251;
+      left->publish(image);
+      right->publish(image);
+      until([&] {
+        executor.spin_some();
+        return image_host->pending() == 2;
+      });
+      QueueController image_controller;
+      image_host->exchange(image_controller);
+      auto batch = image_controller.outgoing.drain();
+      require(batch.size() == 2, "stereo batch lost an image");
+      auto decoded = chimaera::control::decode(chimaera::control::encode(batch));
+      for (auto & frame : decoded) image_guest->submit(std::move(frame));
+      until([&] {
+        executor.spin_some();
+        return received_images.size() == 2;
+      });
+      require(
+        received_images[0] == image && received_images[1] == image,
+        "RGB image contents or timestamp changed");
+      std::cout << "STEREO_TRANSFER_OK " << image.width << 'x' << image.height << '\n';
+    }
+    auto clock_pub = peer->create_publisher<rosgraph_msgs::msg::Clock>("/test/clock", 128);
+    std::vector<rosgraph_msgs::msg::Clock> clocks;
+    auto clock_sub = peer->create_subscription<rosgraph_msgs::msg::Clock>(
+      "/test/guest/clock", 128,
+      [&](rosgraph_msgs::msg::Clock::ConstSharedPtr message) { clocks.push_back(*message); });
+    until([&] {
+      return clock_pub->get_subscription_count() == 1 && clock_sub->get_publisher_count() == 1;
+    });
+    received_images.clear();
+    sensor_msgs::msg::Image unchanged;
+    unchanged.header.stamp.sec = 77;
+    unchanged.width = 64;
+    unchanged.height = 48;
+    unchanged.step = 64 * 3;
+    unchanged.encoding = "rgb8";
+    unchanged.data.assign(unchanged.step * unchanged.height, 123);
+    left->publish(unchanged);
+    right->publish(unchanged);
+    until([&] {
+      executor.spin_some();
+      return image_host->pending() == 2;
+    });
+    rosgraph_msgs::msg::Clock repeated;
+    repeated.clock.sec = 1;
+    for (int i = 0; i < 64; ++i) {
+      clock_pub->publish(repeated);
+      std::this_thread::sleep_for(2ms);
+      executor.spin_some();
+    }
+    require(image_host->pending() == 3, "clock flood grew bridge queue or displaced images");
+    QueueController clock_controller;
+    image_host->exchange(clock_controller);
+    // A new timestamp must replace the still-pending controller clock too.
+    repeated.clock.sec = 2;
+    clock_pub->publish(repeated);
+    until([&] {
+      executor.spin_some();
+      return image_host->pending() == 1;
+    });
+    image_host->exchange(clock_controller);
+    const auto clock_batch = clock_controller.outgoing.drain();
+    require(
+      clock_batch.size() == 3, "coalescing key did not reach controller or image FIFO changed");
+    for (auto frame : clock_batch) image_guest->submit(std::move(frame));
+    until([&] {
+      executor.spin_some();
+      return clocks.size() == 1 && received_images.size() == 2;
+    });
+    require(
+      clocks[0] == repeated && received_images[0] == unchanged && received_images[1] == unchanged,
+      "newest clock or unchanged image payloads were lost");
+    std::cout << "CLOCK_COALESCING_OK: bridge/controller bounded; image FIFO retained\n";
     std::cout << "Config validation, bidirectional generic routing, QoS, frame/queue limits and "
                  "echo isolation, large scans and scan FIFO passed\n";
   } catch (const std::exception & error) {

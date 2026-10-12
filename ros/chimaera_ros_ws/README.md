@@ -76,6 +76,14 @@ routes or mismatches fail the bridge. Remappings that merge local bridge topics
 are rejected to prevent loops. There is no startup route handshake; unused route
 mismatches are detected only when messages arrive. Restart both sides after edits.
 
+A route can set `coalesce: true` to retain only its newest pending update,
+using the transport controller's existing keyed queue. Coalescing applies in
+both the ROS adapter and controller queues, and cannot replace data already
+in flight. The default is `false`, preserving FIFO and duplicate messages.
+For paused Gazebo, enable it on `/clock` to prevent repeated timestamps from
+filling the queue. Keep it disabled on image and event routes when every message
+must be retained. Both sides must agree on the enabled policy.
+
 QoS governs each local ROS hop, not end-to-end DDS identity or acknowledgments.
 Transient-local cache belongs to the bridge publisher and is lost on restart.
 Deadline, lifespan and custom liveliness policies are unsupported. No intra-process

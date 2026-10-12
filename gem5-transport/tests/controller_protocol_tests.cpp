@@ -62,6 +62,20 @@ int main() {
         excessive_payload.resize(16 + control::max_bytes + 1);
         rejects([&] { control::decode(excessive_payload); });
         expect(queue.drain().empty(), "drain did not clear queue");
+        control::OutgoingQueue bounded(2, 6);
+        bounded.submit(frame('c', 1), "clock");
+        bounded.submit(frame('s', 2));
+        bounded.submit(frame('c', 3), "clock");
+        rejects([&] { bounded.submit(frame('c', 4, 7), "clock"); });
+        const auto first = bounded.take();
+        expect(first && first->key.empty() && first->data == frame('s', 2),
+               "take lost FIFO data or key metadata");
+        bounded.submit(frame('s', 5));
+        const auto clock = bounded.take();
+        expect(clock && clock->key == "clock" && clock->data == frame('c', 3),
+               "custom limits, rejected replacement or take changed clock");
+        expect(bounded.drain() == control::Batch{frame('s', 5)} && !bounded.take(),
+               "take did not release byte capacity or drain left metadata");
         for (unsigned i = 0; i < 100; ++i) {
             queue.submit(frame('c', i), "clock");
             queue.submit(frame('s', i));

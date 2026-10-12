@@ -1,10 +1,11 @@
 #pragma once
 
 #include <json-c/json.h>
-#include <rclcpp/rclcpp.hpp>
+
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <rclcpp/rclcpp.hpp>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -15,6 +16,7 @@ namespace chimaera_ros_bridge
 struct Route
 {
   std::string host_topic, guest_topic, type, direction, key;
+  bool coalesce{false};
   rclcpp::QoS qos{128};
 };
 
@@ -26,7 +28,8 @@ inline void fields(json_object * object, std::initializer_list<const char *> all
     throw std::invalid_argument("configuration entry must be an object");
   }
   const std::set<std::string> names(allowed.begin(), allowed.end());
-  json_object_object_foreach(object, name, value) {
+  json_object_object_foreach(object, name, value)
+  {
     (void)value;
     if (!names.count(name)) {
       throw std::invalid_argument(std::string("unsupported configuration/QoS field: ") + name);
@@ -36,9 +39,9 @@ inline void fields(json_object * object, std::initializer_list<const char *> all
 inline json_object * field(json_object * object, const char * name, json_type type)
 {
   json_object * value = nullptr;
-  if (!json_object_object_get_ex(object, name, &value) || !value ||
-    json_object_get_type(value) != type)
-  {
+  if (
+    !json_object_object_get_ex(object, name, &value) || !value ||
+    json_object_get_type(value) != type) {
     throw std::invalid_argument(std::string("missing or invalid field: ") + name);
   }
   return value;
@@ -58,7 +61,9 @@ inline std::vector<Route> load_config(const std::string & path)
 {
   using namespace config_detail;
   std::ifstream file(path);
-  if (!file) {throw std::invalid_argument("cannot open bridge config: " + path);}
+  if (!file) {
+    throw std::invalid_argument("cannot open bridge config: " + path);
+  }
   std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
   if (text.empty() || text.size() > 1024 * 1024) {
     throw std::invalid_argument("bridge config must be between 1 byte and 1 MiB");
@@ -78,13 +83,22 @@ inline std::vector<Route> load_config(const std::string & path)
   }
   auto * topics = field(root.get(), "topics", json_type_array);
   const auto count = json_object_array_length(topics);
-  if (count == 0 || count > 128) {throw std::invalid_argument("require 1..128 topic routes");}
+  if (count == 0 || count > 128) {
+    throw std::invalid_argument("require 1..128 topic routes");
+  }
   std::vector<Route> routes;
   std::set<std::string> host_topics, guest_topics;
   for (std::size_t i = 0; i < count; ++i) {
     auto * entry = json_object_array_get_idx(topics, i);
-    fields(entry, {"host_topic", "guest_topic", "type", "direction", "qos"});
+    fields(entry, {"host_topic", "guest_topic", "type", "direction", "qos", "coalesce"});
     Route route;
+    json_object * coalesce = nullptr;
+    if (json_object_object_get_ex(entry, "coalesce", &coalesce)) {
+      if (!coalesce || json_object_get_type(coalesce) != json_type_boolean) {
+        throw std::invalid_argument("coalesce must be boolean");
+      }
+      route.coalesce = json_object_get_boolean(coalesce);
+    }
     route.host_topic = string(entry, "host_topic");
     route.guest_topic = string(entry, "guest_topic");
     route.type = string(entry, "type");
@@ -92,9 +106,9 @@ inline std::vector<Route> load_config(const std::string & path)
     if (route.host_topic.front() != '/' || route.guest_topic.front() != '/') {
       throw std::invalid_argument("topic names must be absolute");
     }
-    if (!host_topics.insert(route.host_topic).second ||
-      !guest_topics.insert(route.guest_topic).second)
-    {
+    if (
+      !host_topics.insert(route.host_topic).second ||
+      !guest_topics.insert(route.guest_topic).second) {
       throw std::invalid_argument("each topic may appear only once per side (avoid echo loops)");
     }
     if (route.direction != "host_to_guest" && route.direction != "guest_to_host") {
@@ -110,18 +124,30 @@ inline std::vector<Route> load_config(const std::string & path)
       throw std::invalid_argument("supported history is keep_last with depth 1..128");
     }
     route.qos = rclcpp::QoS(rclcpp::KeepLast(static_cast<std::size_t>(depth)));
-    if (reliability == "reliable") {route.qos.reliable();}
-    else if (reliability == "best_effort") {route.qos.best_effort();}
-    else {throw std::invalid_argument("reliability must be reliable or best_effort");}
-    if (durability == "volatile") {route.qos.durability_volatile();}
-    else if (durability == "transient_local") {route.qos.transient_local();}
-    else {throw std::invalid_argument("durability must be volatile or transient_local");}
+    if (reliability == "reliable") {
+      route.qos.reliable();
+    } else if (reliability == "best_effort") {
+      route.qos.best_effort();
+    } else {
+      throw std::invalid_argument("reliability must be reliable or best_effort");
+    }
+    if (durability == "volatile") {
+      route.qos.durability_volatile();
+    } else if (durability == "transient_local") {
+      route.qos.transient_local();
+    } else {
+      throw std::invalid_argument("durability must be volatile or transient_local");
+    }
     // Length-prefix every field so the wire identity is unambiguous and independent
     // of JSON whitespace, object ordering, or route array ordering.
-    for (const auto & part : {route.host_topic, route.guest_topic, route.type, route.direction,
-        history, std::to_string(depth), reliability, durability})
-    {
+    for (const auto & part :
+         {route.host_topic, route.guest_topic, route.type, route.direction, history,
+          std::to_string(depth), reliability, durability}) {
       route.key += std::to_string(part.size()) + ":" + part;
+    }
+    // Preserve legacy wire identities for omitted/false policies.
+    if (route.coalesce) {
+      route.key += "4:true";
     }
     routes.push_back(std::move(route));
   }

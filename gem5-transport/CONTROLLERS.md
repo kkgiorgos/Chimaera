@@ -84,6 +84,12 @@ remains local metadata, and cannot replace data already in flight. Overflow
 throws without changing the queue. `take()` returns `nullopt` when empty;
 an engaged optional can contain an empty message.
 
+The same bounded implementation is available in `<chimaera/outgoing_queue.hpp>`
+for adapters that buffer data before passing it to a controller. Its defaults
+remain 1024 messages and 32 MiB; adapters can configure their own bounds.
+`take()` returns payload and key metadata so adapters can preserve the policy
+when handing a message to the next queue.
+
 ## Why there is an I/O worker
 
 Guest m5 calls synchronously wait for host socket I/O. Meanwhile, the host's

@@ -63,10 +63,11 @@ if(BUILD_TESTING)
     ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=197;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
   if(BUILD_GAZEBO_BRIDGE)
     find_package(sensor_msgs REQUIRED)
+    find_package(rosgraph_msgs REQUIRED)
     add_executable(sensor_bridge_test test/sensor_bridge_test.cpp)
     target_link_libraries(sensor_bridge_test PRIVATE bridge)
     target_include_directories(sensor_bridge_test PRIVATE "${GEM5_TRANSPORT_ROOT}/src")
-    ament_target_dependencies(sensor_bridge_test PUBLIC rclcpp std_msgs sensor_msgs)
+    ament_target_dependencies(sensor_bridge_test PUBLIC rclcpp std_msgs sensor_msgs rosgraph_msgs)
     target_compile_definitions(sensor_bridge_test PRIVATE
       WALL_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_routes.json"
       TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_test_routes.json")

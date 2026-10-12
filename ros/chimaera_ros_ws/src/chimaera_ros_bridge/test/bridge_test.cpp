@@ -51,6 +51,19 @@ int main(int argc, char ** argv)
     std::ifstream input(TEST_CONFIG);
     const std::string valid((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
     auto write = [&](const std::string & text) {std::ofstream(temporary) << text;};
+    for (const auto & flag : {std::string("false"), std::string("true"), std::string("\"true\"")}) {
+      auto configured = valid;
+      configured.insert(configured.find("\"host_topic\""), "\"coalesce\":" + flag + ",");
+      write(configured);
+      if (flag == "\"true\"") {
+        rejects([&] {chimaera_ros_bridge::load_config(temporary);});
+      } else {
+        const auto routes = chimaera_ros_bridge::load_config(temporary);
+        require(routes[0].coalesce == (flag == "true"), "coalesce flag was lost");
+        require((routes[0].key == config[0].key) == (flag == "false"),
+          "coalescing identity or legacy compatibility changed");
+      }
+    }
     for (const auto & bad : {std::string("{"), std::string("{}"), valid + "garbage"}) {
       write(bad);
       rejects([&] {chimaera_ros_bridge::load_config(temporary);});
