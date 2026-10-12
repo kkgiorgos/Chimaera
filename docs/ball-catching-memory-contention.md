@@ -230,5 +230,14 @@ The initial coupled attempt failed before launch because paused Gazebo flooded
 the bridge's 16-message FIFO with unchanged clock timestamps. A standalone
 diagnostic observed 5,096 clock messages over approximately ten wall seconds,
 with only timestamps 0 and 0.5 ms. The approved `/clock` coalescing policy
-addresses that queue. Full guest catch/miss results remain to be recorded;
-native catches and short framing checks are not substitutes.
+addresses that queue. After enabling it, the no-aggressor baseline advanced
+133 boundaries (66.5 ms) and received a full 7.4 MB stereo batch, then hit the
+controller's existing 32 MiB queue bound as subsequent images accumulated.
+The ball had not launched, so this is an infrastructure failure, not a miss.
+Diagnostic initialization statistics recorded 475,596 guest DRAM reads, a
+41.754 ns mean, 71/86 ns P95/P99 and 0.715 GB/s physically served bandwidth.
+These are prelaunch diagnostic numbers, not task-window measurements. The
+records are in `results/memory-suite-clock-validation-20261012`; changing image
+resolution or ingress policy requires consultation before proceeding.
+Full guest catch/miss results remain to be recorded; native catches and short
+framing checks are not substitutes.
