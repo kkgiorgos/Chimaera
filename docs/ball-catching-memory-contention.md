@@ -176,6 +176,25 @@ writes its resolved configuration and exits without opening the timing server
 or calling the simulator. This validates construction, not CPU switching or
 full-system execution.
 
+For live progress, open another terminal in the repository root:
+
+```bash
+python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
+  ros/ball_catching_ws/results/cpu-comparison-640/o3
+```
+
+This reads host records every five wall seconds and needs no ROS environment.
+It shows the latest attempt, active CPU, simulated time, completed exchanges,
+elapsed wall time, average simulation speed, last timing update and delivered
+commands. Throw percentage starts only after `launch.json` exists; startup has
+no known total duration or completion percentage. Catch/miss appears when scored.
+`--once` prints a single snapshot; `--case` selects another case, or pass an
+individual attempt directory. Ctrl+C stops the monitor without stopping the
+benchmark. The monitor never contacts the guest or timing socket, writes no run
+records and adds no simulated work. It tolerates partially written live records.
+For guest diagnostics, tail the attempt's `gem5/board.pc.com_1.device`; host and
+simulator output are in `launch.log`.
+
 ## Customize the experiment
 
 [memory_contention.json](../ros/ball_catching_ws/experiments/memory_contention.json)
