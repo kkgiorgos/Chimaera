@@ -18,7 +18,8 @@
     "version": "25.1.0.1",
     "build_target": "X86",
     "protocol": "MESI_Two_Level",
-    "kvm_required": true
+    "kvm_required": true,
+    "ramulator2_revision": "72427a1bba3771564c4fb0e494ba02242fd1eaa7"
   },
   "guest": {
     "base_resource": "x86-ubuntu-22.04-img",
@@ -61,6 +62,8 @@
     "ros-humble-sensor-msgs",
     "ros-humble-std-msgs",
     "scons",
-    "zlib1g-dev"
+    "zlib1g-dev",
+    "g++-12",
+    "lld"
   ]
 }

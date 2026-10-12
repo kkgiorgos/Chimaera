@@ -1,7 +1,9 @@
 """Exercise gem5 event handlers without booting a full-system image."""
+import argparse
 import ast
 from pathlib import Path
 import re
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -63,3 +65,39 @@ def test_kernel_output_at_every_cpu_marker_boundary(tmp_path, split, newline):
     warning = '[    2.636117] random: python3: uninitialized urandom read' + newline
     serial = 'boot log' + newline + marker[:split] + warning + marker[split:] + newline
     test_online_cpu_verification(tmp_path, serial, 12, None)
+
+
+@pytest.mark.parametrize('arguments, valid', [
+    ([], True),
+    (['--memory-backend', 'ramulator2', '--ramulator-config', 'memory.json'], True),
+    (['--memory-backend', 'ramulator2', '--ramulator-config', 'memory.json',
+      '--cpu-type', 'o3'], True),
+    (['--memory-backend', 'ramulator2'], False),
+    (['--ramulator-config', 'memory.json'], False),
+    (['--memory-backend', 'ramulator2', '--ramulator-config', 'memory.json',
+      '--cpu-type', 'kvm'], False),
+])
+def test_memory_backend_arguments(monkeypatch, arguments, valid):
+    config = Path(__file__).resolve().parents[1] / 'src/wall_follow_bridge/config/gem5_wall_follow.py'
+    tree = ast.parse(config.read_text())
+    # Execute the actual argument contract without importing gem5 or booting.
+    nodes = []
+    collecting = False
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+            if 'parser' in names:
+                collecting = True
+            if 'files' in names:
+                break
+        if collecting:
+            nodes.append(node)
+    monkeypatch.setattr(sys, 'argv', ['gem5_wall_follow.py', '--gem5-root', '/tmp/gem5', *arguments])
+    namespace = dict(argparse=argparse, add_chimaera_arguments=lambda *a, **kw: None)
+    code = compile(ast.Module(body=nodes, type_ignores=[]), str(config), 'exec')
+    if valid:
+        exec(code, namespace)
+    else:
+        with pytest.raises(SystemExit) as error:
+            exec(code, namespace)
+        assert error.value.code == 2

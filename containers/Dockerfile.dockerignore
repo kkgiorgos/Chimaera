@@ -20,3 +20,5 @@
 **/install
 **/log
 gem5/resources
+
+gem5/ext/ramulator2/ramulator2

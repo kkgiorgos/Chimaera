@@ -257,3 +257,12 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=benchmarking python3 -m pytest -q te
 Tests cover controller behavior, recording, sweeps, orchestration, metrics, and
 dashboard controls. See [the short sensitivity preset](experiments/timing_extreme.json)
 for a four-case clock/cache check.
+
+### Fixed-hardware memory contention
+
+The [memory contention study](../../docs/wall-follow-memory-contention.md) holds
+CPU/cache/DRAM settings fixed and sweeps a configurable device ingress into
+Ramulator 2.1. Use `experiments/memory_contention.json` with the Ramulator-enabled
+container image for streaming, strided, random and write-heavy burst workloads.
+The dashboard compares actual memory traffic and guest read latency against
+wall tracking, progress and simulated command receipt gaps.

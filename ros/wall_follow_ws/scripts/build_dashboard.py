@@ -8,7 +8,7 @@ WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE / 'src/wall_follow_robot'))
 sys.path.insert(0,str(WORKSPACE/'benchmarking'))
 from wall_follow_benchmark.comparison import load_comparison
-from wall_follow_benchmark.metrics import TASK, ARCHITECTURE, SIMULATION
+from wall_follow_benchmark.metrics import TASK, ARCHITECTURE, SIMULATION, MEMORY
 from wall_follow_benchmark.timing import SCOPE as TIMING_SCOPE
 
 
@@ -16,7 +16,7 @@ def build_dashboard(runs, output, warmup=0., max_points=1500):
     groups,errors=load_comparison(runs,warmup,max_points)
     payload=dict(runs=groups,errors=errors,warmup=warmup,
                  task_metrics=list(TASK.items()), architecture_metrics=list(ARCHITECTURE.items()),
-                 simulation_metrics=list(SIMULATION.items()),
+                 simulation_metrics=list(SIMULATION.items()), memory_metrics=list(MEMORY.items()),
                  timing_scope=TIMING_SCOPE,generated=datetime.now(timezone.utc).isoformat())
     encoded=json.dumps(payload,allow_nan=False,separators=(',',':')).replace('<','\\u003c').replace('>','\\u003e').replace('&','\\u0026')
     assets=Path(__file__).parent/'web'

@@ -142,6 +142,13 @@ def aggregate_runs(runs, max_points=1500):
         config = first['config']
         width,height = first['arena']['arena_width'],first['arena']['arena_height']
         name = f"{config.get('architecture','unknown')} · {config.get('controller.control_hz','?')} Hz · {width:g}×{height:g} m"
+        if config.get('hardware.memory_backend') == 'ramulator2':
+            pattern = config.get('hardware.aggressor_pattern', 'none')
+            interval = config.get('hardware.aggressor_interval', '?')
+            read = config.get('hardware.aggressor_read_percent', '?')
+            duty = config.get('hardware.aggressor_duty_percent', '?')
+            name = ('Baseline · no aggressor' if pattern == 'none' else
+                    f'{pattern.title()} · every {interval} DRAM cycles · {read}% reads · {duty}% duty')
         stats = {key:metric_statistics([r['metrics'].get(key) for r in members]) for key in first['metrics']}
         means,stds,counts,interval = aggregate_series(members,max_points)
         groups.append(clean(dict(id=group_id,name=name,count=len(members),path='\n'.join(r['path'] for r in members),
@@ -157,6 +164,12 @@ def aggregate_runs(runs, max_points=1500):
                if k != 'architecture' and not k.startswith('source_sha256.')
                and len({json.dumps(g['config'].get(k), sort_keys=True) for g in groups}) > 1]
     for g in groups:
+        if g['config'].get('hardware.memory_backend') == 'ramulator2':
+            extra = [k for k in varying if not k.startswith('hardware.aggressor_')]
+            if extra:
+                g['name'] += ' · ' + ' · '.join(
+                    f"{k.removeprefix('hardware.')}={g['config'].get(k, 'unknown')}" for k in extra)
+            continue
         parts = [str(g['config'].get('architecture', 'unknown'))]
         parts.extend(f"{k.removeprefix('hardware.').removeprefix('controller.').removeprefix('sensor.')}={g['config'].get(k, 'unknown')}"
                      for k in varying)

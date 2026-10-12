@@ -183,3 +183,15 @@ assets and images needed by active or resumable runs; remove unused guest direct
 Run [container host tests](../README.md#checks) without Docker execution. For an
 end-to-end native check, use the smoke suite above with fresh output. Application
 and benchmark tests are in the [workspace guide](../../ros/wall_follow_ws/README.md#checks).
+
+## Ramulator memory contention DSE
+
+Use [the shared-memory benchmark guide](../../docs/wall-follow-memory-contention.md)
+and `ros/wall_follow_ws/experiments/memory_contention.json` to hold the architecture
+fixed while varying configurable GPU-like synthetic traffic. Build the updated
+shared image with `containers/build.py --tag chimaera:ramulator2`, then pass
+`--image chimaera:ramulator2` to `suite.py`. The image includes the pinned Ramulator
+library, its DDR4 export, GCC 12 and a gem5 binary built with `RAMULATOR2_ROOT`.
+Custom exported JSON configs are frozen and mounted with the generated plan;
+every attempt saves its exact memory configuration. The dashboard compares
+achieved traffic, guest DRAM latency, delivered command cadence and robot quality.

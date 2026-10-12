@@ -39,7 +39,10 @@ def main():
             inputs = inputs / 'plan'
             config = json.loads((inputs / 'runner.json').read_text())
             command = config['command']
-            if (json.loads((inputs / 'experiment.json').read_text()) != json.loads(args.config.read_text())
+            original = inputs / 'source-experiment.json'
+            if not original.exists():
+                original = inputs / 'experiment.json'
+            if (json.loads(original.read_text()) != json.loads(args.config.read_text())
                     or config['image'] != args.image
                     or ('--gem5' in command) == args.local
                     or command[command.index('--architecture') + 1] != architecture):

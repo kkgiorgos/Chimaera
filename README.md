@@ -108,6 +108,10 @@ Chimaera's custom operations. The supplied X86 build selects the
 KVM support. ROS bridge builds include `gem5-transport` automatically; a separate
 `make -C gem5-transport` is only needed when using its libraries directly.
 
+For optional Ramulator 2.1 DRAM timing, see the
+[integration guide](gem5/ext/ramulator2/README.md) for the pinned dependency,
+build flag, SE examples, regression checks, and wall-follow memory selection.
+
 ### Supply and prepare the guest image and kernel
 
 You must obtain or create these **untracked external artifacts**:

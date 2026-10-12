@@ -6,6 +6,16 @@ data.runs.forEach((r,i) => r.color = i<colors.length ? colors[i] : `hsl(${i*137.
 const metrics = data.task_metrics;
 const architectureMetrics = data.architecture_metrics;
 const timingMetrics = data.simulation_metrics;
+const memoryMetrics = data.memory_metrics ?? [];
+setOptions('memory-metric', memoryMetrics);
+const hasMemory = data.runs.some(r=>r.config['hardware.memory_backend']==='ramulator2');
+$('memory-section').hidden=!hasMemory;
+if(hasMemory) {
+ $('memory-metric').value='gem5_cpu_dram_read_ns';
+ document.title='Wall follower · Memory contention';
+ document.querySelector?.('header h1') && (document.querySelector('header h1').textContent='Memory contention, task impact');
+ document.querySelector?.('header p') && (document.querySelector('header p').textContent='Fixed hardware. Varying shared-memory workloads. Measured robot behavior.');
+}
 const signals = [['gt_error','Wall-distance error (m)'],['path_m','Cumulative distance (m)']];
 const hash = new URLSearchParams(location.hash.slice(1));
 let selected = new Set(hash.has('runs') ? hash.get('runs').split(',') : data.runs.map(r=>r.id));
@@ -29,7 +39,8 @@ setOptions('timing-metric',timingMetrics);
 if(!data.runs.some(r=>finite(r.metrics.timing_cosim_realtime_factor)))$('timing-metric').value='real_time_factor';
 setOptions('architecture-metric',architectureMetrics);
 $('timing-scope').textContent=data.timing_scope;
-setOptions('bar-metric',metrics); setOptions('signal',signals);
+$('memory-metric').addEventListener('change',render);
+setOptions('bar-metric',metrics); $('bar-metric').value='rmse_m'; setOptions('signal',signals);
 $('total').textContent=`(${data.runs.length})`;
 $('context').textContent=`Summary warmup: ${data.warmup} simulation seconds · Built ${new Date(data.generated).toLocaleString()}`;
 $('footer').textContent='Repetitions have equal weight. Error bars and bands show sample standard deviation; n=1 has no SD estimate. Scalar metrics use all recorded samples after warmup. Traces interpolate within the common recorded time interval; mean trajectories are averages, not individual paths. Time filters affect charts only. Missing measurements remain unavailable.';
@@ -114,7 +125,7 @@ for(const key of [...new Set(data.runs.flatMap(r=>Object.keys(r.config)))].sort(
 function settingLabel(key) { return key.replace(/^(hardware|controller|sensor|arena|cosimulation)\./,'').replaceAll('_',' '); }
 function coordinate(run, name) {
  const keys=dimensions.get(name)??[];
- if(!keys.length)return run.name;
+ if(!keys.length||name==='workload')return run.name;
  return keys.length===1?run.config[keys[0]]:keys.map(k=>`${settingLabel(k)}=${fmt(run.config[k])}`).join(', ');
 }
 function axisLabel(name) {
@@ -171,7 +182,42 @@ function renderMetricBars(runs, key, label, container) {
  svg.append(svgElem('text',{x:plotWidth/2,y:430,'text-anchor':'middle'},axisLabel(xkey)));
  attachHover(svg,hover);
 }
+function renderMemory(runs) {
+ if(!hasMemory)return;
+ const key=$('memory-metric').value;
+ renderMetricBars(runs,key,memoryMetrics.find(m=>m[0]===key)[1],$('memory-chart'));
+ scalarTable($('memory-table'),runs,memoryMetrics);
+ const taskKey=$('bar-metric').value;
+ const taskLabel=metrics.find(m=>m[0]===taskKey)[1];
+ const points=runs.filter(r=>finite(r.metrics.gem5_aggressor_gbps)&&finite(r.metrics[taskKey]));
+ const svg=chart($('traffic-task-chart'),`Achieved traffic versus ${taskLabel}`,720,380);
+ const xd=domain(points.map(r=>r.metrics.gem5_aggressor_gbps),true);
+ const yd=domain(points.map(r=>r.metrics[taskKey]),true);
+ const a=axes(svg,xd,yd,720,380),hover=[];
+ svg.append(svgElem('text',{x:12,y:16},taskLabel));
+ svg.append(svgElem('text',{x:360,y:376,'text-anchor':'middle'},'Achieved aggressor traffic (GB/s)'));
+ for(const r of points) {
+  const x=a.x(r.metrics.gem5_aggressor_gbps), y=a.y(r.metrics[taskKey]);
+  const text=`${r.name}\n${fmt(r.metrics.gem5_aggressor_gbps)} GB/s · ${taskLabel}: ${fmt(r.metrics[taskKey])}`;
+  const point=svgElem('circle',{cx:x,cy:y,r:6,fill:r.color});
+  point.append(svgElem('title',{},text));svg.append(point);
+  hover.push({x,y,text});
+ }
+ attachHover(svg,hover);
+ const baseline=data.runs.find(r=>r.completed&&r.config['hardware.aggressor_pattern']==='none');
+ const rows=[['rmse_m','Tracking RMSE Δ (%)'],['path_m','Progress Δ (%)'],
+             ['command_gap_p95_ms','Command gap p95 Δ (%)'],['gem5_cpu_dram_read_ns','Guest DRAM latency Δ (%)']];
+ const comparable=r=>baseline&&JSON.stringify(baseline.provenance)===JSON.stringify(r.provenance)&&
+   JSON.stringify(baseline.events)===JSON.stringify(r.events)&&
+   [...new Set([...Object.keys(baseline.config),...Object.keys(r.config)])].every(k=>
+     k.startsWith('hardware.aggressor_')||JSON.stringify(baseline.config[k])===JSON.stringify(r.config[k]));
+ comparisonTable($('baseline-impact'),runs,runs.map(r=>Object.fromEntries(rows.map(([k])=>{
+  const base=baseline?.metrics[k], value=r.metrics[k];
+  return [k,comparable(r)&&finite(base)&&base!==0&&finite(value)?100*(value/base-1):null];
+ }))),rows);
+}
 function renderBars(runs) {
+ renderMemory(runs);
  const key=$('bar-metric').value;
  renderMetricBars(runs,key,metrics.find(m=>m[0]===key)[1],$('bar-chart'));
  scalarTable($('metrics-table'),runs,metrics);
