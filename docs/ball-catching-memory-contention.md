@@ -172,8 +172,10 @@ work to this initial study. The replay comes from host physics records. Native
 computation timings are available in native preflights; detailed guest execution
 timings and consumed-frame attribution are not collected by this version.
 
-The 1280×960 RGB pair carries 7,372,800 raw image bytes; at 90 Hz it represents
-663.6 MB/s before serialization and copies. The generic ROS bridge transmits
+The preset uses 640×480 images with the same field of view and update rates.
+An RGB pair carries 1,843,200 raw image bytes; at 90 Hz it represents
+165.9 MB/s before serialization and copies, one quarter of the original
+1280×960 image traffic. The generic ROS bridge transmits
 opaque serialized messages. Its per-message limit is set from image dimensions;
 the controller still has its existing 32 MiB aggregate queue bound. Queue
 overflow fails explicitly. Local full-size stereo tests verify framing, payloads
@@ -208,10 +210,17 @@ Full simulation outcomes are separate from unit and transport checks.
 
 ### Local validation, 2026-10-12
 
-The four native preset baselines each caught the ball: both speed geometries at
-both frequency tuples, one throw each. Records and the comparison/replay report
+The four original 1280×960 native baselines each caught the ball: both speed
+geometries at both frequency tuples, one throw each. Records and the comparison/replay report
 are in `ros/ball_catching_ws/results/memory-native-suite-20261012`. This screening
 does not establish guest feasibility or reliability.
+
+After reducing the preset to 640×480, all four native baselines also caught the
+ball, one throw each, with unchanged launch geometry, field of view, physics and
+frequency tuples. Records and the report are in
+`ros/ball_catching_ws/results/memory-native-640-20261012`. The 44 Python workflow
+and report checks passed with the reduced preset. A fresh coupled 90 Hz baseline
+is required to establish whether the guest can sustain image ingress.
 
 The random-pattern calibration measured 21.897728 GB/s physically served over
 the 1 ms window after warmup (42.769% of the 51.2 GB/s theoretical peak). It is a
@@ -237,7 +246,8 @@ The ball had not launched, so this is an infrastructure failure, not a miss.
 Diagnostic initialization statistics recorded 475,596 guest DRAM reads, a
 41.754 ns mean, 71/86 ns P95/P99 and 0.715 GB/s physically served bandwidth.
 These are prelaunch diagnostic numbers, not task-window measurements. The
-records are in `results/memory-suite-clock-validation-20261012`; changing image
-resolution or ingress policy requires consultation before proceeding.
+records are in `results/memory-suite-clock-validation-20261012`. The user approved
+trying reduced resolution first, so the preset now uses 640×480. Further changes
+to ingress policy require consultation before proceeding.
 Full guest catch/miss results remain to be recorded; native catches and short
 framing checks are not substitutes.
