@@ -36,6 +36,15 @@ const context = vm.createContext({
 vm.runInContext(html.match(/<script>(\/\* Buildless,[\s\S]*?)<\/script>/)[1], context);
 const rows = elements.get('memory-rows');
 assert.equal(elements.get('memory-panel').hidden, false);
+if (process.argv[3] === 'cpu-comparison') {
+  assert.equal(rows.children.length, 2);
+  assert.equal(new Set(data.trials.map(trial => trial.id)).size, 2);
+  assert.deepEqual(rows.children.map(row => row.children[1].textContent), ['MISS', 'CATCH']);
+  assert.deepEqual(rows.children.map(row => row.children[8].textContent), ['100.0', '200.0']);
+  assert.deepEqual(rows.children.map(row => row.children[9].textContent), ['1.00×', '1.00×']);
+  rows.children[1].click(); assert.equal(selected, data.points[1].id);
+  console.log('CPU comparison preserves separate results and matches each model to its own baseline');
+} else {
 assert.equal(rows.children.length, 4);
 assert.deepEqual(rows.children.map(row => row.children[1].textContent),
                  ['CATCH', 'MISS', 'CATCH', 'infrastructure failure']);
@@ -67,3 +76,4 @@ exported.text().then(text => {
   assert.equal(saved[3].result, undefined);
   console.log('Comparison filters, latency plots, outcomes, baseline ratios and export passed');
 });
+}

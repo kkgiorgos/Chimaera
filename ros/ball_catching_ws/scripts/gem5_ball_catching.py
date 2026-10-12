@@ -1,4 +1,4 @@
-"""Full-system ball catching: KVM boot followed by a fixed Timing CPU ROI."""
+"""Full-system ball catching: KVM boot followed by a fixed Timing or O3 CPU ROI."""
 import argparse
 import json
 from pathlib import Path
@@ -22,13 +22,18 @@ parser.add_argument('--experiment', required=True)
 parser.add_argument('--bundle', required=True)
 parser.add_argument('--image', required=True)
 parser.add_argument('--kernel', required=True)
+parser.add_argument('--instantiate-only', action='store_true',
+                    help='Instantiate the full system at tick zero, without booting or simulating')
 add_chimaera_arguments(parser, guest_command='/opt/chimaera/ball_catching/guest_start')
 args = parser.parse_args()
 experiment = json.loads(Path(args.experiment).read_text())
 hardware = experiment['hardware']
+cpu_type = hardware.get('cpu_type', 'timing')
+if cpu_type not in ('timing', 'o3'):
+    parser.error('hardware cpu_type must be timing or o3')
 configure_ticks()
 processor = SimpleSwitchableProcessor(starting_core_type=CPUTypes.KVM,
-    switch_core_type=CPUTypes.TIMING, isa=ISA.X86, num_cores=hardware['num_cores'])
+    switch_core_type=CPUTypes(cpu_type), isa=ISA.X86, num_cores=hardware['num_cores'])
 for core in processor.get_cores():
     core.get_simobject().usePerf = False
 cache = MESITwoLevelCacheHierarchy(l1d_size=hardware['l1d_size'],
@@ -49,6 +54,18 @@ board.set_kernel_disk_workload(kernel=KernelResource(local_path=args.kernel),
     kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off'],
     readfile_contents=boot)
 
+if args.instantiate_only:
+    # Use the board's documented direct-instantiation lifecycle. No timing
+    # server is opened and no call to m5.simulate()/Simulator.run() is made.
+    root = board._pre_instantiate()
+    m5.instantiate()
+    board._post_instantiate()
+    record = dict(cpu_type=cpu_type, num_cores=hardware['num_cores'], tick=m5.curTick(),
+                  simulated=False)
+    (Path(m5.options.outdir) / 'cpu_check.json').write_text(json.dumps(record, indent=2) + '\n')
+    print('Full-system configuration instantiated without simulation: ' + json.dumps(record))
+    raise SystemExit(0)
+
 def prepare_roi():
     serial = (Path(m5.options.outdir) / 'board.pc.com_1.device').read_text(errors='replace')
     serial = re.sub(r'\[\s*\d+\.\d+\] [^\r\n]*(?:\r?\n|$)', '', serial)
@@ -56,6 +73,12 @@ def prepare_roi():
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
     processor.switch()
+    cores = processor.get_cores()
+    if len(cores) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in cores):
+        raise RuntimeError('Detailed CPU switch did not select the requested model')
+    (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
+        cpu_type=cpu_type, num_cores=len(cores),
+        simobjects=[core.get_simobject().type for core in cores], tick=m5.curTick()), indent=2) + '\n')
     # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile
     # mechanism to give the guest the exact origin used by the timing server.
     boot_file = Path(str(board.readfile))

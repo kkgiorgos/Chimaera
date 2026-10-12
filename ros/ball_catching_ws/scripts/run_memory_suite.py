@@ -61,7 +61,7 @@ def positive(value, name, zero=False):
         raise ValueError(f'{name} must be finite and {"nonnegative" if zero else "positive"}')
 
 
-def load_config(path):
+def load_config(path, cpu_type=None):
     path = Path(path).resolve()
     data = json.loads(path.read_text())
     if set(data) != {'version', 'fixed', 'hardware', 'ramulator_config', 'throws', 'rates',
@@ -70,11 +70,15 @@ def load_config(path):
     for section in ('fixed', 'hardware', 'aggressor', 'calibration'):
         if not isinstance(data[section], dict):
             raise ValueError(f'{section} must be an object')
+    # Older experiment files retain the original Timing CPU behaviour.
+    data['hardware'].setdefault('cpu_type', 'timing')
+    if cpu_type is not None:
+        data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s'},
-        'hardware': {'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
+        'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
         'calibration': {'warmup_ns', 'duration_ns'},
@@ -155,6 +159,8 @@ def load_config(path):
             or type(aggressor['read_percent']) is not int or not 0 <= aggressor['read_percent'] <= 100):
         raise ValueError('Aggressor alignment or read percentage is invalid')
     hardware = data['hardware']
+    if hardware['cpu_type'] not in ('timing', 'o3'):
+        raise ValueError('hardware cpu_type must be timing or o3')
     for key in ('num_cores', 'l1_assoc', 'l2_assoc'):
         if type(hardware[key]) is not int or hardware[key] < 1:
             raise ValueError('Invalid hardware ' + key)
@@ -189,7 +195,9 @@ def plan(data):
         if pressure == 0 and pattern != data['patterns'][0]:
             continue
         index = len(points)
-        points.append(dict(id=f'case-{index:03d}', label=f'{throw["name"]} · {rates["name"]} · '
+        cpu_type = data['hardware']['cpu_type']
+        points.append(dict(id=f'case-{index:03d}', cpu_type=cpu_type,
+                           label=f'{cpu_type.upper()} · {throw["name"]} · {rates["name"]} · '
                            + ('baseline' if pressure == 0 else f'{pattern} {pressure:.0%}'),
                            throw=throw, rates=rates, pattern=pattern if pressure else 'none',
                            pressure=pressure, status='pending', trials=[], expected_throws=1))
@@ -457,13 +465,19 @@ def main():
     parser.add_argument('--gem5-root', type=Path, default=REPOSITORY / 'gem5')
     parser.add_argument('--image', type=Path)
     parser.add_argument('--kernel', type=Path)
+    parser.add_argument('--cpu-type', choices=('timing', 'o3'),
+                        help='Override the fixed detailed CPU model for this suite')
     parser.add_argument('--case', action='append', help='Select plan case IDs; repeatable')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--native-preflight', action='store_true', help='Native baseline throws only; no memory measurements')
     parser.add_argument('--calibrate-only', action='store_true')
+    parser.add_argument('--prepare-only', action='store_true',
+                        help='Check artifacts and stage the guest; do not run calibration, gem5 or Gazebo')
     parser.add_argument('--resume', action='store_true')
     args = parser.parse_args()
-    data = load_config(args.config)
+    if args.prepare_only and (args.native_preflight or args.calibrate_only):
+        parser.error('--prepare-only cannot be combined with native execution or calibration')
+    data = load_config(args.config, args.cpu_type)
     all_points = plan(data)
     points = all_points
     if args.case:
@@ -511,7 +525,7 @@ def main():
         for path in (args.image, args.kernel, gem5):
             if not path.is_file():
                 raise ValueError('Missing artifact: ' + str(path))
-        calibration = calibrate(output, data, gem5)
+        calibration = manifest.get('calibration', {}) if args.prepare_only else calibrate(output, data, gem5)
         if not args.calibrate_only:
             bundle = output / 'guest.tar.gz'
             if not bundle.exists():
@@ -533,6 +547,30 @@ def main():
         completed = [output / trial for point in manifest['points'] for trial in point['trials']]
         create_dashboard(completed, output / 'dashboard.html', manifest['points'])
     save()
+    if args.prepare_only:
+        write_json(output / 'cpu_check.json', dict(hardware=data['hardware'],
+            ramulator_config=data['ramulator_config'],
+            aggressor=dict(data['aggressor'], pattern='none', interval=1, gbps=0)))
+        # Freeze the input and exact selected cases so handoff needs one command.
+        frozen_config = output / 'prepared_config.json'
+        write_json(frozen_config, {key: value for key, value in data.items()
+                                  if key not in ('ramulator_sha256', 'peak_gbps')})
+        command = [sys.executable, str(SCRIPTS / 'run_memory_suite.py'),
+                   '--config', str(frozen_config), '--cpu-type', data['hardware']['cpu_type'],
+                   '--gem5-root', str(args.gem5_root), '--image', str(args.image),
+                   '--kernel', str(args.kernel), '--output', str(output), '--resume']
+        for case in args.case or []:
+            command += ['--case', case]
+        run_script = output / 'run.sh'
+        run_script.write_text('#!/usr/bin/env bash\nset -eo pipefail\ncd ' + shlex.quote(str(REPOSITORY))
+            + '\nsource /opt/ros/humble/setup.bash\n'
+            + 'source ' + shlex.quote(str(REPOSITORY / 'ros/chimaera_ros_ws/install/local_setup.bash')) + '\n'
+            + 'source ' + shlex.quote(str(WORKSPACE / 'install/local_setup.bash')) + '\n'
+            + 'exec ' + shlex.join(command) + '\n')
+        run_script.chmod(0o755)
+        print('Prepared ' + data['hardware']['cpu_type'] + ' guest bundle: ' + str(bundle))
+        print('Run with: bash ' + shlex.quote(str(run_script)))
+        return 0
     if args.calibrate_only:
         print(json.dumps(calibration, indent=2))
         return 0

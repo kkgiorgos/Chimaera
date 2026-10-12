@@ -17,7 +17,8 @@
     }
   }
   const trialFor = point => byId.get(point.trials[0]);
-  const comparable = (a, b) => a.throw.name === b.throw.name && a.rates.name === b.rates.name;
+  const comparable = (a, b) => a.throw.name === b.throw.name && a.rates.name === b.rates.name &&
+    (a.cpu_type || 'timing') === (b.cpu_type || 'timing');
   function svgElement(name, attributes, text) {
     const node = document.createElementNS('http://www.w3.org/2000/svg', name);
     for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);

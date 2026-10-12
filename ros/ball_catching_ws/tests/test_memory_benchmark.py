@@ -53,7 +53,8 @@ def test_baselines_not_duplicated_across_patterns(tmp_path):
     ('fixed', 'joint_hz', 100), ('fixed', 'camera_width', 4096),
     ('fixed', 'image_age_periods', 0), ('fixed', 'image_age_periods', float('inf')),
     ('aggressor', 'backpressure', False), ('aggressor', 'stride', 1),
-    ('aggressor', 'duty_percent', 50), ('hardware', 'num_cores', 0)])
+    ('aggressor', 'duty_percent', 50), ('hardware', 'num_cores', 0),
+    ('hardware', 'cpu_type', 'kvm'), ('hardware', 'cpu_type', None)])
 def test_invalid_experiments_fail_before_launch(tmp_path, section, key, value):
     raw = configuration(tmp_path)
     raw[section][key] = value
@@ -61,6 +62,107 @@ def test_invalid_experiments_fail_before_launch(tmp_path, section, key, value):
         raw['fixed']['camera_height'] = 4096
     with pytest.raises(ValueError):
         load(tmp_path, raw)
+
+
+def test_cpu_override_changes_only_the_fixed_cpu_model(tmp_path):
+    raw = configuration(tmp_path)
+    del raw['hardware']['cpu_type']
+    timing = load(tmp_path, raw)
+    o3 = load_config(tmp_path / 'suite.json', cpu_type='o3')
+    assert timing['hardware']['cpu_type'] == 'timing'
+    assert o3['hardware']['cpu_type'] == 'o3'
+    o3['hardware']['cpu_type'] = 'timing'
+    assert o3 == timing
+
+
+def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_path, monkeypatch):
+    import run_memory_suite as runner
+    import report
+    config = tmp_path / 'config.json'
+    config.write_text(json.dumps(configuration(tmp_path)))
+    gem5_root = tmp_path / 'gem5'
+    artifacts = ['build/X86/gem5.opt', 'resources/x86-ubuntu-22.04-ros-humble.img',
+                 'resources/x86-linux-kernel-5.15.180']
+    for name in artifacts:
+        path = gem5_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'artifact')
+    output = tmp_path / 'prepared-o3'
+    bundles = []
+    def stage(directory, data, points):
+        bundles.append((data['hardware']['cpu_type'], [point['id'] for point in points]))
+        bundle = directory / 'guest.tar.gz'
+        bundle.write_bytes(b'guest-payload')
+        return bundle
+    monkeypatch.setattr(runner, 'prepare_bundle', stage)
+    monkeypatch.setattr(runner, 'calibrate', lambda *args: pytest.fail('Preparation must not simulate calibration'))
+    monkeypatch.setattr(runner, 'gem5_trial', lambda *args: pytest.fail('Preparation must not boot gem5'))
+    monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
+    monkeypatch.setattr(runner.subprocess, 'check_output', lambda *args, **kwargs: 'test-revision\n')
+    monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
+    command = ['run_memory_suite.py', '--prepare-only', '--cpu-type', 'o3', '--case', 'case-003',
+               '--config', str(config), '--gem5-root', str(gem5_root), '--output', str(output)]
+    monkeypatch.setattr(sys, 'argv', command)
+    assert runner.main() == 0
+    assert bundles == [('o3', ['case-003'])]
+    manifest = json.loads((output / 'experiment_manifest.json').read_text())
+    assert manifest['configuration']['hardware']['cpu_type'] == 'o3'
+    assert all(point['status'] == 'pending' and point['trials'] == [] for point in manifest['points'])
+    assert json.loads((output / 'cpu_check.json').read_text())['aggressor']['gbps'] == 0
+    script = (output / 'run.sh').read_text()
+    assert '--cpu-type o3' in script and '--case case-003' in script and '--resume' in script
+    assert '--prepare-only' not in script
+    assert load_config(output / 'prepared_config.json') == load_config(config, 'o3')
+    monkeypatch.setattr(sys, 'argv', command + ['--resume'])
+    assert runner.main() == 0
+    assert len(bundles) == 1
+    changed = command.copy()
+    changed[changed.index('o3')] = 'timing'
+    monkeypatch.setattr(sys, 'argv', changed + ['--resume'])
+    with pytest.raises(SystemExit) as error:
+        runner.main()
+    assert error.value.code == 2
+    assert json.loads((output / 'experiment_manifest.json').read_text()) == manifest
+
+
+def test_prepared_suite_resumes_into_a_real_trial(tmp_path, monkeypatch):
+    # The previous test checks preparation in isolation; exercise the branch
+    # that consumes its manifest and existing guest bundle next.
+    import run_memory_suite as runner
+    import report
+    config = tmp_path / 'config.json'
+    data = configuration(tmp_path)
+    config.write_text(json.dumps(data))
+    gem5_root = tmp_path / 'gem5'
+    for name in ['build/X86/gem5.opt', 'resources/x86-ubuntu-22.04-ros-humble.img',
+                 'resources/x86-linux-kernel-5.15.180']:
+        path = gem5_root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'artifact')
+    output = tmp_path / 'o3'
+    def stage(directory, *args):
+        bundle = directory / 'guest.tar.gz'
+        bundle.write_bytes(b'guest-payload')
+        return bundle
+    trials = []
+    def trial(directory, output, data, point, args, calibration, bundle):
+        trials.append((data['hardware']['cpu_type'], point['id'], bundle.read_bytes()))
+        directory.mkdir()
+        (directory / 'experiment.json').write_text('{}')
+        (directory / 'result.json').write_text('{"success": true}')
+    monkeypatch.setattr(runner, 'prepare_bundle', stage)
+    monkeypatch.setattr(runner, 'gem5_trial', trial)
+    monkeypatch.setattr(runner, 'calibrate', lambda *args: {})
+    monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
+    monkeypatch.setattr(runner.subprocess, 'check_output', lambda *args, **kwargs: 'test-revision\n')
+    monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
+    command = ['run_memory_suite.py', '--cpu-type', 'o3', '--case', 'case-003',
+               '--config', str(config), '--gem5-root', str(gem5_root), '--output', str(output)]
+    monkeypatch.setattr(sys, 'argv', command + ['--prepare-only'])
+    assert runner.main() == 0
+    monkeypatch.setattr(sys, 'argv', command + ['--resume'])
+    assert runner.main() == 0
+    assert trials == [('o3', 'case-003', b'guest-payload')]
 
 
 def test_host_truth_and_throw_settings_never_cross_bridge():
@@ -228,6 +330,39 @@ def test_profiles_change_target_rates_in_report(tmp_path):
     details = load_trial(tmp_path)['summary']['timing_detail']
     assert next(row for row in details if row['stage'] == 'planning')['desired_hz'] == 50
     assert next(row for row in details if row['stage'] == 'control')['desired_hz'] == 500
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='Node required for offline dashboard controls')
+def test_cpu_comparison_preserves_duplicate_trial_names_and_per_model_baselines(tmp_path):
+    from test_experiment_report import write_trial
+    from report import cpu_comparison_suites, create_dashboard
+    paths = []
+    for index, cpu_type in enumerate(('timing', 'o3')):
+        suite = tmp_path / cpu_type
+        directory = suite / 'case-003-attempt-001'
+        directory.mkdir(parents=True)
+        write_trial(directory, success=bool(index))
+        data = load_config(WORKSPACE / 'experiments/memory_contention.json', cpu_type)
+        point = plan(data)[3]
+        point.update(status='complete', trials=[directory.name])
+        (suite / 'experiment_manifest.json').write_text(json.dumps(dict(
+            mode='gem5', configuration=data, points=[point])))
+        memory = {f'{scope}_{metric}_ns': 100 * (index + 1)
+                  for scope in ('accepted', 'total') for metric in ('mean', 'p95', 'p99')}
+        memory.update(aggressor_accepted_gbps=0, dram_bus_peak_fraction=.05)
+        (directory / 'benchmark.json').write_text(json.dumps(dict(memory=memory, commands={})))
+        paths.append(suite)
+    directories, points, identifiers = cpu_comparison_suites(paths)
+    dashboard = create_dashboard(directories, tmp_path / 'comparison.html', points, identifiers)
+    subprocess.run(['node', str(WORKSPACE / 'tests/memory_dashboard_smoke.cjs'), str(dashboard),
+                    'cpu-comparison'], check=True)
+    assert [point['cpu_type'] for point in points] == ['timing', 'o3']
+    manifest_path = paths[1] / 'experiment_manifest.json'
+    manifest = json.loads(manifest_path.read_text())
+    manifest['configuration']['fixed']['camera_width'] = 320
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match='must match except'):
+        cpu_comparison_suites(paths)
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='Node required for offline dashboard controls')

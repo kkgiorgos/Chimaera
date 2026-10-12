@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build a portable, offline timing dashboard and synchronized motion replay."""
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -170,12 +171,14 @@ def load_trial(directory):
                 summary=summary, frames=frames, benchmark=benchmark)
 
 
-def create_dashboard(directories, destination, points=None):
+def create_dashboard(directories, destination, points=None, trial_ids=None):
     destination = Path(destination)
     models, trials = {}, []
     for directory in directories:
         directory = Path(directory)
         trial = load_trial(directory)
+        if trial_ids:
+            trial['id'] = trial_ids[str(directory.resolve())]
         robot_path = directory / 'robot.urdf'
         model_id = hashlib.sha256(robot_path.read_bytes()).hexdigest()[:16]
         if model_id not in models:
@@ -202,11 +205,53 @@ def create_dashboard(directories, destination, points=None):
     return destination
 
 
+def cpu_comparison_suites(paths):
+    """Combine fixed-system suites without colliding case/trial identifiers."""
+    directories, points, trial_ids = [], [], {}
+    reference = None
+    names = set()
+    for path in paths:
+        path = Path(path).resolve()
+        if path.name in names:
+            raise ValueError('Comparison suite directory names must be unique')
+        names.add(path.name)
+        manifest = json.loads((path / 'experiment_manifest.json').read_text())
+        if manifest['mode'] != 'gem5':
+            raise ValueError('CPU comparisons require gem5 suites')
+        configuration = copy.deepcopy(manifest['configuration'])
+        cpu_type = configuration['hardware'].pop('cpu_type', 'timing')
+        provenance = manifest.get('provenance', {})
+        comparable = (configuration, {key: provenance.get(key) for key in (
+            'gem5_sha256', 'kernel_sha256', 'execution_sha256', 'image', 'image_size', 'image_mtime_ns')})
+        if reference is not None and comparable != reference:
+            raise ValueError('CPU comparison settings and artifacts must match except hardware.cpu_type')
+        reference = comparable
+        for original in manifest['points']:
+            point = copy.deepcopy(original)
+            point['id'] = path.name + '/' + original['id']
+            point['cpu_type'] = cpu_type
+            point['label'] = path.name + ' · ' + original['label']
+            point['trials'] = [path.name + '/' + name for name in original['trials']]
+            points.append(point)
+            for name, identifier in zip(original['trials'], point['trials']):
+                directory = path / name
+                directories.append(directory)
+                trial_ids[str(directory)] = identifier
+    return directories, points, trial_ids
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('results', type=Path, nargs='+')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    if len(args.results) > 1 and all((path / 'experiment_manifest.json').exists() for path in args.results):
+        try:
+            directories, points, trial_ids = cpu_comparison_suites(args.results)
+        except ValueError as error:
+            parser.error(str(error))
+        create_dashboard(directories, args.output, points, trial_ids)
+        return
     directories = []
     points = None
     for path in args.results:

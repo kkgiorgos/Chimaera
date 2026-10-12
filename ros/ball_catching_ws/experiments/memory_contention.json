@@ -17,6 +17,7 @@
     "wall_timeout_s": 10800
   },
   "hardware": {
+    "cpu_type": "timing",
     "num_cores": 4,
     "cpu_clock": "3GHz",
     "l1d_size": "32KiB",
