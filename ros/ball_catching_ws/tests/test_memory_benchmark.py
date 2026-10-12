@@ -165,6 +165,43 @@ def test_prepared_suite_resumes_into_a_real_trial(tmp_path, monkeypatch):
     assert trials == [('o3', 'case-003', b'guest-payload')]
 
 
+@pytest.mark.parametrize('launched', [False, True])
+def test_guest_failure_stops_attempt_without_waiting_for_wall_timeout(tmp_path, monkeypatch, launched):
+    from types import SimpleNamespace
+    import ball_catching_sim.scene
+    import run_memory_suite as runner
+    data = load(tmp_path, configuration(tmp_path))
+    point = plan(data)[0]
+    directory = tmp_path / 'case-000-attempt-001'
+    stopped = []
+
+    class RunningHost:
+        def __init__(self, *args, **kwargs):
+            (directory / 'gem5').mkdir()
+            (directory / 'gem5/board.pc.com_1.device').write_text(
+                'CHIMAERA_BOOTSTRAP_READY\r\nGuest bridge: trailing controller data\r\n')
+            if launched:
+                (directory / 'launch.json').write_text('{"launch_time":0.5}')
+
+        def poll(self):
+            return None  # The host keeps advancing after the guest crash.
+
+    monkeypatch.setattr(ball_catching_sim.scene, 'generate', lambda *args, **kwargs: (
+        None, tmp_path / 'robot.urdf', None, {'focal': 640}))
+    monkeypatch.setattr(runner, 'session', lambda *args: {})
+    monkeypatch.setattr(runner.subprocess, 'Popen', RunningHost)
+    monkeypatch.setattr(runner, 'stop', lambda process: stopped.append(process))
+    monkeypatch.setattr(runner, 'timing_command', lambda *args: pytest.fail('Do not reset/dump a failed guest'))
+    monkeypatch.setattr(runner.time, 'monotonic', lambda: 0)
+    args = SimpleNamespace(image=tmp_path / 'image', kernel=tmp_path / 'kernel',
+                           gem5_root=tmp_path / 'gem5')
+    with pytest.raises(RuntimeError, match='Guest application failed: Guest bridge: trailing controller data'):
+        runner.gem5_trial(directory, tmp_path, data, point, args, {}, tmp_path / 'guest.tar.gz')
+    assert len(stopped) == 1
+    assert not (directory / 'result.json').exists()
+    assert not (directory / 'benchmark.json').exists()
+
+
 def test_host_truth_and_throw_settings_never_cross_bridge():
     topic_routes = routes()['topics']
     assert len(topic_routes) == 7

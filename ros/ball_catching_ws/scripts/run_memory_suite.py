@@ -18,6 +18,7 @@ import tarfile
 import time
 
 from benchmark_metrics import command_metrics, memory_metrics, read_stats, controller_counters
+from benchmark_status import guest_failure
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 REPOSITORY = WORKSPACE.parents[1]
@@ -46,7 +47,8 @@ def execution_fingerprint():
     from ament_index_python.packages import get_package_prefix
     result = hashlib.sha256()
     paths = [SCRIPTS / name for name in ('run_memory_suite.py', 'run_trial.py',
-             'gem5_ball_catching.py', 'calibrate_memory.py', 'benchmark_metrics.py')]
+             'gem5_ball_catching.py', 'calibrate_memory.py', 'benchmark_metrics.py',
+             'benchmark_status.py')]
     for package in ('ball_catching_robot', 'ball_catching_sim', 'chimaera_ros_bridge'):
         root = Path(get_package_prefix(package))
         paths += [path for path in root.rglob('*') if path.is_file()
@@ -424,6 +426,7 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                                'ROS_LOG_DIR': str(directory / 'ros_logs'),
                                'IGN_LOG_PATH': str(directory / 'gazebo_logs')}
     started = time.monotonic()
+    next_guest_check = started
     reset = False
     roi = directory / 'gem5'
     timing_socket = Path('/tmp/chimaera_time.sock')
@@ -432,6 +435,12 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                                    start_new_session=True)
         try:
             while process.poll() is None:
+                now = time.monotonic()
+                if now >= next_guest_check and not (directory / 'result.json').exists():
+                    failure = guest_failure(roi / 'board.pc.com_1.device')
+                    if failure:
+                        raise RuntimeError(f'Guest application failed: {failure}; inspect guest serial')
+                    next_guest_check = now + 1
                 if not reset and (directory / 'launch.json').exists():
                     timing_command(timing_socket, 'BENCHMARK_RESET', fixed['wall_timeout_s'])
                     reset = True

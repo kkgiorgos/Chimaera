@@ -100,3 +100,22 @@ def format BasicOperate(code, *flags) {{
         decode_block = BasicDecode.subst(iop)
         exec_output = BasicExecute.subst(iop)
 }};
+
+// Functional guest-memory writes must complete before an out-of-order core
+// executes younger loads. Non-speculative execution alone only orders older
+// instructions; selected memory-writing m5ops also need IsSerializeAfter.
+def format M5Op(*flags) {{
+        code = '''
+            uint64_t result;
+            bool recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
+                    xc->tcBase(), IMMEDIATE, result);
+            Rax = result;
+            if (!recognized)
+                fault = std::make_shared<InvalidOpcode>();
+        '''
+        iop = InstObjParams(name, Name, 'X86ISA::X86StaticInst', code, flags)
+        header_output = BasicDeclare.subst(iop)
+        decoder_output = BasicConstructor.subst(iop)
+        decode_block = BasicDecode.subst(iop)
+        exec_output = BasicExecute.subst(iop)
+}};

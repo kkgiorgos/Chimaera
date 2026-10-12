@@ -126,15 +126,22 @@ in each attempt's `gem5/config.ini` and `gem5/config.json`. After switching,
 `gem5/cpu_roi.json` records the actual active model, core count and switch tick;
 the suite aborts if they differ from the requested model.
 
+The x86 receive and readfile m5 instructions serialize younger instructions
+until their functional guest-memory writes complete. Non-speculative execution
+alone orders older instructions but lets O3 issue later loads early and retain
+stale bytes. This ordering requirement applies to both the controller framing
+buffer and the simulation-clock origin. Other m5 instructions retain their
+existing flags; timestamp reads do not acquire the additional serialization.
+
 To prepare both environments without running calibration, gem5 or Gazebo:
 
 ```bash
 python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type o3 --case case-003 \
-  --output ros/ball_catching_ws/results/cpu-comparison-640/o3
+  --output ros/ball_catching_ws/results/cpu-comparison-640-fixed/o3
 python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type timing --case case-003 \
-  --output ros/ball_catching_ws/results/cpu-comparison-640/timing
+  --output ros/ball_catching_ws/results/cpu-comparison-640-fixed/timing
 ```
 
 Preparation checks the existing image, kernel and simulator, packages the guest
@@ -146,16 +153,16 @@ the repository root, one at a time:
 
 ```bash
 # First compare whether O3 can initialize and catch with fresh images.
-bash ros/ball_catching_ws/results/cpu-comparison-640/o3/run.sh
+bash ros/ball_catching_ws/results/cpu-comparison-640-fixed/o3/run.sh
 
 # Run the matching Timing control separately when desired.
-bash ros/ball_catching_ws/results/cpu-comparison-640/timing/run.sh
+bash ros/ball_catching_ws/results/cpu-comparison-640-fixed/timing/run.sh
 
 # Rebuild one offline dashboard after either or both runs.
 python3 ros/ball_catching_ws/scripts/report.py \
-  ros/ball_catching_ws/results/cpu-comparison-640/o3 \
-  ros/ball_catching_ws/results/cpu-comparison-640/timing \
-  --output ros/ball_catching_ws/results/cpu-comparison-640/dashboard.html
+  ros/ball_catching_ws/results/cpu-comparison-640-fixed/o3 \
+  ros/ball_catching_ws/results/cpu-comparison-640-fixed/timing \
+  --output ros/ball_catching_ws/results/cpu-comparison-640-fixed/dashboard.html
 ```
 
 The run scripts resume completed work and retain interrupted attempts. Changed
@@ -180,7 +187,7 @@ For live progress, open another terminal in the repository root:
 
 ```bash
 python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
-  ros/ball_catching_ws/results/cpu-comparison-640/o3
+  ros/ball_catching_ws/results/cpu-comparison-640-fixed/o3
 ```
 
 This reads host records every five wall seconds and needs no ROS environment.
@@ -195,6 +202,10 @@ records and adds no simulated work. It tolerates partially written live records.
 Fatal guest bridge errors and guest session exits are reported as infrastructure
 failures even if the host runner continues advancing simulated time. That
 advancement is not valid task progress; this observer does not stop the runner.
+The runner independently checks the same explicit guest failures once per wall
+second, stops the attempt and marks it as an infrastructure failure. It retains
+logs, stops further cases and does not invent a catch/miss outcome. A scored
+throw retains its outcome even if guest cleanup subsequently exits.
 For guest diagnostics, tail the attempt's `gem5/board.pc.com_1.device`; host and
 simulator output are in `launch.log`.
 
@@ -308,6 +319,8 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
 python3 gem5/ext/ramulator2/tests/run.py \
   --case single --case vector --case aggressor-backpressure --case aggressor-drain \
   --output /tmp/ball-memory-tests
+python3 gem5/tests/chimaera/m5_write_ordering/run.py \
+  --output /tmp/chimaera-m5-write-ordering
 colcon --log-base ros/chimaera_ros_ws/log test \
   --base-paths ros/chimaera_ros_ws/src --build-base ros/chimaera_ros_ws/build \
   --install-base ros/chimaera_ros_ws/install --packages-select chimaera_ros_bridge
@@ -418,5 +431,45 @@ termination after the normal shutdown timeout; final Ramulator counters were
 unavailable, so no complete memory benchmark was constructed. The monitor now
 checks guest failure messages instead of displaying ordinary startup progress.
 The framing decoder found bytes remaining after the batch's declared messages;
-the logs do not identify why. This requires investigation before another O3
-benchmark. No transport change or new simulation was performed during this audit.
+the cause was still unknown at the end of this audit. No transport change or new
+simulation was performed during that inspection.
+
+### O3 receive ordering repair, 2026-10-12
+
+A small standalone SE regression reproduced the fault without booting Linux or
+running the robot. An older load warmed an eight-byte buffer containing zero;
+`m5_chimaera_recv` then wrote the correct big-endian controller header value three.
+A subsequent independent load read the header. The unpatched Timing CPU passed
+at tick 113,886, while O3 exited with status one at tick 119,547 despite the m5
+receive log confirming the correct host bytes. Records are in
+`results/cpu-comparison-640-fixed/ordering-regression/before`. The functional
+memory write updated the cache but
+could not replace an old value already held in a CPU register by a younger load.
+This explains how the decoder could retain a zero message count while its buffer
+held a nonempty batch and report trailing controller data.
+
+The x86 decoder now adds `IsSerializeAfter` to `M5OP_CHIMAERA_RECV` and
+`M5OP_READ_FILE`, preserving `IsNonSpeculative` for older-instruction ordering.
+The latter is also used to load the simulation-clock origin into guest memory.
+The simulator was rebuilt with Ramulator enabled. All eight committed SE probes
+passed: receive/readfile, Timing/O3 and classic/Ruby MESI Two Level caches, each
+simulating less than one microsecond. Their logs and machine-readable summary
+are in `results/cpu-comparison-640-fixed/ordering-regression/after`.
+The regression source is
+[`m5_write_ordering`](../gem5/tests/chimaera/m5_write_ordering/README.md).
+
+The host runner now checks guest serial failures both before launch and after
+workbegin. Tests cover a host that remains alive after the guest fails, including
+a failure with a launch record already present, and verify cleanup without task
+scoring. All 60 ball-catching Python checks and three transport suites passed.
+The socket-dependent transport checks require host Unix-socket access in a
+restricted environment.
+
+Fresh comparison environments are staged in
+`results/cpu-comparison-640-fixed/{o3,timing}` with the rebuilt simulator and
+runner fingerprints. Both full-system boards also instantiated at tick zero,
+with four KVM boot cores and four selected detailed cores; no guest instructions
+were executed by these configuration checks. The original failed logs remain
+under the previous output.
+Full ball-catching execution, freshness deadlines under O3 and binary task
+results still await the user's run; these isolated checks do not establish them.

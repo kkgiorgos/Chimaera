@@ -156,14 +156,14 @@
             // to play with so there can be quite a few pseudo
             // instructions.
             //0x04: loadall_or_reset_or_hang();
-            0x4: BasicOperate::gem5Op({{
-                uint64_t result;
-                bool recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
-                        xc->tcBase(), IMMEDIATE, result);
-                Rax = result;
-                if (!recognized)
-                    fault = std::make_shared<InvalidOpcode>();
-            }}, IsNonSpeculative);
+            0x4: decode IMMEDIATE {
+                // M5OP_READ_FILE and M5OP_CHIMAERA_RECV write guest memory
+                // functionally, outside the CPU's load/store queue. Prevent
+                // younger loads from retaining bytes read before that write.
+                0x50: M5Op::gem5ReadFile(IsNonSpeculative, IsSerializeAfter);
+                0x57: M5Op::chimaeraRecv(IsNonSpeculative, IsSerializeAfter);
+                default: M5Op::gem5Op(IsNonSpeculative);
+            }
             0x05: decode FullSystemInt {
                 0: SyscallInst::syscall({{
                     return std::make_shared<SESyscallFault>();
