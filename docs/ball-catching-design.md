@@ -35,10 +35,11 @@ Continually revise the interception target from visual observations. Keep the
 cup orientation fixed upward in world coordinates while moving its position;
 coordinate wrist motion to preserve that orientation despite the rigid
 attachment. Investigate vertical velocity
-matching if contact tests show excessive bounce. Success requires physical entry
-and retention for one simulated second by default, with a configurable duration.
-Every trial starts from a configurable joint pose, using the same neutral pose
-by default for comparable speed sweeps. The robot detects the throw visually;
+matching if contact tests show excessive bounce. Success is evaluated at a
+configurable deadline, defaulting to 2 simulated seconds after launch. The ball must be physically inside the cup at that
+instant; earlier contact or containment alone does not qualify. Every trial
+starts from the fixed vertical home for comparable runs. The robot detects the
+throw visually;
 it receives no launch notification. Cup dimensions, contact parameters, camera
 settings and operating envelope remain experiment variables. The implemented
 cup uses a rigid offset bracket to clear the wrist, radius 0.12 m and depth
@@ -92,8 +93,9 @@ the wall-follow lidar workload does not establish stereo transport performance.
 
 ## Evaluation and reproducibility
 
-The host scorer may access all simulator state. Require physical retention,
-not a synthetic attachment or success on first contact. Distinguish catch/miss
+The host scorer may access all simulator state. Evaluate physical containment
+at the deadline, with no synthetic attachment or early success on first contact.
+Distinguish catch/miss
 from infrastructure failure, and retain failure reasons such as absent visual
 track, infeasible intercept, late arrival, rim collision, or bounce-out when
 those can be established. Record primary binary outcomes and timestamped
@@ -104,9 +106,10 @@ Record launch position/direction/speed, initial robot pose, sensor configuration
 physics/contact parameters, seeds, and software provenance. For a fixed vector,
 sample success versus speed and repeat trials where variability exists. Do not
 assume success is strictly monotonic with speed or that a single trial defines
-a reliable maximum. Retention uses simulated time and defaults to 1.0 seconds;
-record the configured retention duration with each trial. Any shorter future
-benchmark criterion must be validated against a longer observation period.
+a reliable maximum. Experiment duration uses simulated time and defaults to
+2.0 seconds after launch. Record the configured duration, final containment,
+and uninterrupted containment duration. Pause Gazebo at evaluation and exclude
+shutdown activity from performance statistics.
 Reset and settle the arm at the configured starting pose before each throw;
 ensure capture and application readiness before launching the ball without
 exposing that launch event to the robot pipeline. Keep the starting pose fixed

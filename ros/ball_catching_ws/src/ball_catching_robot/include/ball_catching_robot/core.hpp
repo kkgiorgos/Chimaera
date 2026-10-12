@@ -15,7 +15,7 @@ using Vec7 = Eigen::Matrix<double, 7, 1>;
 using Mat6 = Eigen::Matrix<double, 6, 6>;
 using Mat7 = Eigen::Matrix<double, 7, 7>;
 inline const Vec3 gravity(0., 0., -9.81);
-Vec7 uprightHome(bool gripper = false);
+Vec7 uprightHome();
 
 class Arm
 {
@@ -35,7 +35,6 @@ public:
   std::vector<std::string> names;
   Vec7 lower, upper, velocity, effort;
   Vec7 acceleration = Vec7::Constant(10.);
-  bool gripper{false};
 
 private:
   struct Impl;
@@ -103,26 +102,4 @@ private:
   Mat6 covariance_ = Mat6::Zero();
 };
 
-// Drag is inferred from images, never copied from simulator material settings.
-Vec6 propagateBall(const Vec6 & state, double interval, double drag);
-class DragFilter
-{
-public:
-  std::optional<Vec3> predict(double time) const;
-  std::optional<Vec6> observe(
-    const Vec3 & point, double time,
-    const Eigen::Matrix3d & noise = (.0001 * Eigen::Matrix3d::Identity()).eval());
-  Mat6 covariance() const { return covariance_.topLeftCorner<6, 6>(); }
-  double drag() const { return state_ ? (*state_)[6] : 0.; }
-  unsigned resets() const { return resets_; }
-
-private:
-  std::vector<std::pair<double, Vec3>> history_;
-  std::optional<double> time_;
-  std::optional<Vec7> state_;
-  Mat7 covariance_ = Mat7::Zero();
-  std::optional<Vec3> previousObservation_;
-  double previousVerticalVelocity_{0};
-  unsigned resets_{0};
-};
 }  // namespace ball_catching

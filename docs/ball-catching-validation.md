@@ -113,3 +113,64 @@ ROS topic contracts, simulation-time scheduling, and the future host/guest
 boundary are preserved. Launch and experiment tooling remain Python. The
 rewrite removes the robot's rclpy, Python OpenCV, NumPy, and PyKDL dependencies;
 simulation tooling still uses Python NumPy/xacro.
+
+
+## Cup-only simplification — 2026-10-12
+
+The application now has one rigid-cup setup and three robot processes:
+perception, interception, and effort control. Launch files and runners no longer
+select a tool mode. The arm starts from the vertical home, and scoring requires
+continuous containment in the polygonal cup cavity. Reports use the current cup
+record fields and offline dashboard schema version 2.
+
+Native Gazebo validation used:
+
+```zsh
+python3 ros/ball_catching_ws/scripts/run_cup_examples.py \
+  --cases default fast miss \
+  --output ros/ball_catching_ws/results/cup-only-native-20261012
+```
+
+| Example | Launch speed | Stable containment after launch | Outcome |
+|---|---:|---:|---|
+| Default loft | 3 m/s | 0.968 s | Retained for 1 s |
+| Faster loft | 5 m/s | 1.096 s | Retained for 1 s |
+| Deliberate miss | 10 m/s | — | Not retained; 8 s timeout |
+
+The combined `dashboard.html` embeds the generated robot geometry, recorded
+motion, and computation timings. Both ROS packages built with testing enabled.
+All 18 Python workflow/report tests and 19 native tests passed. JavaScript syntax
+checks and the whitespace check also passed. The initial sandboxed simulation
+could not access local network interfaces; the recorded native trials ran with
+that access enabled.
+
+
+## Evaluation at a configurable deadline — 2026-10-12
+
+Trials now evaluate exactly once at the configured duration after launch,
+defaulting to 2 simulated seconds. Success means the ball is physically inside
+the cup at that deadline. No minimum retention interval is required. Gazebo
+pauses when the result is published, and report statistics exclude shutdown
+activity. Deadlines are resolved to the first physics step at or after the
+requested time.
+
+```zsh
+python3 ros/ball_catching_ws/scripts/run_cup_examples.py \
+  --cases default fast miss \
+  --output ros/ball_catching_ws/results/cup-deadline-2s-verified-20261012
+python3 ros/ball_catching_ws/scripts/run_cup_examples.py \
+  --cases default --duration 0.5 \
+  --output ros/ball_catching_ws/results/cup-deadline-short-verified-20261012
+```
+
+The 3 m/s and 5 m/s lofts succeeded at 2 seconds; the 10 m/s deliberate miss
+failed at the same deadline. Their final uninterrupted containment durations
+were 1.032 s, 0.907 s, and 0 s, respectively. These are measured durations, not
+success thresholds. The 0.5-second run ended before cup entry and failed at
+that custom deadline. Each report preserves the configured duration, actual
+evaluation time, and final containment state.
+
+All 22 Python tests and 19 native tests passed. Deadline scoring tests cover
+waiting through an early catch, escape before evaluation, capture at the
+last instant, recapture, fractional durations, and invalid duration settings.
+Report tests verify that computation and motion after evaluation are excluded.

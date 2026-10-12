@@ -14,9 +14,7 @@ def start(context):
     common = {'use_sim_time': get('use_sim_time').lower() == 'true',
               'robot_file': get('robot_file'), 'output': get('output'),
               'initial_pose': None}
-    gripper = get('mode') == 'gripper'
-    upright = [0., -math.pi/4, 0., -3*math.pi/4, 0., math.pi/2, math.pi/4] if gripper \
-        else [0., 0., 0., -.14, 0., .50, math.pi/4]
+    upright = [0., 0., 0., -.14, 0., .50, math.pi/4]
     common['initial_pose'] = json.loads(get('initial_pose')) if get('initial_pose') != 'auto' else upright
     if len(common['initial_pose']) != 7 or any(
             not math.isfinite(q) or abs(q-home) > 1e-8
@@ -26,24 +24,18 @@ def start(context):
     calibration = json.loads(get('calibration'))
     nodes = [Node(package='ball_catching_robot', executable='perception',
                  parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output'],
-                              'estimate_drag': gripper, **calibration}], output='screen'),
+                              **calibration}], output='screen'),
             Node(package='ball_catching_robot', executable='intercept',
-                 parameters=[{**common, 'present': get('present').lower() == 'true',
-                              'gripper_motor_lead': float(get('gripper_motor_lead')),
-                              'presentation_hold': float(get('presentation_hold'))}],
+                 parameters=[common],
                  output='screen'),
             Node(package='ball_catching_robot', executable='effort_control', parameters=[common],
                  output='screen')]
-    if gripper:
-        nodes.append(Node(package='ball_catching_robot', executable='gripper_control',
-                          parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output']}],
-                          output='screen'))
     return [*nodes, *[RegisterEventHandler(OnProcessExit(target_action=node,
         on_exit=[EmitEvent(event=Shutdown(reason='Robot component exited'))])) for node in nodes]]
 
 
 def generate_launch_description():
-    defaults = dict(robot_file='', output='', use_sim_time='true', mode='cup', present='false', gripper_motor_lead='0.0', presentation_hold='0.25',
+    defaults = dict(robot_file='', output='', use_sim_time='true',
                     initial_pose='auto',
                     calibration='{"focal":400.0,"cx":320.0,"cy":240.0,"baseline":0.3,"camera_origin":[-0.65,0.15,1.0]}')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],

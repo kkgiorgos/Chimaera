@@ -2,6 +2,7 @@
 """Run cup demonstrations from upright home and build one offline dashboard."""
 import argparse
 import json
+import math
 from pathlib import Path
 import subprocess
 import sys
@@ -35,9 +36,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cases', choices=list(CASES), nargs='+', default=list(CASES))
+    parser.add_argument('--duration', type=float, default=2.,
+                        help='Simulated seconds after launch before final evaluation (default: 2)')
     parser.add_argument('--wall-timeout', type=float, default=120.)
     parser.add_argument('--flat', action='store_true', help='Use the earlier, shorter flat throws as challenges')
     args = parser.parse_args()
+    if not math.isfinite(args.duration) or args.duration <= 0:
+        parser.error('duration must be finite and positive')
     output = args.output.resolve()
     if output.exists() and any(output.iterdir()):
         parser.error('output directory must be empty or new')
@@ -48,7 +53,7 @@ def main():
     cameras = [] if args.flat else ['--camera-position', '-2', '0', '2', '--resolution', '1280', '960']
     points = [dict(id=name, label=cases[name][0], trials=[], expected_throws=1,
                    status='pending', config={}) for name in args.cases]
-    manifest = dict(mode='cup', start_condition='vertical_home', points=points)
+    manifest = dict(start_condition='vertical_home', duration=args.duration, points=points)
     completed = []
 
     def report():
@@ -60,8 +65,8 @@ def main():
         print(f'Running {point["label"]}', flush=True)
         trial = output / name
         subprocess.run([sys.executable, str(Path(__file__).with_name('run_trial.py')),
-                        '--mode', 'cup', '--output', str(trial), '--no-dashboard',
-                        '--wall-timeout', str(args.wall_timeout), *cameras, *cases[name][1]])
+                        '--output', str(trial), '--no-dashboard',
+                        '--duration', str(args.duration), '--wall-timeout', str(args.wall_timeout), *cameras, *cases[name][1]])
         if not (trial / 'result.json').exists():
             point.update(status='infrastructure_failure', reason=f'Inspect {name}/launch.log')
             report()

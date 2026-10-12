@@ -87,7 +87,6 @@
       this.jointPositions = {};
       this.ballPosition = null;
       this.ballLocatorEnabled = true;
-      this.courtEnabled = true;
       this._createProgram();
       this.robotDrawables = [];
       this.children = new Map();
@@ -107,8 +106,6 @@
       this.locatorMesh = this._lineMesh(locatorRing, [0.25, 0.94, 1, 1], this.gl.LINE_LOOP);
       this.trailMesh = this._lineMesh([], [1, 0.76, 0.25, 1], this.gl.LINES);
       this.floorMesh = this._mesh({...box([32, 16, 0.06]), color: [0.09, 0.12, 0.16, 1]});
-      this.courtDrawables = [];
-      this._createCourt();
       this.setView("robot");
       this._bindControls();
       if (typeof ResizeObserver !== "undefined") {
@@ -213,30 +210,6 @@
       mesh.count = vertices.length;
     }
 
-    _createCourt() {
-      const addBox = (xyz, size, color) => this.courtDrawables.push({matrix: translation(xyz), mesh: this._mesh({...box(size), color})});
-      const green = [0.045, 0.21, 0.15, 1], white = [0.75, 0.79, 0.76, 1], net = [0.055, 0.065, 0.075, 1];
-      addBox([11.885, 0, -0.01], [23.77, 8.23, 0.02], green);
-      for (const y of [-4.115, 4.115]) addBox([11.885, y, 0.004], [23.82, 0.05, 0.008], white);
-      for (const x of [0, 23.77]) addBox([x, 0, 0.004], [0.05, 8.23, 0.008], white);
-      for (const x of [5.485, 18.285]) addBox([x, 0, 0.004], [0.05, 8.23, 0.008], white);
-      addBox([11.885, 0, 0.004], [12.8, 0.05, 0.008], white);
-      // Net tape follows the real centre dip (0.914 m) and 1.07 m end height.
-      const sections = 40, width = 9.6;
-      for (let i = 0; i <= sections; ++i) {
-        const y = -width/2 + i*width/sections;
-        const height = 0.914 + 0.156 * Math.pow(Math.abs(y)/(width/2), 2);
-        addBox([11.885, y, height/2], [0.014, 0.012, height], net);
-        if (i < sections) {
-          const centerY = y + width/(2*sections);
-          const centerHeight = 0.914 + 0.156 * Math.pow(Math.abs(centerY)/(width/2), 2);
-          addBox([11.885, centerY, centerHeight], [0.035, width/sections+0.01, 0.04], white);
-        }
-      }
-      for (let z = 0.16; z < 0.91; z += 0.15) addBox([11.885, 0, z], [0.012, width, 0.01], net);
-      for (const y of [-width/2, width/2]) addBox([11.885, y, 0.55], [0.065, 0.065, 1.1], net);
-    }
-
     _bindControls() {
       let pointer = null;
       this.onPointerDown = (event) => {
@@ -273,11 +246,6 @@
       this._requestDraw();
     }
 
-    setCourt(enabled) {
-      this.courtEnabled = Boolean(enabled);
-      this._requestDraw();
-    }
-
     setBallLocator(enabled) {
       this.ballLocatorEnabled = Boolean(enabled);
       this._requestDraw();
@@ -296,12 +264,12 @@
     }
 
     setView(view) {
-      if (view !== "robot" && view !== "court") throw new Error(`Unknown replay view: ${view}`);
+      if (view !== "robot" && view !== "wide") throw new Error(`Unknown replay view: ${view}`);
       this.view = view;
-      this.target = view === "court" ? [11.0, 0, 0.4] : [0.12, 0, 0.62];
-      this.distance = view === "court" ? 29 : 2.25;
-      this.azimuth = view === "court" ? -1.07 : -0.85;
-      this.elevation = view === "court" ? 0.76 : 0.40;
+      this.target = view === "wide" ? [1.5, 0, 1.5] : [0.12, 0, 0.62];
+      this.distance = view === "wide" ? 8 : 2.25;
+      this.azimuth = view === "wide" ? -1.07 : -0.85;
+      this.elevation = view === "wide" ? 0.76 : 0.40;
       this._requestDraw();
     }
 
@@ -370,7 +338,7 @@
       const depth = dot(subtract(eye, this.ballPosition), forward);
       if (depth <= 0.025) return;
       const cssHeight = Math.max(1, this.canvas.getBoundingClientRect().height);
-      // A cyan annotation ring is about 14 CSS px across in the court view.
+      // A cyan annotation ring is about 14 CSS px across in the wide view.
       // It grows outside the actual 67 mm ball in close-up; sphere geometry stays fixed.
       const radius = Math.max(0.0335*1.4, 14*depth*Math.tan(Math.PI/8)/cssHeight);
       const matrix = [...right.map(v => v*radius), 0, ...up.map(v => v*radius), 0,
@@ -396,7 +364,6 @@
       gl.uniformMatrix4fv(loc.uViewProjection, false, multiply(perspective(this.canvas.width/this.canvas.height), lookAt(eye, this.target)));
       gl.uniform3fv(loc.uEye, eye);
       this._drawMesh(this.floorMesh, translation([11, 0, -0.05]));
-      if (this.courtEnabled) for (const drawable of this.courtDrawables) this._drawMesh(drawable.mesh, drawable.matrix);
       const transforms = this._linkTransforms();
       for (const drawable of this.robotDrawables) {
         const link = transforms.get(drawable.link);

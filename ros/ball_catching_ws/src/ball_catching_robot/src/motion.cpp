@@ -54,9 +54,10 @@ std::optional<std::vector<Quintic>> cupCatchTrajectory(
   const Arm & arm, double start, double flightTime, const MotionState & initial,
   const Vec7 & target, const Vec3 & incomingVelocity, double matchingSpeed, double brakeTime)
 {
-  if (arm.gripper || !incomingVelocity.allFinite() || incomingVelocity.norm() < 1e-9 ||
-      !std::isfinite(matchingSpeed) || matchingSpeed <= 0 ||
-      !std::isfinite(brakeTime) || brakeTime <= 0)
+  if (
+    !incomingVelocity.allFinite() || incomingVelocity.norm() < 1e-9 ||
+    !std::isfinite(matchingSpeed) || matchingSpeed <= 0 || !std::isfinite(brakeTime) ||
+    brakeTime <= 0)
     throw std::invalid_argument("Invalid cup velocity or braking duration");
   const auto jacobian = arm.jacobian(target);
   Vec6 twist = Vec6::Zero();

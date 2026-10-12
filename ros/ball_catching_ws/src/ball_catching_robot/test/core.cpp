@@ -91,31 +91,6 @@ TEST(Filter, ExactBallisticVelocityAndPrediction)
   EXPECT_LT((*filter.predict(.35) - (p + v * .35 + .5 * gravity * .35 * .35)).norm(), 1e-10);
   EXPECT_FALSE(filter.observe(p, .2));
 }
-TEST(Flight, DragIntegrationAndVisualIdentification)
-{
-  Vec6 initial;
-  initial << 12., -.1, 2.5, -25., .5, 1.;
-  const auto noDrag = propagateBall(initial, .2, 0.);
-  EXPECT_LT(
-    (noDrag.head<3>() - initial.head<3>() - initial.tail<3>() * .2 - .5 * gravity * .04).norm(),
-    1e-10);
-  const auto withDrag = propagateBall(initial, .2, .022);
-  EXPECT_LT(withDrag.tail<3>().norm(), noDrag.tail<3>().norm());
-  DragFilter filter;
-  std::optional<Vec6> state;
-  for (int i = 0; i <= 50; ++i) {
-    const double t = i / 90.;
-    const auto truth = propagateBall(initial, t, .022);
-    state = filter.observe(truth.head<3>(), t);
-  }
-  ASSERT_TRUE(state);
-  EXPECT_NEAR(filter.drag(), .022, .003);
-  EXPECT_LT((state->tail<3>() - propagateBall(initial, 50. / 90., .022).tail<3>()).norm(), .2);
-  EXPECT_LT((*filter.predict(.6) - propagateBall(initial, .6, .022).head<3>()).norm(), .025);
-  EXPECT_FALSE(filter.observe(Vec3::Constant(NAN), .7));
-  EXPECT_FALSE(filter.predict(.1));
-  EXPECT_THROW(propagateBall(initial, -.1, .02), std::invalid_argument);
-}
 TEST(Motion, NonzeroTerminalVelocityAndContinuousBraking)
 {
   const MotionState start{Vec7::Zero(), Vec7::Zero(), Vec7::Zero()};
@@ -339,38 +314,6 @@ TEST(Arm, HomeCannotBeReplacedWithAnUprightPreparedPose)
   EXPECT_THROW(arm.validateHome(prepared), std::invalid_argument);
   EXPECT_THROW(arm.validateHome(Vec7::Constant(NAN)), std::invalid_argument);
   EXPECT_GT(arm.pose(uprightHome()).p.z(), 1.1);
-}
-
-TEST(Flight, VisualGroundReversalReacquiresWithoutKnowingRestitution)
-{
-  DragFilter filter;
-  Vec6 state;
-  state << 2., .1, .7, -2., 0., -3.;
-  double time = 0.;
-  std::optional<Vec6> estimate;
-  for (int i = 0; i < 16; ++i) {
-    estimate = filter.observe(state.head<3>(), time);
-    state = propagateBall(state, .01, 0.);
-    time += .01;
-  }
-  ASSERT_TRUE(estimate);
-  ASSERT_LT((*estimate)[5], -1.);
-  // Feed a measured rebound, using an arbitrary normal restitution that is
-  // never passed to the filter. Its contact model remains continuous flight.
-  state.z() = .04;
-  state[5] = 3.2;
-  bool lostTrack = false;
-  for (int i = 0; i < 14; ++i) {
-    estimate = filter.observe(state.head<3>(), time);
-    lostTrack |= !estimate;
-    state = propagateBall(state, .01, 0.);
-    time += .01;
-  }
-  EXPECT_TRUE(lostTrack);
-  EXPECT_GT(filter.resets(), 0u);
-  ASSERT_TRUE(estimate);
-  EXPECT_NEAR((*estimate)[3], -2., .15);
-  EXPECT_NEAR((*estimate)[5], state[5] + .0981, .15);
 }
 
 TEST(Stereo, DistantDepthHasHigherUncertaintyAndOffsetRayCorrelation)

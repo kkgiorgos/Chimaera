@@ -21,7 +21,6 @@ public:
     record_(declare_parameter<std::string>("output", ""), "perception")
   {
     cv::setNumThreads(1);
-    estimateDrag_ = declare_parameter("estimate_drag", false);
     state_ =
       create_publisher<nav_msgs::msg::Odometry>("/robot/ball_state", rclcpp::SensorDataQoS());
     geometry_ = create_publisher<geometry_msgs::msg::Vector3Stamped>(
@@ -82,9 +81,7 @@ private:
     const double conversionSeconds = elapsed(started);
     const auto detectionStarted = WallClock::now();
     const double capture = seconds(msg->header.stamp);
-    const auto detection = stereo_.detect(
-      images[0], images[1],
-      estimateDrag_ ? dragFilter_.predict(capture) : filter_.predict(capture));
+    const auto detection = stereo_.detect(images[0], images[1], filter_.predict(capture));
     const double detectionSeconds = elapsed(detectionStarted);
     if (!detection) {
       record_.write(
@@ -97,18 +94,13 @@ private:
       return;
     }
     const auto estimationStarted = WallClock::now();
-    const auto resetsBefore = dragFilter_.resets();
-    const auto estimate =
-      estimateDrag_
-        ? dragFilter_.observe(detection->point, capture, stereo_.observationNoise(detection->point))
-        : filter_.observe(detection->point, capture);
+    const auto estimate = filter_.observe(detection->point, capture);
     const double estimationSeconds = elapsed(estimationStarted);
     const auto publicationStarted = WallClock::now();
     geometry_msgs::msg::Vector3Stamped geometry;
     geometry.header.stamp = msg->header.stamp;
     geometry.header.frame_id = "ball";
     geometry.vector.x = detection->radius;
-    geometry.vector.y = estimateDrag_ ? dragFilter_.drag() : 0.;
     geometry_->publish(geometry);
     if (estimate) {
       nav_msgs::msg::Odometry state;
@@ -124,7 +116,7 @@ private:
       v.x = (*estimate)[3];
       v.y = (*estimate)[4];
       v.z = (*estimate)[5];
-      const Mat6 covariance = estimateDrag_ ? dragFilter_.covariance() : filter_.covariance();
+      const Mat6 covariance = filter_.covariance();
       for (int i = 0; i < 3; ++i)
         for (int j = 0; j < 3; ++j) {
           state.pose.covariance[i * 6 + j] = covariance(i, j);
@@ -142,18 +134,11 @@ private:
        {"estimation_wall_seconds", estimationSeconds},
        {"publication_wall_seconds", publicationSeconds},
        {"observation", values(detection->point)},
-       {"drag", geometry.vector.y},
-       {"track_reset", estimateDrag_ && dragFilter_.resets() != resetsBefore ? 1. : 0.},
        {"radius", detection->radius},
-       {"state_sigma", estimateDrag_
-                         ? Field(values(Vec6(dragFilter_.covariance().diagonal().cwiseSqrt())))
-                         : Field(nullptr)},
        {"state", estimate ? Field(values(*estimate)) : Field(nullptr)}});
   }
   Stereo stereo_;
   BallFilter filter_;
-  DragFilter dragFilter_;
-  bool estimateDrag_{false};
   Recorder record_;
   int64_t lastPair_{-1};
   double lastImages_{-1};

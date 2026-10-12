@@ -11,14 +11,12 @@ Cup home is `[0, 0, 0, -0.14, 0, 0.50, pi/4]` radians, or
 `[0°, 0°, 0°, -8.02°, 0°, 28.65°, 45°]`. The upper arm is vertical and the
 forearm has the small elbow bend required by the model's limits. An all-zero
 arm violates both the elbow and wrist limits. The empty cup is tilted at home;
-the approach aligns its opening upward before interception. Gripper examples
-retain their previous home; this change concerns the cup examples.
+the approach aligns its opening upward before interception.
 
 Scene generation, application and robot launch files, and native interception
 and arm-control processes reject other starting poses. The host waits for the
 home controller and cameras to report readiness before launching the ball.
-The dashboard reports measured joint error at launch and distinguishes vertical
-home from the previous bent home in archived runs.
+The dashboard reports measured joint error at launch.
 
 The almost-straight pose is close to an IK singularity. The planner tries an
 alternate numerical seed if the feedback seed fails. This seed only solves
@@ -68,8 +66,12 @@ a cup-braking trajectory.
 The effort controller follows both segments using measured joints, computed
 dynamics and bounded torque. Physical tracking and collisions can disturb the
 commanded path. No ball attachment, changed contact restitution, scoring input,
-or artificial flight delay is used to obtain retention. A catch still requires
-one continuous simulated second of physical containment.
+or artificial flight delay is used to obtain retention. Each trial now runs for
+2 simulated seconds after launch by default. Set
+`--duration` on either runner to change this. Success requires physical
+containment at the deadline; no minimum retention interval is required. Gazebo
+pauses at evaluation. Earlier retention results below describe the previous
+scoring rule.
 
 ## Pipeline and recorded clocks
 
@@ -96,12 +98,12 @@ flowchart LR
 | Stereo delivery and matching | `ros_gz_bridge`, `/stereo/{left,right}/image_raw`, `Perception::image` | `receive_time - capture_time`: simulation-clock age combining delivery, callback scheduling and matching |
 | RGB preparation | `perception.cpp` | `image_conversion_wall_seconds`: native wall duration for validation and RGB view/conversion preparation |
 | Detection and metric stereo | `vision.cpp`, `Stereo::detect` | `detection_wall_seconds`: native wall duration, including prediction for candidate selection |
-| Flight filtering | `BallFilter::observe` / `DragFilter::observe` | `estimation_wall_seconds`: native wall duration for filter update |
+| Flight filtering | `BallFilter::observe` | `estimation_wall_seconds`: native wall duration for filter update |
 | Estimate publication | `/robot/ball_state`, `/robot/ball_geometry` | `publication_wall_seconds`: native wall duration for message construction and publication |
 | Whole perception callback | `perception.jsonl` | `processing_wall_seconds`: callback total up to timing-record preparation; substeps are nested within this total |
 | Interception / trajectory search | `intercept.cpp`, `motion.cpp`, `/robot/joint_trajectory` | `planning_wall_seconds`, including unsuccessful admitted searches; scheduled braking timestamps use simulation time |
 | Arm effort computation | `effort_control.cpp`, `/robot/joint_states`, `/robot/effort_command` | `control_timing.jsonl: processing_wall_seconds`, excluding the timing-record write |
-| Passive retention scoring | `host.cpp`, `scoring.hpp`, `result.json`, `ground_truth.csv` | Launch, containment, flight-end and scoring timestamps use simulation time |
+| Passive deadline scoring | `host.cpp`, `scoring.hpp`, `result.json`, `ground_truth.csv` | Launch, containment, flight-end and scoring timestamps use simulation time |
 
 The dashboard shows sample count, minimum, median, mean, P95, P99 and maximum
 for each recorded duration, plus observed update cadence and P95 timestamp gaps.
@@ -115,8 +117,8 @@ The perception total contains its substeps. Percentiles of separate stages
 cannot be added into an end-to-end percentile. Repeated planning and control
 updates are separate work items, not serial intervals to subtract from flight.
 The records do not correlate all ROS messages into an end-to-end trace, measure
-camera render CPU cost, or provide gem5 guest instruction timing. Older reports
-without split instrumentation keep legacy labels and missing fields.
+camera render CPU cost, or provide gem5 guest instruction timing. Reports use
+the current split instrumentation.
 
 ## Validation
 

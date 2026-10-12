@@ -30,8 +30,7 @@ Arm::Arm(const std::string &xml) : impl_(std::make_unique<Impl>()) {
   if (!model.initString(xml)) throw std::invalid_argument("Invalid robot URDF");
   std::vector<urdf::JointConstSharedPtr> path;
   std::set<std::string> pathNames;
-  gripper = bool(model.getLink("grasp_center"));
-  auto link = model.getLink(gripper ? "grasp_center" : "cup_rim");
+  auto link = model.getLink("cup_rim");
   while (link && link->name != "fr3_link0") {
     auto joint = link->parent_joint;
     if (!joint) break;
@@ -55,15 +54,8 @@ Arm::Arm(const std::string &xml) : impl_(std::make_unique<Impl>()) {
     }
     // Include fixed side branches such as the rigid mounting bracket.
     for (const auto &joint : child->child_joints)
-      if (
-        !pathNames.count(joint->name) &&
-        (joint->type == urdf::Joint::FIXED || (gripper && joint->type == urdf::Joint::PRISMATIC))) {
+      if (!pathNames.count(joint->name) && joint->type == urdf::Joint::FIXED) {
         auto origin = frame(joint->parent_to_joint_origin_transform);
-        // Finger travel changes their contribution only slightly. Include both
-        // fingers at nominal open width in the seven-joint arm dynamics model.
-        if (joint->type == urdf::Joint::PRISMATIC)
-          origin = origin * KDL::Frame(KDL::Vector(
-                              joint->axis.x * .04, joint->axis.y * .04, joint->axis.z * .04));
         inertia = inertia + origin * body(model.getLink(joint->child_link_name));
       }
     return inertia;
@@ -147,15 +139,10 @@ void Arm::validatePose(const Vec7 &q) const {
   if (!q.allFinite() || (q.array() < lower.array() + .02).any() || (q.array() > upper.array() - .02).any())
     throw std::invalid_argument("initial_pose must be within joint limits with 0.02 rad margin");
 }
-Vec7 uprightHome(bool gripper) {
-  if (!gripper)
-    return (Vec7() << 0., 0., 0., -.14, 0., .50, .7853981633974483).finished();
-  return (Vec7() << 0., -.7853981633974483, 0., -2.356194490192345, 0.,
-          1.5707963267948966, .7853981633974483).finished();
-}
+Vec7 uprightHome() { return (Vec7() << 0., 0., 0., -.14, 0., .50, .7853981633974483).finished(); }
 void Arm::validateHome(const Vec7 &q) const {
   validatePose(q);
-  if ((q - uprightHome(gripper)).cwiseAbs().maxCoeff() > 1e-8)
+  if ((q - uprightHome()).cwiseAbs().maxCoeff() > 1e-8)
     throw std::invalid_argument("Robot must start from the fixed upright home pose");
 }
 }

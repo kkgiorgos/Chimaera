@@ -11,8 +11,8 @@ public:
   EffortControl()
   : Node("ball_effort_control"),
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
-    home_(jointVector(
-      declare_parameter<std::vector<double>>("initial_pose", values(uprightHome(arm_.gripper))))),
+    home_(
+      jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())))),
     record_(declare_parameter<std::string>("output", ""), "control"),
     timing_(get_parameter("output").as_string(), "control_timing")
   {
