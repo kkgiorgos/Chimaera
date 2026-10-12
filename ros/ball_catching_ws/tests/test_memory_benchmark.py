@@ -36,6 +36,19 @@ def test_default_has_one_binary_trial_per_point(tmp_path):
     assert len({point['id'] for point in points}) == len(points)
 
 
+def test_timing_validation_preset_contains_only_the_qualified_baseline():
+    data = load_config(WORKSPACE / 'experiments/memory_contention_timing_validation.json')
+    points = plan(data)
+    assert len(points) == 1 and points[0]['id'] == 'case-000'
+    assert points[0]['pressure'] == 0 and points[0]['cpu_type'] == 'timing'
+    assert points[0]['throw']['launch_speed'] == 3
+    assert points[0]['rates']['camera_hz'] == 30
+    assert (data['fixed']['camera_width'], data['fixed']['camera_height']) == (480, 360)
+    assert data['fixed']['guest_dds_shm_bytes'] == 8 * 1024 * 1024
+    assert data['fixed']['image_age_periods'] == 2
+    assert data['fixed']['wall_timeout_s'] == 14400
+
+
 def test_baselines_not_duplicated_across_patterns(tmp_path):
     raw = configuration(tmp_path)
     raw['patterns'] = ['stream', 'stride', 'random']
@@ -53,6 +66,9 @@ def test_baselines_not_duplicated_across_patterns(tmp_path):
     ('fixed', 'joint_hz', 100), ('fixed', 'camera_width', 4096),
     ('fixed', 'image_age_periods', 0), ('fixed', 'image_age_periods', float('inf')),
     ('fixed', 'image_diagnostics', 'true'),
+    ('fixed', 'guest_dds_shm_bytes', True), ('fixed', 'guest_dds_shm_bytes', -1),
+    ('fixed', 'guest_dds_shm_bytes', 65536), ('fixed', 'guest_dds_shm_bytes', 2.5),
+    ('fixed', 'guest_dds_shm_bytes', 128 * 1024 * 1024),
     ('aggressor', 'backpressure', False), ('aggressor', 'stride', 1),
     ('aggressor', 'duty_percent', 50), ('hardware', 'num_cores', 0),
     ('hardware', 'cpu_type', 'kvm'), ('hardware', 'cpu_type', None)])
@@ -241,16 +257,32 @@ def test_each_tuple_gets_its_own_simulated_freshness_budget(tmp_path, monkeypatc
     assert reduced['bridge']['simulation_time_from_readfile'] is True
 
 
-def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch):
+def test_older_configs_keep_default_dds_transport(tmp_path):
+    from run_memory_suite import session
+    raw = configuration(tmp_path)
+    del raw['fixed']['guest_dds_shm_bytes']
+    data = load(tmp_path, raw)
+    assert data['fixed']['guest_dds_shm_bytes'] == 0
+    guest = session(tmp_path, data, plan(data)[0])['guest']
+    assert guest['localhost_only'] is True
+    assert 'FASTRTPS_DEFAULT_PROFILES_FILE' not in guest['env']
+
+
+@pytest.mark.parametrize('segment', [0, 4 * 1024 * 1024, 8 * 1024 * 1024])
+def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch, segment):
     monkeypatch.syspath_prepend(str(WORKSPACE.parent / 'chimaera_ros_ws/src/chimaera_ros_bridge'))
     import tarfile
     import ament_index_python.packages
     import chimaera_ros.runner
-    from run_memory_suite import prepare_bundle, GUEST_ROOT
+    from run_memory_suite import prepare_bundle, session, GUEST_ROOT
+    from chimaera_ros.runner import plan as bridge_plan
+    import xml.etree.ElementTree as ET
     prefix = tmp_path / 'bridge'
     clock = prefix / 'lib/libchimaera_gem5_clock.so'
     clock.parent.mkdir(parents=True)
     clock.write_bytes(b'clock-test-payload')
+    middleware = prefix / 'lib/librmw_fastrtps_cpp.so'
+    middleware.write_bytes(b'middleware-test-payload')
     monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: str(prefix))
     def stage(manifest, staged):
         root = staged / GUEST_ROOT.lstrip('/')
@@ -266,14 +298,35 @@ def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch
     monkeypatch.setattr(subprocess, 'run', lambda command, **kwargs: subprocess.CompletedProcess(
         command, 0, stdout=f'libtest.so => {dependency} (0x1)\n'))
     data = load(tmp_path, configuration(tmp_path))
+    data['fixed']['guest_dds_shm_bytes'] = segment
     output = tmp_path / 'bundle'
     output.mkdir()
     bundle = prepare_bundle(output, data, plan(data))
     with tarfile.open(bundle) as archive:
         root = GUEST_ROOT.lstrip('/')
         assert archive.extractfile(root + '/lib/libchimaera_gem5_clock.so').read() == clock.read_bytes()
+        assert archive.extractfile(root + '/lib/librmw_fastrtps_cpp.so').read() == middleware.read_bytes()
         assert archive.extractfile(root + '/lib/libtest.so').read() == dependency.read_bytes()
         assert b'rm -f /tmp/chimaera-sim-time-origin.ns' in archive.extractfile(root + '/guest_start').read()
+        guest = bridge_plan(session(output, data, plan(data)[0]), 'guest', '/test/bridge')
+        assert guest['env']['ROS_LOCALHOST_ONLY'] == ('0' if segment else '1')
+        assert guest['env']['RMW_IMPLEMENTATION'] == 'rmw_fastrtps_cpp'
+        if segment:
+            assert guest['env']['FASTRTPS_DEFAULT_PROFILES_FILE'] == GUEST_ROOT + '/dds.xml'
+            profile = ET.fromstring(archive.extractfile(root + '/dds.xml').read())
+            ns = {'dds': 'http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles'}
+            transports = profile.findall('dds:transport_descriptors/dds:transport_descriptor', ns)
+            assert len(transports) == 2
+            udp, shm = transports
+            assert udp.find('dds:type', ns).text == 'UDPv4'
+            assert udp.find('dds:interfaceWhiteList/dds:address', ns).text == '127.0.0.1'
+            assert shm.find('dds:type', ns).text == 'SHM'
+            assert int(shm.find('dds:segment_size', ns).text) == segment
+            participant = profile.find('dds:participant', ns)
+            assert participant.attrib['is_default_profile'] == 'true'
+            assert participant.find('dds:rtps/dds:useBuiltinTransports', ns).text == 'false'
+        else:
+            assert root + '/dds.xml' not in archive.getnames()
 
 
 def test_native_preflight_preserves_custom_cup_geometry(tmp_path, monkeypatch):

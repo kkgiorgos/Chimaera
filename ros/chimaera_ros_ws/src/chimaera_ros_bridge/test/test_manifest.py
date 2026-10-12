@@ -30,6 +30,8 @@ class SessionTest(unittest.TestCase):
         guest = plan(data, 'guest', '/opt/bridge')
         self.assertEqual(host['env']['ROS_DOMAIN_ID'], '41')
         self.assertEqual(guest['env']['ROS_DOMAIN_ID'], '42')
+        self.assertEqual(host['env']['ROS_LOCALHOST_ONLY'], '1')
+        self.assertEqual(guest['env']['ROS_LOCALHOST_ONLY'], '1')
         self.assertIn('config_file:=' + str(self.root / 'routes.json'), host['processes'][0]['command'])
         self.assertNotIn('poll_us:=10000', guest['processes'][0]['command'])
         self.assertEqual(len(host['processes']), 1)
@@ -90,6 +92,27 @@ class SessionTest(unittest.TestCase):
         for side in ('host', 'guest'):
             command = plan(data, side, '/opt/bridge')['processes'][0]['command']
             self.assertIn('image_diagnostics:=true', command)
+
+    def test_explicit_guest_dds_profile_preserves_domain_isolation(self):
+        self.data['guest'].update(localhost_only=False,
+            env={'FASTRTPS_DEFAULT_PROFILES_FILE': '/opt/chimaera/dds.xml'})
+        data = self.load()
+        guest = plan(data, 'guest', '/opt/bridge')
+        self.assertEqual(guest['env']['ROS_LOCALHOST_ONLY'], '0')
+        self.assertEqual(guest['env']['ROS_DOMAIN_ID'], '42')
+        self.assertEqual(guest['env']['FASTRTPS_DEFAULT_PROFILES_FILE'], '/opt/chimaera/dds.xml')
+        self.assertEqual(plan(data, 'host', '/opt/bridge')['env']['ROS_LOCALHOST_ONLY'], '1')
+        for value in ('false', 0, None):
+            self.data['guest']['localhost_only'] = value
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                self.load()
+
+    def test_missing_dds_profile_fails_before_starting_processes(self):
+        with self.assertRaisesRegex(ValueError, 'DDS profile does not exist'):
+            supervise(dict(setup=[],
+                env={'FASTRTPS_DEFAULT_PROFILES_FILE': str(self.root / 'missing.xml')},
+                processes=[dict(name='unexpected', command=['touch', str(self.root / 'started')])]))
+        self.assertFalse((self.root / 'started').exists())
 
     def test_experiment_arguments_are_opaque(self):
         self.data['simulator'] = dict(gem5_root='gem5', config='riscv_experiment.py',

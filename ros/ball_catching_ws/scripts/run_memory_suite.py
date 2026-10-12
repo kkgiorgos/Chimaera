@@ -75,12 +75,14 @@ def load_config(path, cpu_type=None):
     # Older experiment files retain the original Timing CPU behaviour.
     data['hardware'].setdefault('cpu_type', 'timing')
     data['fixed'].setdefault('image_diagnostics', False)
+    data['fixed'].setdefault('guest_dds_shm_bytes', 0)
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
-                  'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics'},
+                  'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
+                  'guest_dds_shm_bytes'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -110,6 +112,10 @@ def load_config(path, cpu_type=None):
         raise ValueError('One stereo pair exceeds the controller 32 MiB budget; consult before changing transport')
     if fixed['camera_width'] < 64 or fixed['camera_height'] < 64:
         raise ValueError('Camera dimensions must be at least 64')
+    segment = fixed['guest_dds_shm_bytes']
+    if (type(segment) is not int or not 0 <= segment <= 64 * 1024 * 1024
+            or (segment and segment < 2 * payload + 65536)):
+        raise ValueError('guest_dds_shm_bytes must be 0 or fit a stereo pair plus 64 KiB, at most 64 MiB')
     def vector(value, name, nonzero=False):
         if not isinstance(value, list) or len(value) != 3 or any(
                 type(x) not in (int, float) or not math.isfinite(x) for x in value):
@@ -241,15 +247,17 @@ def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=F
 
 
 def session(output, data, point, calibration=None):
-    from ament_index_python.packages import get_package_prefix
-    root = str(Path(get_package_prefix('chimaera_ros_bridge')))
     fixed = data['fixed']
     robot = robot_command(point, calibration, fixed['image_age_periods'], fixed['image_diagnostics'])
+    guest_env = dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu',
+                     RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+    if fixed['guest_dds_shm_bytes']:
+        guest_env['FASTRTPS_DEFAULT_PROFILES_FILE'] = GUEST_ROOT + '/dds.xml'
     return dict(version=1, routes=str(output / 'routes.json'),
         host=dict(domain_id=71, setup=['/opt/ros/humble/setup.bash'], processes=[]),
         guest=dict(domain_id=72, setup=['/opt/ros/humble/setup.bash',
                     GUEST_ROOT + '/app/share/ball_catching_robot/local_setup.bash'],
-                   env=dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu'),
+                   localhost_only=not bool(fixed['guest_dds_shm_bytes']), env=guest_env,
                    processes=[dict(name='robot', command=robot)]),
         bridge=dict(interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
                     timing_backend='gazebo', gazebo_world='ball_catching',
@@ -264,6 +272,33 @@ def session(output, data, point, calibration=None):
                     install_trees=[dict(source=str(WORKSPACE / 'install/ball_catching_robot'), destination='app')]))
 
 
+def guest_dds_profile(segment_bytes):
+    # Humble's localhost mode appends a default SHM transport. Use an explicit
+    # UDP loopback whitelist and one sized SHM transport instead.
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>local_udp</transport_id><type>UDPv4</type>
+      <interfaceWhiteList><address>127.0.0.1</address></interfaceWhiteList>
+    </transport_descriptor>
+    <transport_descriptor>
+      <transport_id>image_shm</transport_id><type>SHM</type>
+      <segment_size>{segment_bytes}</segment_size>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="image_participant" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>local_udp</transport_id><transport_id>image_shm</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
+'''
+
+
 def prepare_bundle(output, data, points):
     from chimaera_ros.manifest import load
     from chimaera_ros.runner import stage
@@ -273,12 +308,19 @@ def prepare_bundle(output, data, points):
     if staged.exists():
         staged = output / f'staged-{len(list(output.glob("staged*"))) + 1:03d}'
     root = stage(load(output / 'staging-session.json'), staged)
+    if data['fixed']['guest_dds_shm_bytes']:
+        (root / 'dds.xml').write_text(guest_dds_profile(data['fixed']['guest_dds_shm_bytes']))
     libraries = root / 'lib'
     libraries.mkdir()
     from ament_index_python.packages import get_package_prefix
     clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock.so'
     shutil.copyfile(clock, libraries / clock.name)
-    binaries = [root / 'runtime/guest_bridge', *list((root / 'app/lib/ball_catching_robot').iterdir())]
+    # RMW is loaded dynamically and absent from application ldd output. Bundle
+    # the selected plugin and its dependencies so DDS matches native validation.
+    middleware = Path(get_package_prefix('rmw_fastrtps_cpp')) / 'lib/librmw_fastrtps_cpp.so'
+    shutil.copyfile(middleware, libraries / middleware.name)
+    binaries = [root / 'runtime/guest_bridge', middleware,
+                *list((root / 'app/lib/ball_catching_robot').iterdir())]
     for binary in binaries:
         linked = subprocess.run(['ldd', str(binary)], check=True, capture_output=True, text=True).stdout
         if 'not found' in linked:

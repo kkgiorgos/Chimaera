@@ -50,8 +50,11 @@ def load(path):
         raise ValueError("Expected version 1 topic route config")
     for side in ('host', 'guest'):
         config = data[side]
-        fields(config, {'domain_id', 'setup', 'env', 'processes'}, {'domain_id', 'processes'})
+        fields(config, {'domain_id', 'localhost_only', 'setup', 'env', 'processes'}, {'domain_id', 'processes'})
         integer(config['domain_id'], 0, 232)
+        config.setdefault('localhost_only', True)
+        if type(config['localhost_only']) is not bool:
+            raise ValueError("localhost_only must be boolean")
         config['setup'] = strings(config.get('setup', []))
         if side == 'host':
             config['setup'] = [local(p) for p in config['setup']]

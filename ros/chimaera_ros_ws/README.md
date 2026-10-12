@@ -46,7 +46,7 @@ The session has `version: 1` and these fields:
 | Field | Meaning |
 | --- | --- |
 | `routes` | Shared route JSON path, relative to the session file or absolute. |
-| `host`, `guest` | Distinct `domain_id` values, `setup` arrays, optional `env`, and `processes` arrays. |
+| `host`, `guest` | Distinct `domain_id` values, `setup` arrays, optional `env`, optional boolean `localhost_only` (default `true`), and `processes` arrays. |
 | `processes` | Entries with a unique `name` and nonempty `command` argument array. Typically `ros2 launch PACKAGE host.launch.py` and its guest equivalent. Arguments are preserved without shell expansion. |
 | `bridge` | Optional timing, status, and buffer parameters described below. |
 | `simulator` | `gem5_root`, experiment `config` path, optional `args` array and `outdir`; used by `bringup`. |
@@ -62,8 +62,14 @@ does not rewrite launch arguments, parameter files, model paths, or application
 resources. All required non-system assets should be installed by the application.
 
 Each side automatically starts its bridge, then the configured application commands.
-Separate localhost-only ROS domains isolate DDS discovery. Domain variables are
-applied after sourcing overlays and cannot be overridden in `env`. Other environment
+Separate ROS domains and default localhost-only discovery isolate DDS traffic.
+Domain and localhost variables are applied after sourcing overlays and cannot be
+overridden in `env`. Set a side's `localhost_only` to `false` when an explicit DDS
+profile supplies its transport configuration. For example, the ball-catching suite
+uses an explicit UDP loopback whitelist and a larger shared-memory segment;
+Humble's localhost flag would otherwise append a default shared-memory transport.
+`env.FASTRTPS_DEFAULT_PROFILES_FILE` must exist on that side when processes start;
+a missing profile fails before any child starts. Other environment
 variables can be supplied, including application-specific resource paths. Startup
 scripts are trusted code; use only trusted configuration and install trees.
 

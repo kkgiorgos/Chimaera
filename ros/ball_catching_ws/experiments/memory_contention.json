@@ -9,6 +9,7 @@
     "camera_width": 640,
     "camera_height": 480,
     "image_age_periods": 2.0,
+    "guest_dds_shm_bytes": 8388608,
     "cup_radius": 0.12,
     "cup_depth": 0.14,
     "interval_us": 500,

@@ -20,7 +20,8 @@ def prefix():
 def plan(data, side, package_prefix=None, simulate=False):
     package_prefix = Path(package_prefix) if package_prefix else prefix()
     config = data[side]
-    env = dict(config['env'], ROS_DOMAIN_ID=str(config['domain_id']), ROS_LOCALHOST_ONLY='1')
+    env = dict(config['env'], ROS_DOMAIN_ID=str(config['domain_id']),
+               ROS_LOCALHOST_ONLY='1' if config.get('localhost_only', True) else '0')
     if side == 'guest':
         env.setdefault('ROS_LOG_DIR', '/tmp/chimaera-guest-logs')
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
@@ -57,6 +58,12 @@ def plan(data, side, package_prefix=None, simulate=False):
 
 
 def supervise(spec):
+    profile = spec['env'].get('FASTRTPS_DEFAULT_PROFILES_FILE')
+    if profile and not Path(profile).is_file():
+        raise ValueError('DDS profile does not exist: ' + profile)
+    if profile:
+        print('DDS profile: ' + profile + ' (ROS_LOCALHOST_ONLY='
+              + spec['env'].get('ROS_LOCALHOST_ONLY', 'unset') + ')', flush=True)
     processes = []
     interrupted = False
     def stop(signum, frame):
