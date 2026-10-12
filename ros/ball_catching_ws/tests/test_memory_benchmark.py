@@ -46,7 +46,7 @@ def test_timing_validation_preset_contains_only_the_qualified_baseline():
     assert (data['fixed']['camera_width'], data['fixed']['camera_height']) == (480, 360)
     assert data['fixed']['guest_dds_shm_bytes'] == 8 * 1024 * 1024
     assert data['fixed']['image_age_periods'] == 2
-    assert data['fixed']['wall_timeout_s'] == 14400
+    assert data['fixed']['wall_timeout_s'] == 43200
 
 
 def test_baselines_not_duplicated_across_patterns(tmp_path):

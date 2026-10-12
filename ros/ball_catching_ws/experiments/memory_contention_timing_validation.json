@@ -19,7 +19,7 @@
     "interval_us": 500,
     "poll_us": 100,
     "startup_timeout_s": 900,
-    "wall_timeout_s": 14400,
+    "wall_timeout_s": 43200,
     "image_diagnostics": true
   },
   "hardware": {

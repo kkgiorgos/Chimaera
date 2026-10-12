@@ -141,21 +141,21 @@ Prepare after building and sourcing both overlays:
 python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type timing --case case-000 \
   --config ros/ball_catching_ws/experiments/memory_contention_timing_validation.json \
-  --output ros/ball_catching_ws/results/timing-validation-480-dds8
+  --output ros/ball_catching_ws/results/timing-validation-480-dds8-12h
 ```
 
-The prepared run executes two simulated seconds after launch, with a four-hour
+The prepared run executes two simulated seconds after launch, with a twelve-hour
 wall limit covering boot, readiness and the throw. Run from the repository root:
 
 ```bash
-bash ros/ball_catching_ws/results/timing-validation-480-dds8/run.sh
+bash ros/ball_catching_ws/results/timing-validation-480-dds8-12h/run.sh
 ```
 
 Track progress in another terminal; this requires no ROS setup:
 
 ```bash
 python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
-  ros/ball_catching_ws/results/timing-validation-480-dds8 --case case-000
+  ros/ball_catching_ws/results/timing-validation-480-dds8-12h --case case-000
 ```
 
 The monitor reports simulated time, separate arm/fresh-camera readiness, sampled
@@ -164,6 +164,15 @@ suite saves `dashboard.html` and the attempt's binary `result.json` and DRAM
 `benchmark.json`; an unlaunched timeout remains an infrastructure failure.
 Preparation executes no gem5 or Gazebo simulation. The full guest outcome awaits
 the user's run; native qualification is a feasibility check.
+
+Both current presets allow twelve wall hours per attempt. The bridge's separate
+15-minute startup deadline covers connecting to gem5 and local ROS routes; it
+does not cap robot readiness after detailed simulation begins. Running processes
+load their limits at startup. Existing prepared directories keep their frozen
+budgets; an increased limit requires a fresh directory and a restarted run.
+The original `timing-validation-480-dds8` directory therefore retains its
+four-hour limit. Stop its running invocation before starting the twelve-hour
+replacement above.
 
 ## Timing versus O3 comparison
 
