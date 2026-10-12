@@ -23,7 +23,8 @@ def start(context):
     universal = Path(get_package_share_directory('chimaera_ros_bridge'))
     options = {**execution['options'], **execution['rates'], 'robot': False,
                'image_age_periods': execution['fixed']['image_age_periods'],
-               'paused': True, 'gui': False, 'partition': 'ball-memory-suite'}
+               'paused': True, 'gui': False, 'partition': 'ball-memory-suite',
+               'transport_ip': '127.0.0.1'}
     options.pop('name', None)
     launch_args = {key: json.dumps(value) if isinstance(value, (list, bool)) else str(value)
                    for key, value in options.items()}
@@ -41,7 +42,7 @@ def start(context):
         output='screen', sigterm_timeout='10')
     fixed = execution['fixed']
     bridge = Node(package='chimaera_ros_bridge', executable='gazebo_host_bridge', output='screen',
-        additional_env={'IGN_PARTITION': options['partition']},
+        additional_env={'IGN_PARTITION': options['partition'], 'IGN_IP': options['transport_ip']},
         parameters=[dict(config_file=execution['routes'], timing_socket='/tmp/chimaera_time.sock',
             timing_file=str(output / 'timing.csv'), gazebo_world='ball_catching',
             interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],

@@ -89,7 +89,7 @@ def check(binary, config, extra, expected, cancel=False):
 
             thread = threading.Thread(target=serve, daemon=True)
             thread.start()
-            env = dict(os.environ, IGN_PARTITION='wall_follow_test_' + str(os.getpid()),
+            env = dict(os.environ, IGN_IP='127.0.0.1', IGN_PARTITION='wall_follow_test_' + str(os.getpid()),
                        ROS_DOMAIN_ID='196', ROS_LOCALHOST_ONLY='1', ROS_LOG_DIR=str(root / 'logs'))
             with (root / 'gazebo.log').open('w') as log:
                 gazebo = subprocess.Popen(['ign', 'gazebo', '-s', str(world)], env=env,

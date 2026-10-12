@@ -43,7 +43,7 @@ def start(context):
         (Path(output) / 'experiment.json').write_text(json.dumps(record, indent=2) + '\n')
     plugin_path = str(Path(get_package_prefix('ball_catching_sim')) / 'lib')
     env = {'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': plugin_path + ':' + os.environ.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
-           'IGN_PARTITION': get('partition')}
+           'IGN_PARTITION': get('partition'), 'IGN_IP': get('transport_ip')}
     command = ['ign', 'gazebo']
     if get('paused').lower() != 'true':
         command += ['-r']
@@ -54,7 +54,7 @@ def start(context):
         '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
         '/stereo/left/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
         '/stereo/right/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image'],
-        additional_env={'IGN_PARTITION': get('partition')}, output='screen')
+        additional_env={'IGN_PARTITION': get('partition'), 'IGN_IP': get('transport_ip')}, output='screen')
     actions = [RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(
         function=lambda context: temporary.cleanup())])), bridge, gazebo,
         Node(package='robot_state_publisher', executable='robot_state_publisher',
@@ -75,6 +75,7 @@ def start(context):
 
 def generate_launch_description():
     defaults = dict(gui='true', robot='true', paused='false', output='', partition='ball-catching',
+                    transport_ip='127.0.0.1',
                     control_hz='250', planner_hz='30', plan_interval='0.06',
                     image_age_periods='2',
                     joint_hz='250', warmup='0',

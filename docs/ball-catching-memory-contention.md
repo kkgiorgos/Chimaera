@@ -7,6 +7,12 @@ operating boundary, with no statistical reliability claim. Container execution
 is a later step; configuration, per-attempt records and the report remain
 independent of the local execution backend.
 
+Local Gazebo, its ROS bridge and the Chimaera host bridge use `IGN_IP=127.0.0.1`.
+This restricts discovery to loopback and prevents unrelated Docker network
+removal from invalidating discovery sockets during a long run. The native
+application exposes `transport_ip` for deployments that need another interface;
+the current local benchmark fixes it to loopback.
+
 ## Reference system and boundary
 
 The guest runs perception, flight estimation, interception/braking planning and
