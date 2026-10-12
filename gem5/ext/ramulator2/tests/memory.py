@@ -22,6 +22,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--config", required=True)
 parser.add_argument("--vector", action="store_true")
 parser.add_argument("--aggressor", choices=("stream", "stride", "random"))
+parser.add_argument("--backpressure", action="store_true")
+parser.add_argument("--bandwidth", type=float, default=0)
 args = parser.parse_args()
 config = json.loads(Path(args.config).read_text())
 system = System(mem_mode="timing", mem_ranges=[AddrRange("32MiB")])
@@ -60,6 +62,8 @@ else:
         aggressor_pattern=args.aggressor or "none",
         aggressor_interval=1,
         aggressor_max_pending=2,
+        aggressor_backpressure=args.backpressure,
+        aggressor_gbps=args.bandwidth,
     )
     system.memory.port = system.membus.mem_side_ports
 

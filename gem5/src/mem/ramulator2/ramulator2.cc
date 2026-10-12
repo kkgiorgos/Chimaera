@@ -2,6 +2,8 @@
 // Adapted from CMU-SAFARI/ramulator2; see LICENSE.
 #include "mem/ramulator2/ramulator2.hh"
 
+#include <cmath>
+
 #include "base/trace.hh"
 #include "debug/Ramulator2.hh"
 
@@ -24,6 +26,10 @@ Ramulator2::Ramulator2(const Params &p)
     aggressorState = p.aggressor_seed;
     aggressorDutyPercent = p.aggressor_duty_percent;
     aggressorPeriod = p.aggressor_period;
+    aggressorBackpressure = p.aggressor_backpressure;
+    aggressorGbps = p.aggressor_gbps;
+    fatal_if(!std::isfinite(aggressorGbps) || aggressorGbps < 0,
+             "Aggressor bandwidth must be finite and nonnegative");
     fatal_if(aggressorPattern != "none" && aggressorPattern != "stream" &&
              aggressorPattern != "stride" && aggressorPattern != "random",
              "Unknown Ramulator aggressor pattern");

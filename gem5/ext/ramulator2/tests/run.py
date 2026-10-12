@@ -28,7 +28,7 @@ def main():
         choices=("configuration", "single", "vector", "mode-switch",
                  "timing-se", "o3-se", "full-system",
                  "aggressor-stream", "aggressor-stride", "aggressor-random",
-                 "aggressor-drain"),
+                 "aggressor-drain", "aggressor-backpressure"),
         help="Run only selected cases (repeatable)",
     )
     parser.add_argument(
@@ -66,6 +66,8 @@ def main():
               for pattern in ("stream", "stride", "random")]
     cases.append(("aggressor-drain", tests / "mode_switch.py",
                   ["--binary", str(binary), "--aggressor", "random"]))
+    cases.append(("aggressor-backpressure", tests / "memory.py",
+                  ["--aggressor", "random", "--backpressure", "--bandwidth", "20"]))
     if args.full_system or "full-system" in (args.case or []):
         cases.append((
             "full-system", tests / "full_system.py",
@@ -106,7 +108,7 @@ def main():
         assert len(stats) == 1, stats
         reads, writes = request_counts(stats[0])
         assert reads > 0, (name, reads, writes)
-        if name in ("single", "vector", "aggressor-stream", "aggressor-stride", "aggressor-random"):
+        if name in ("single", "vector", "aggressor-stream", "aggressor-stride", "aggressor-random", "aggressor-backpressure"):
             assert writes > 0, (name, reads, writes)
             assert len(list(directory.glob("*.ramulator_stats.*.yaml"))) >= 2
             assert "RAMULATOR_MEMORY_OK" in (directory / "run.log").read_text()
@@ -114,6 +116,13 @@ def main():
             counters = (directory / "stats.txt").read_text()
             assert int(re.findall(r"system.memory.aggressorAccepted\s+(\d+)", counters)[-1]) > 0
             assert int(re.findall(r"system.memory.aggressorRejected\s+(\d+)", counters)[-1]) > 0
+        if name == "aggressor-backpressure":
+            assert int(re.findall(r"system.memory.aggressorStallCycles\s+(\d+)", counters)[-1]) > 0
+            accepted = int(re.findall(r"system.memory.cpuReadLatencyTicks\s+(\d+)", counters)[-1])
+            total = int(re.findall(r"system.memory.cpuReadTotalLatencyTicks\s+(\d+)", counters)[-1])
+            assert total > accepted > 0, (accepted, total)
+            assert "cpuReadLatencyNs::" in counters
+            assert "cpuReadTotalLatencyNs::" in counters
         if name in ("mode-switch", "aggressor-drain"):
             assert "RAMULATOR_MODE_SWITCH_OK" in (
                 directory / "run.log"

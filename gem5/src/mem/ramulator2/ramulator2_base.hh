@@ -6,6 +6,7 @@
 #include <deque>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -114,6 +115,8 @@ class Ramulator2Base : public AbstractMemory
         statistics::Scalar aggressorAccepted, aggressorRejected, aggressorBytes;
         statistics::Scalar aggressorCompleted, aggressorLatencyTicks;
         statistics::Scalar cpuReads, cpuReadLatencyTicks, cpuRetries;
+        statistics::Scalar cpuReadTotalLatencyTicks, aggressorStallCycles;
+        statistics::SparseHistogram cpuReadLatencyNs, cpuReadTotalLatencyNs;
         ContentionStats(statistics::Group *parent);
     } contentionStats;
     std::string aggressorPattern = "none";
@@ -123,6 +126,11 @@ class Ramulator2Base : public AbstractMemory
     Addr aggressorWindow = 268435456;
     uint64_t aggressorState = 1, aggressorIndex = 0, aggressorCycle = 0;
     unsigned int aggressorPending = 0;
+    bool aggressorBackpressure = false, aggressorHeld = false;
+    double aggressorGbps = 0, aggressorNextOffer = 0;
+    Addr aggressorHeldAddress = 0;
+    Tick measurementEpoch = 0;
+    std::unordered_map<PacketPtr, Tick> firstReadAttempt;
     void injectAggressor();
 
     Ramulator2Base(const AbstractMemoryParams &p,

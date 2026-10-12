@@ -24,3 +24,5 @@ class Ramulator2(AbstractMemory):
     aggressor_seed = Param.Unsigned(1, "Deterministic random seed")
     aggressor_duty_percent = Param.Unsigned(100, "Active fraction of burst period")
     aggressor_period = Param.Unsigned(12000, "Burst period in DRAM cycles")
+    aggressor_backpressure = Param.Bool(False, "Retain refused requests and stall generation")
+    aggressor_gbps = Param.Float(0, "Offered decimal GB/s; zero uses aggressor_interval")

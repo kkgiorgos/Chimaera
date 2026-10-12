@@ -115,3 +115,27 @@ Issuing stops during drain and atomic boot. CPU and device counters are separate
 in gem5 statistics. See the [wall-follow DSE guide](../../../docs/wall-follow-memory-contention.md)
 for semantics, parameters, limitations and container commands. The vector-port
 wrapper retains its existing behavior and does not expose this device source.
+
+`aggressor_backpressure=true` retains a refused transaction, including its
+random address, and retries admission on subsequent DRAM cycles. New work stalls
+when its bounded outstanding limit is full. This models a backpressured device;
+the default remains the earlier open-loop source for existing experiments.
+`aggressor_gbps` sets offered decimal GB/s with fractional-cycle pacing; zero
+uses `aggressor_interval`. Physical DRAM throughput can be lower than accepted
+traffic because writes may coalesce and reads may be forwarded.
+
+The wrapper records guest read latency sums and sparse 1 ns histograms:
+`cpuReadLatencyNs` spans accepted submission to backend completion, while
+`cpuReadTotalLatencyNs` starts at the first wrapper submission attempt and
+includes admission retries. Neither includes upstream cache/fabric waiting or
+response delivery after backend completion. Each completed guest read contributes
+one sample. Reads first submitted before a statistics reset are excluded from
+the new measurement epoch, so outstanding warmup requests cannot contaminate
+its tails. Means use exact gem5 ticks; histogram percentiles round upward to
+1 ns. Guest write acknowledgements remain distinct from DRAM completion.
+
+`configs/ddr4-3200-dual.json` is an expanded export from the pinned Python DSL:
+two 64-bit DDR4-3200AA channels, one 8 GiB rank per channel, FRFCFS, open rows,
+all-bank refresh and cache-line interleaving. It has a theoretical 51.2 GB/s
+aggregate data-bus peak. The ball-catching benchmark uses this PC-sized preset;
+see [its guide](../../../docs/ball-catching-memory-contention.md).

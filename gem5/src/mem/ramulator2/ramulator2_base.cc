@@ -62,8 +62,15 @@ Ramulator2Base::ContentionStats::ContentionStats(statistics::Group *parent)
       ADD_STAT(aggressorLatencyTicks, statistics::units::Tick::get(), "Synthetic completion latency sum"),
       ADD_STAT(cpuReads, statistics::units::Count::get(), "Completed CPU-side DRAM reads"),
       ADD_STAT(cpuReadLatencyTicks, statistics::units::Tick::get(), "CPU-side DRAM read latency sum"),
-      ADD_STAT(cpuRetries, statistics::units::Count::get(), "CPU-side rejected submissions")
-{}
+      ADD_STAT(cpuRetries, statistics::units::Count::get(), "CPU-side rejected submissions"),
+      ADD_STAT(cpuReadTotalLatencyTicks, statistics::units::Tick::get(), "Read first-attempt to backend completion sum"),
+      ADD_STAT(aggressorStallCycles, statistics::units::Count::get(), "Cycles generation or admission waits under backpressure"),
+      ADD_STAT(cpuReadLatencyNs, statistics::units::Count::get(), "Accepted guest read latency, rounded up to 1 ns"),
+      ADD_STAT(cpuReadTotalLatencyNs, statistics::units::Count::get(), "Guest read latency including admission retries, rounded up to 1 ns")
+{
+    cpuReadLatencyNs.init(0);
+    cpuReadTotalLatencyNs.init(0);
+}
 
 void
 Ramulator2Base::injectAggressor()
@@ -71,21 +78,30 @@ Ramulator2Base::injectAggressor()
     // An independent device ingress: no gem5 packets, cache pollution, CPU
     // instructions or backing-store writes. Addresses are above guest RAM.
     const uint64_t cycle = aggressorCycle++;
-    if (aggressorPattern == "none" || drainState() != DrainState::Running ||
-        cycle % aggressorInterval ||
+    if (aggressorPattern == "none" || drainState() != DrainState::Running) {
+        return;
+    }
+    const bool due = aggressorGbps > 0 ? cycle >= aggressorNextOffer :
+                     cycle % aggressorInterval == 0;
+    if ((!aggressorHeld && !due) ||
         cycle % aggressorPeriod >=
             uint64_t(aggressorPeriod) * aggressorDutyPercent / 100) {
         return;
     }
     if (aggressorPending >= aggressorMaxPending) {
         ++contentionStats.aggressorRejected;
+        if (aggressorBackpressure) {
+            ++contentionStats.aggressorStallCycles;
+        }
         return;
     }
     const unsigned int bytes = ramulator2_memorysystem->get_tx_bytes();
     fatal_if(aggressorWindow % bytes || aggressorStride % bytes,
              "Aggressor window and stride must align to DRAM transactions");
     Addr offset;
-    if (aggressorPattern == "random") {
+    if (aggressorHeld) {
+        offset = aggressorHeldAddress - getAddrRange().size();
+    } else if (aggressorPattern == "random") {
         aggressorState ^= aggressorState << 13;
         aggressorState ^= aggressorState >> 7;
         aggressorState ^= aggressorState << 17;
@@ -95,6 +111,7 @@ Ramulator2Base::injectAggressor()
                                   aggressorStride)) % aggressorWindow;
     }
     const Addr address = getAddrRange().size() + offset;
+    aggressorHeldAddress = address;
     const bool read = aggressorIndex % 100 < aggressorReadPercent;
     const Tick submitted = curTick();
     ++aggressorPending; // Writes may complete synchronously.
@@ -104,8 +121,10 @@ Ramulator2Base::injectAggressor()
         read ? 0 : 1, address, 0, -1,
         [this, submitted](Ramulator::Request &) {
             --aggressorPending;
-            ++contentionStats.aggressorCompleted;
-            contentionStats.aggressorLatencyTicks += curTick() - submitted;
+            if (submitted >= measurementEpoch) {
+                ++contentionStats.aggressorCompleted;
+                contentionStats.aggressorLatencyTicks += curTick() - submitted;
+            }
             if (!nbrOutstanding()) {
                 signalDrainDone();
             }
@@ -114,9 +133,21 @@ Ramulator2Base::injectAggressor()
         ++aggressorIndex;
         ++contentionStats.aggressorAccepted;
         contentionStats.aggressorBytes += bytes;
+        aggressorHeld = false;
     } else {
         --aggressorPending;
         ++contentionStats.aggressorRejected;
+        aggressorHeld = aggressorBackpressure;
+        if (aggressorBackpressure) {
+            ++contentionStats.aggressorStallCycles;
+        }
+    }
+    if (!aggressorHeld) {
+        const double spacing = aggressorGbps > 0 ?
+            bytes / (aggressorGbps * clockPeriod / 1000.0) : aggressorInterval;
+        // Never accumulate unbounded catch-up work while the device is stalled.
+        aggressorNextOffer = std::max(aggressorNextOffer + spacing,
+                                     static_cast<double>(cycle) + 1);
     }
 }
 
@@ -170,6 +201,7 @@ void
 Ramulator2Base::resetStats()
 {
     AbstractMemory::resetStats();
+    measurementEpoch = curTick();
     if (ramulator2_frontend) {
         ramulator2_frontend->reset_stats_recursive();
     }
@@ -305,6 +337,9 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
     if (state.retryReq) {
         return false;
     }
+    if (pkt->isRead()) {
+        firstReadAttempt.emplace(pkt, curTick());
+    }
     // A write occupies a backend slot and, until acknowledged, a response
     // slot. Reserve both so downstream backpressure cannot exceed the cap.
     const unsigned int slots = pkt->isWrite() && pkt->needsResponse() ? 2 : 1;
@@ -337,13 +372,23 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
         ++nbrOutstandingWrites;
     }
     const Tick submitted = curTick();
-    auto callback = [this, pkt, port_id, read, submitted](Ramulator::Request &req) {
+    const Tick first = read ? firstReadAttempt.at(pkt) : submitted;
+    auto callback = [this, pkt, port_id, read, submitted, first](Ramulator::Request &req) {
         if (read) {
             const auto erased = outstandingReads.erase(pkt);
             panic_if(erased != 1, "Unknown Ramulator2 read completion");
             --nbrOutstandingReads;
-            ++contentionStats.cpuReads;
-            contentionStats.cpuReadLatencyTicks += curTick() - submitted;
+            firstReadAttempt.erase(pkt);
+            if (first >= measurementEpoch) {
+                const Tick latency = curTick() - submitted;
+                const Tick total = curTick() - first;
+                const Tick ns = sim_clock::as_int::ns;
+                ++contentionStats.cpuReads;
+                contentionStats.cpuReadLatencyTicks += latency;
+                contentionStats.cpuReadTotalLatencyTicks += total;
+                contentionStats.cpuReadLatencyNs.sample((latency + ns - 1) / ns);
+                contentionStats.cpuReadTotalLatencyNs.sample((total + ns - 1) / ns);
+            }
             accessAndRespond(pkt, port_id);
         } else {
             --nbrOutstandingWrites;
