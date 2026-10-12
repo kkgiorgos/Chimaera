@@ -545,3 +545,46 @@ The failed setup and both attempts are archived under
 `results/cpu-comparison-640-fixed/previous-setup/{o3,timing}`. Fresh matched bundles
 and manifests use the same `results/cpu-comparison-640-fixed/{o3,timing}/run.sh`
 launcher paths, with current runner and installed bridge fingerprints.
+
+### Timing baseline recovery, 2026-10-13
+
+Recovery uses four Timing CPUs with the existing fixed hardware and disabled
+aggressor. Local Gazebo discovery now explicitly binds to `127.0.0.1`; it no
+longer depends on a Docker bridge remaining present. The native 640×480,
+90/30/250 Hz trial caught the fixed 3 m/s loft even with an invalid inherited
+`IGN_IP`. Image-stage diagnostics and separate arm/camera readiness records
+are available as described above. Validation passed 68 ball-catching Python
+checks, all six bridge suites, and robot/scoring CTest suites.
+
+Native screening kept the launch geometry, physics, joint feedback, planner and
+effort controller fixed. Reducing only resolution to 320×240 caused a miss;
+the first visual detection occurred about 371 ms after launch. That scene is
+not eligible as the interference baseline. Keeping 640×480 and reducing only
+camera rate to 30 Hz caught the same throw natively. Native catches establish
+geometry feasibility, not a working detailed guest run.
+
+The bounded 640×480, 30 Hz Timing diagnostic exposed two distinct delays. For
+the pair captured at 66.5 ms, bridge receipt/publication occurred at
+77.414/85.249 ms; perception paired it at 88.658 ms and finished detection at
+139.987 ms. Its final age was 73.487 ms, exceeding the two-period 66.667 ms
+budget, so the result was rejected. This is one initial processing sample;
+it does not establish steady-state detector cost. The arm became ready while
+camera readiness remained false. No throw had launched at this observation.
+
+A separate native DDS probe used the installed Fast DDS 2.6.12 and
+rmw_fastrtps 6.2.10, sending three stereo pairs of 921,600-byte RGB images. With
+the receiver process paused for 100 ms around each publication, default DDS
+delivered zero of six images. An explicit loopback-only profile with an 8 MiB
+shared-memory segment delivered all six, both with and without the pause.
+The default unpaused check delivered four of six. Humble's
+`ROS_LOCALHOST_ONLY=1` adds a default shared-memory transport even when an XML
+profile is supplied; the successful profile therefore used its own UDP loopback
+whitelist with that flag disabled. The guest DDS configuration has not been
+changed pending the user's requested transport consultation. This isolated
+test reproduces loss under a delayed receiver; it does not attribute every
+missing guest frame to DDS.
+
+Raw records, the DDS probe source/profile, and diagnostic manifests are under
+`ros/ball_catching_ws/results/timing-recovery-20261013`. Bounded diagnostics that
+end without launch/score are infrastructure checks, not catch/miss results.
+A full guest throw and its DRAM measurement window remain to be validated.
