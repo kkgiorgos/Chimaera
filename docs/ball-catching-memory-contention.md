@@ -563,13 +563,25 @@ not eligible as the interference baseline. Keeping 640×480 and reducing only
 camera rate to 30 Hz caught the same throw natively. Native catches establish
 geometry feasibility, not a working detailed guest run.
 
+At 640×480 and 15 Hz, the native trial also missed. A 264 ms gap in visual
+observations reset estimator initialization; the first state estimate arrived
+too late for a feasible intercept. That frequency is not eligible as the
+baseline for this geometry. Keeping 30 Hz and reducing only resolution to
+480×360 caught the fixed throw, with the first estimate captured 163 ms after
+launch and the first plan at 199.5 ms after launch. This is the next qualified
+native candidate, not yet a validated detailed guest baseline.
+
 The bounded 640×480, 30 Hz Timing diagnostic exposed two distinct delays. For
 the pair captured at 66.5 ms, bridge receipt/publication occurred at
 77.414/85.249 ms; perception paired it at 88.658 ms and finished detection at
 139.987 ms. Its final age was 73.487 ms, exceeding the two-period 66.667 ms
-budget, so the result was rejected. This is one initial processing sample;
-it does not establish steady-state detector cost. The arm became ready while
-camera readiness remained false. No throw had launched at this observation.
+budget, so the result was rejected. The next pair took another 48.280 ms from
+conversion to completed detection and finished with a 93.925 ms age; it was
+also rejected. These two initial samples do not establish steady-state detector
+cost. The arm became ready while camera readiness remained false. The diagnostic
+reached 196.5 ms of simulated time before its 900-second wall limit, with no
+launch or task result. Cleanup released all three Chimaera sockets without
+manual removal.
 
 A separate native DDS probe used the installed Fast DDS 2.6.12 and
 rmw_fastrtps 6.2.10, sending three stereo pairs of 921,600-byte RGB images. With
