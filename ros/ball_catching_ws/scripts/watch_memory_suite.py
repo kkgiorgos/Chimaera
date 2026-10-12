@@ -5,6 +5,7 @@ import csv
 import json
 import math
 from pathlib import Path
+import re
 import sys
 import time
 
@@ -33,6 +34,19 @@ def number(value):
         return result if math.isfinite(result) else None
     except (ValueError, TypeError):
         return None
+
+
+def guest_failure(path):
+    try:
+        serial = path.read_text(errors='replace')
+    except FileNotFoundError:
+        return None
+    for pattern in (r'^Guest bridge: .+$', r'^\w+ exited \(-?\d+\); stopping session\r?$',
+                    r'^CHIMAERA_GUEST_APPLICATION_EXIT=\d+\r?$'):
+        match = re.search(pattern, serial, re.MULTILINE)
+        if match:
+            return match.group().strip()
+    return None
 
 
 def snapshot(path, case='case-003'):
@@ -80,6 +94,11 @@ def snapshot(path, case='case-003'):
         state.update(phase='Task scored', outcome='CATCH' if result['success'] else 'MISS')
     if point.get('reason'):
         state['reason'] = point['reason']
+    failure = guest_failure(attempt / 'gem5/board.pc.com_1.device')
+    if failure and 'outcome' not in state:
+        state.update(status='infrastructure_failure', phase='Guest application failed',
+                     reason=state.get('reason', failure),
+                     host_running_after_guest_failure=point.get('status') == 'running')
     return state
 
 
@@ -105,6 +124,8 @@ def display(state):
         lines.append('Result: ' + state['outcome'])
     if state.get('reason'):
         lines.append('Reason: ' + state['reason'])
+    if state.get('host_running_after_guest_failure'):
+        lines.append('Host runner still reports running; guest work has failed.')
     return '\n'.join(lines)
 
 

@@ -46,3 +46,24 @@ def test_task_percentage_starts_at_launch_and_scoring_preserves_a_miss(tmp_path)
     state = snapshot(attempt)
     assert state['phase'] == 'Task scored' and state['outcome'] == 'MISS'
     assert 'Result: MISS' in display(state)
+
+
+def test_guest_failure_is_visible_even_while_host_time_keeps_advancing(tmp_path):
+    attempt = tmp_path / 'case-003-attempt-001'
+    (attempt / 'gem5').mkdir(parents=True)
+    (tmp_path / 'experiment_manifest.json').write_text(json.dumps(dict(
+        configuration=dict(hardware=dict(cpu_type='o3')),
+        points=[dict(id='case-003', status='running')])))
+    (attempt / 'timing.csv').write_text('step,sim_seconds,elapsed_wall_seconds\n1,0.5,50\n')
+    serial = attempt / 'gem5/board.pc.com_1.device'
+    serial.write_text('warning: kernel recovered from I/O error\n')
+    assert snapshot(tmp_path)['status'] == 'running'
+    serial.write_text('Guest bridge: trailing controller data\r\n'
+                      'guest_bridge exited (1); stopping session\r\n')
+    state = snapshot(tmp_path)
+    assert state['status'] == 'infrastructure_failure'
+    assert state['phase'] == 'Guest application failed'
+    assert state['reason'] == 'Guest bridge: trailing controller data'
+    assert state['host_running_after_guest_failure']
+    assert 'outcome' not in state
+    assert 'guest work has failed' in display(state)

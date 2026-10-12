@@ -192,6 +192,9 @@ no known total duration or completion percentage. Catch/miss appears when scored
 individual attempt directory. Ctrl+C stops the monitor without stopping the
 benchmark. The monitor never contacts the guest or timing socket, writes no run
 records and adds no simulated work. It tolerates partially written live records.
+Fatal guest bridge errors and guest session exits are reported as infrastructure
+failures even if the host runner continues advancing simulated time. That
+advancement is not valid task progress; this observer does not stop the runner.
 For guest diagnostics, tail the attempt's `gem5/board.pc.com_1.device`; host and
 simulator output are in `launch.log`.
 
@@ -397,3 +400,23 @@ settings and current execution fingerprints. Guest bundles include the simulatio
 clock library. Local environments and construction records are under
 `results/cpu-comparison-640/{o3,timing}`. Neither benchmark was executed; CPU
 switching, freshness under O3 and catch/miss outcomes await the user's runs.
+
+The user's first O3 attempt exposed a controller framing failure during
+initialization: `Guest bridge: trailing controller data`, followed by
+`guest_bridge exited (1); stopping session`. The final bridge exchange was at
+0.269983493 s, and the last of eighteen commands arrived at 0.2695 s. Guest robot
+processes were then interrupted by their supervisor. Exchanges covering 0.3–0.4
+simulated seconds took 67.51 wall seconds, versus 1,495 wall seconds for 0.1–0.2 s;
+the apparent speedup followed the loss of robot work. O3 remained selected, and
+each exchange still advanced 0.5 ms. No throw occurred and no task result exists.
+
+The host runner did not detect this post-workbegin guest failure. The agent
+stopped the invalid attempt, preserved its logs and diagnostic record, and marked
+the case as an infrastructure failure. Records are in
+`results/cpu-comparison-640/o3/case-003-attempt-001`. The stop required process
+termination after the normal shutdown timeout; final Ramulator counters were
+unavailable, so no complete memory benchmark was constructed. The monitor now
+checks guest failure messages instead of displaying ordinary startup progress.
+The framing decoder found bytes remaining after the batch's declared messages;
+the logs do not identify why. This requires investigation before another O3
+benchmark. No transport change or new simulation was performed during this audit.
