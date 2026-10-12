@@ -11,6 +11,7 @@ import re
 import shlex
 import signal
 import socket
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -71,7 +72,7 @@ def load_config(path):
             raise ValueError(f'{section} must be an object')
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
-                  'camera_width', 'camera_height', 'cup_radius', 'cup_depth',
+                  'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s'},
         'hardware': {'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
@@ -84,7 +85,7 @@ def load_config(path):
     fixed = data['fixed']
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
                 'startup_timeout_s', 'wall_timeout_s', 'camera_width', 'camera_height',
-                'cup_radius', 'cup_depth'):
+                'cup_radius', 'cup_depth', 'image_age_periods'):
         positive(fixed[key], key)
     positive(fixed['warmup'], 'warmup', zero=True)
     for key in ('interval_us', 'poll_us', 'startup_timeout_s', 'camera_width', 'camera_height'):
@@ -128,6 +129,8 @@ def load_config(path):
                 for key in ('camera_hz', 'planner_hz', 'control_hz'):
                     positive(entry[key], key)
                 positive(entry['plan_interval'], 'plan_interval', zero=True)
+                if fixed['image_age_periods'] / entry['camera_hz'] > 3600:
+                    raise ValueError('Image freshness budget must be at most one simulated hour')
                 if max(entry['camera_hz'], entry['control_hz']) * fixed['physics_step'] > 1 + 1e-8:
                     raise ValueError('Update frequencies exceed the physics rate')
                 if entry['control_hz'] > fixed['joint_hz']:
@@ -204,24 +207,30 @@ def routes():
             ('/robot/ready', 'std_msgs/msg/Bool', 'guest_to_host', True),
             ('/robot/perception_ready', 'std_msgs/msg/Bool', 'guest_to_host', True)]:
         result.append(dict(host_topic=topic, guest_topic=topic, type=kind, direction=direction,
-                           coalesce=topic == '/clock',
+                           coalesce=topic == '/clock' or 'image_raw' in topic,
                            qos=dict(history='keep_last', depth=2 if 'image' in topic else 1,
                                     reliability='reliable' if reliable else 'best_effort', durability='volatile')))
+    for route in result:
+        if route['type'] == 'sensor_msgs/msg/Image':
+            route['coalesce_group'] = 'stereo'
     return dict(version=1, topics=result)
 
 
-def robot_command(point, calibration):
+def robot_command(point, calibration, image_age_periods=2.0):
     return ['ros2', 'launch', 'ball_catching_robot', 'robot.launch.py',
             'robot_file:=/tmp/chimaera-ball.urdf',
             'calibration:=' + json.dumps(calibration or {}),
-            *[f'{key}:={point["rates"][key]}' for key in ('control_hz', 'planner_hz', 'plan_interval')]]
+            f'image_age_periods:={image_age_periods}',
+            'gem5_clock_library:=' + GUEST_ROOT + '/lib/libchimaera_gem5_clock.so',
+            'gem5_time_origin_file:=/tmp/chimaera-sim-time-origin.ns',
+            *[f'{key}:={point["rates"][key]}' for key in ('control_hz', 'planner_hz', 'plan_interval', 'camera_hz')]]
 
 
 def session(output, data, point, calibration=None):
     from ament_index_python.packages import get_package_prefix
     root = str(Path(get_package_prefix('chimaera_ros_bridge')))
-    robot = robot_command(point, calibration)
     fixed = data['fixed']
+    robot = robot_command(point, calibration, fixed['image_age_periods'])
     return dict(version=1, routes=str(output / 'routes.json'),
         host=dict(domain_id=71, setup=['/opt/ros/humble/setup.bash'], processes=[]),
         guest=dict(domain_id=72, setup=['/opt/ros/humble/setup.bash',
@@ -233,6 +242,8 @@ def session(output, data, point, calibration=None):
                     physics_step_ns=round(fixed['physics_step'] * 1e9),
                     max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
                     max_pending_messages=16, m5ops='instruction', wait_for_application=True,
+                    max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
+                    simulation_time_from_readfile=True,
                     startup_timeout_s=fixed['startup_timeout_s'], status_bar=False),
         deploy=dict(guest_root=GUEST_ROOT,
                     install_trees=[dict(source=str(WORKSPACE / 'install/ball_catching_robot'), destination='app')]))
@@ -249,6 +260,9 @@ def prepare_bundle(output, data, points):
     root = stage(load(output / 'staging-session.json'), staged)
     libraries = root / 'lib'
     libraries.mkdir()
+    from ament_index_python.packages import get_package_prefix
+    clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock.so'
+    shutil.copyfile(clock, libraries / clock.name)
     binaries = [root / 'runtime/guest_bridge', *list((root / 'app/lib/ball_catching_robot').iterdir())]
     for binary in binaries:
         linked = subprocess.run(['ldd', str(binary)], check=True, capture_output=True, text=True).stdout
@@ -268,6 +282,7 @@ def prepare_bundle(output, data, points):
     # Use each trial's injected session, rather than hard-coding its geometry/rates.
     (root / 'guest_start').write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(GUEST_ROOT) + '\n'
         + 'export PYTHONPATH=' + shlex.quote(GUEST_ROOT + '/runtime') + '\n'
+        + 'rm -f /tmp/chimaera-sim-time-origin.ns\n'
         + 'exec python3 -m chimaera_ros.runner run /tmp/chimaera-ball-session.json --side guest --guest-binary '
         + shlex.quote(GUEST_ROOT + '/runtime/guest_bridge') + '\n')
     bundle = output / 'guest.tar.gz'
@@ -353,7 +368,7 @@ def native_trial(directory, data, point):
         command += ['--' + option, *map(str, throw[key])]
     command += ['--speed', str(throw['launch_speed']), '--camera-position', *map(str, fixed['camera_position']),
                 '--resolution', str(fixed['camera_width']), str(fixed['camera_height'])]
-    for key in ('duration', 'physics_step', 'joint_hz', 'warmup', 'cup_radius', 'cup_depth'):
+    for key in ('duration', 'physics_step', 'joint_hz', 'warmup', 'cup_radius', 'cup_depth', 'image_age_periods'):
         command += ['--' + key.replace('_', '-'), str(fixed[key])]
     for key in ('camera_hz', 'planner_hz', 'plan_interval', 'control_hz'):
         command += ['--' + key.replace('_', '-'), str(point['rates'][key])]

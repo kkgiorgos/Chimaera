@@ -15,11 +15,29 @@ actuation and passive scoring. The bridge carries RGB images, simulation time,
 joint feedback, efforts and readiness. Throw settings and ground truth never
 cross into robot computation.
 
-The suite enables the existing keyed coalescing mechanism only on `/clock`.
-Both the ROS adapter and controller retain its newest pending update. Paused
-Gazebo publishes repeated timestamps in wall time; without this policy they
-can fill the adapter queue before a physics step completes. Image, joint and
-robot-output routes retain their configured FIFO behaviour.
+The suite uses the existing keyed coalescing queues for `/clock` and stereo
+images. Paused Gazebo publishes repeated clock timestamps in wall time; only its
+newest pending update is retained. Images are matched by capture timestamp and
+wrapped as one atomic pair before replacing the pending pair in both queues.
+Unmatched arrivals are bounded to three images per camera. Joint and robot-output
+routes retain FIFO behaviour.
+
+The fixed `image_age_periods` budget is initially two camera periods: 22.222223 ms
+at 90 Hz and 33.333334 ms at 60 Hz. The guest rejects expired pairs before ROS
+allocation and again after copying. Perception checks age before detection and
+before committing/publishing its estimate; results that expire during processing
+are discarded. Frames already in flight cannot be replaced or recalled. Both
+images must have the same timestamp; independently selecting each camera's latest
+image would risk losing stereo correspondence.
+
+Guest age checks use `m5_rpns()` relative to the exact detailed-simulation origin,
+not delayed `/clock` callbacks or host wall time. After CPU switching, the suite
+replaces its already-consumed boot readfile with that origin. The guest bridge
+reads it after bootstrap confirms detailed execution and publishes a small local
+origin file. An optional clock library lets perception read the same gem5 clock
+without introducing simulator instructions into native execution. Native checks
+use ROS simulation time. Image delivery fails closed until this clock is ready.
+Readiness reflects capture age, so stale arrivals cannot falsely refresh it.
 
 The reference is four x86 Timing CPUs at 3 GHz, private 32 KiB instruction/data
 L1 caches and an 8 MiB shared Ruby MESI last-level cache. Ramulator models two
@@ -247,7 +265,25 @@ Diagnostic initialization statistics recorded 475,596 guest DRAM reads, a
 41.754 ns mean, 71/86 ns P95/P99 and 0.715 GB/s physically served bandwidth.
 These are prelaunch diagnostic numbers, not task-window measurements. The
 records are in `results/memory-suite-clock-validation-20261012`. The user approved
-trying reduced resolution first, so the preset now uses 640×480. Further changes
-to ingress policy require consultation before proceeding.
+trying reduced resolution first, so the preset now uses 640×480.
+
+The 640×480 FIFO baseline still accumulated images. It was stopped before launch
+after roughly 0.19 simulated seconds (about fourteen wall minutes), when received
+batches had grown through 1.8, 3.7, 6.5 and 10.2 MB. The latest control command was
+108 ms old on arrival. It did not reach the queue bound before interruption and
+has no catch/miss outcome. Initialization diagnostics recorded 1,833,193 guest
+reads, a 46.364 ns mean, 82/315 ns P95/P99, 1.023 GB/s physically served bandwidth
+and zero controller admission retries. Records are in
+`results/memory-suite-640-20261012`.
+
+The user then requested a mechanism to avoid stale images and selected the
+two-camera-period budget documented above. Freshness validation passed 47 Python
+workflow/report checks, 22 native test results and six ROS bridge suites. It covers
+atomic replacement of complete pairs, both full RGB resolutions, mismatched and
+missing-camera arrivals, expiry before and during ROS copying, unchanged control
+FIFO, and a guest clock that advances despite delayed ROS clock callbacks.
+All four fixed native throws also caught with freshness enabled; their records
+and report are in `results/memory-native-freshness-640-20261012`.
+Further changes beyond this approved policy require consultation.
 Full guest catch/miss results remain to be recorded; native catches and short
 framing checks are not substitutes.

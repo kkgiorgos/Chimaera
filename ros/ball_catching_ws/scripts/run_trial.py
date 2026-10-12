@@ -42,6 +42,7 @@ def main():
     parser.add_argument('--no-dashboard', action='store_true', help='Use when an experiment generates one combined dashboard')
     parser.add_argument('--camera-position', type=float, nargs=3, default=[-.65, 0., 1.])
     parser.add_argument('--camera-hz', type=float, default=90.)
+    parser.add_argument('--image-age-periods', type=float, default=2.)
     parser.add_argument('--resolution', type=int, nargs=2, metavar=('WIDTH', 'HEIGHT'), default=[640, 480])
     parser.add_argument('--control-hz', type=float, default=250.)
     parser.add_argument('--planner-hz', type=float, default=30.)
@@ -72,7 +73,7 @@ def main():
                f'partition:=ball-catching-{os.getpid()}']
     command += [f'{name}:={getattr(args, name)}' for name in
                 ('control_hz', 'planner_hz', 'plan_interval', 'joint_hz', 'physics_step', 'warmup',
-                 'cup_radius', 'cup_depth')]
+                 'cup_radius', 'cup_depth', 'image_age_periods')]
     environment = os.environ.copy()
     # Gazebo partitions alone do not isolate ROS topics between local trials.
     environment['ROS_DOMAIN_ID'] = str(30 + os.getpid() % 170)

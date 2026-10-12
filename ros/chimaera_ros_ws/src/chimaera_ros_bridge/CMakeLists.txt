@@ -42,6 +42,10 @@ if(BUILD_GAZEBO_BRIDGE)
   install(TARGETS gazebo_host_bridge DESTINATION lib/${PROJECT_NAME})
 endif()
 if(BUILD_GUEST_BRIDGE)
+  add_library(chimaera_gem5_clock SHARED src/gem5_clock.cpp)
+  target_include_directories(chimaera_gem5_clock PRIVATE ${GEM5_OP_INCLUDE})
+  target_link_libraries(chimaera_gem5_clock PRIVATE ${GEM5_M5_LIBRARY})
+  install(TARGETS chimaera_gem5_clock LIBRARY DESTINATION lib)
   target_include_directories(guest_bridge PRIVATE ${GEM5_OP_INCLUDE} ${GEM5_MMAP_INCLUDE})
   target_link_libraries(guest_bridge PRIVATE ${GEM5_M5_LIBRARY})
 endif()
@@ -72,6 +76,12 @@ if(BUILD_TESTING)
       WALL_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_routes.json"
       TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/sensor_test_routes.json")
     add_test(NAME sensor_bridge_test COMMAND sensor_bridge_test)
+    add_executable(stereo_freshness_test test/stereo_freshness_test.cpp)
+    target_link_libraries(stereo_freshness_test PRIVATE bridge)
+    ament_target_dependencies(stereo_freshness_test PUBLIC rclcpp sensor_msgs std_msgs)
+    add_test(NAME stereo_freshness_test COMMAND stereo_freshness_test)
+    set_tests_properties(stereo_freshness_test PROPERTIES TIMEOUT 30
+      ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=194;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
     set_tests_properties(sensor_bridge_test PROPERTIES TIMEOUT 30
       ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=195;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
     add_test(NAME timing_integration COMMAND ${Python3_EXECUTABLE}

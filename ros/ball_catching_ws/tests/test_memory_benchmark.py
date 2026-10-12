@@ -51,6 +51,7 @@ def test_baselines_not_duplicated_across_patterns(tmp_path):
     ('fixed', 'duration', 0), ('fixed', 'warmup', -1),
     ('fixed', 'poll_us', 500), ('fixed', 'interval_us', 750),
     ('fixed', 'joint_hz', 100), ('fixed', 'camera_width', 4096),
+    ('fixed', 'image_age_periods', 0), ('fixed', 'image_age_periods', float('inf')),
     ('aggressor', 'backpressure', False), ('aggressor', 'stride', 1),
     ('aggressor', 'duty_percent', 50), ('hardware', 'num_cores', 0)])
 def test_invalid_experiments_fail_before_launch(tmp_path, section, key, value):
@@ -68,7 +69,9 @@ def test_host_truth_and_throw_settings_never_cross_bridge():
     assert sum(route['type'] == 'sensor_msgs/msg/Image' for route in topic_routes) == 2
     assert all(not route['host_topic'].startswith(('/evaluation', '/experiment')) for route in topic_routes)
     assert all('ball_state' not in route['host_topic'] for route in topic_routes)
-    assert [route['host_topic'] for route in topic_routes if route['coalesce']] == ['/clock']
+    assert [route['host_topic'] for route in topic_routes if route['coalesce']] == [
+        '/clock', '/stereo/left/image_raw', '/stereo/right/image_raw']
+    assert [route['coalesce_group'] for route in topic_routes if 'coalesce_group' in route] == ['stereo', 'stereo']
 
 
 def test_guest_launch_has_no_empty_ros_arguments(tmp_path):
@@ -78,6 +81,22 @@ def test_guest_launch_has_no_empty_ros_arguments(tmp_path):
     assert all(not item.endswith(':=') for item in command)
     assert 'output:=' not in command
     assert 'control_hz:=125.0' in command
+    assert 'camera_hz:=60.0' in command
+    assert 'image_age_periods:=2.0' in command
+    assert any(arg.startswith('gem5_clock_library:=') for arg in command)
+
+
+def test_each_tuple_gets_its_own_simulated_freshness_budget(tmp_path, monkeypatch):
+    from run_memory_suite import session
+    import ament_index_python.packages
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: '/test/prefix')
+    data = load(tmp_path, configuration(tmp_path))
+    points = plan(data)
+    reduced = session(tmp_path, data, points[0])
+    standard = session(tmp_path, data, points[3])
+    assert reduced['bridge']['max_image_age_ns'] == 33333334
+    assert standard['bridge']['max_image_age_ns'] == 22222223
+    assert reduced['bridge']['simulation_time_from_readfile'] is True
 
 
 def test_native_preflight_preserves_custom_cup_geometry(tmp_path, monkeypatch):
@@ -98,6 +117,7 @@ def test_native_preflight_preserves_custom_cup_geometry(tmp_path, monkeypatch):
     command = commands[0]
     assert command[command.index('--cup-radius') + 1] == '0.2'
     assert command[command.index('--cup-depth') + 1] == '0.18'
+    assert command[command.index('--image-age-periods') + 1] == '2.0'
     assert json.loads((directory / 'benchmark.json').read_text())['memory'] is None
 
 

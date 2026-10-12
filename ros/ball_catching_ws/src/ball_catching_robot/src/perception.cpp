@@ -6,6 +6,7 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/bool.hpp>
 
+#include "ball_catching_robot/image_freshness.hpp"
 #include "ball_catching_robot/runtime.hpp"
 
 namespace ball_catching
@@ -18,8 +19,19 @@ public:
     stereo_(
       declare_parameter("focal", 400.), declare_parameter("cx", 320.),
       declare_parameter("cy", 240.), declare_parameter("baseline", .3), cameraOrigin()),
-    record_(declare_parameter<std::string>("output", ""), "perception")
+    record_(declare_parameter<std::string>("output", ""), "perception"),
+    imageClock_(
+      [this] { return now().nanoseconds(); },
+      declare_parameter<std::string>("gem5_clock_library", ""),
+      declare_parameter<std::string>("gem5_time_origin_file", ""))
   {
+    const auto cameraHz = declare_parameter("camera_hz", 90.);
+    const auto periods = declare_parameter("image_age_periods", 2.);
+    if (
+      !std::isfinite(cameraHz) || !std::isfinite(periods) || cameraHz <= 0 || periods <= 0 ||
+      periods / cameraHz > 3600)
+      throw std::invalid_argument("invalid image freshness budget");
+    imageAgeNs_ = static_cast<int64_t>(std::ceil(periods / cameraHz * 1e9));
     cv::setNumThreads(1);
     state_ =
       create_publisher<nav_msgs::msg::Odometry>("/robot/ball_state", rclcpp::SensorDataQoS());
@@ -27,9 +39,8 @@ public:
       "/robot/ball_geometry", rclcpp::SensorDataQoS());
     ready_ = create_publisher<std_msgs::msg::Bool>("/robot/perception_ready", 1);
     timer_ = timer(*this, .1, [this] {
-      const double age = now().seconds() - lastImages_;
       std_msgs::msg::Bool msg;
-      msg.data = age >= 0 && age < .2;
+      msg.data = fresh_image(lastCapture_, imageClock_.now(), imageAgeNs_);
       ready_->publish(msg);
     });
     for (int i = 0; i < 2; ++i) {
@@ -38,6 +49,12 @@ public:
         "/stereo/" + side + "/image_raw", rclcpp::SensorDataQoS(),
         [this, i](sensor_msgs::msg::Image::ConstSharedPtr msg) { image(msg, i); });
     }
+  }
+  ~Perception() override
+  {
+    RCLCPP_INFO(
+      get_logger(), "Image freshness: stale inputs=%lu, expired processing=%lu", staleInputs_,
+      expiredPairs_);
   }
 
 private:
@@ -51,6 +68,10 @@ private:
   {
     const int64_t key = rclcpp::Time(msg->header.stamp).nanoseconds();
     if (key <= lastPair_) return;
+    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+      staleInput();
+      return;
+    }
     buffers_[side][key] = msg;
     for (auto & buffer : buffers_)
       while (buffer.size() > 3) buffer.erase(buffer.begin());
@@ -58,8 +79,14 @@ private:
     lastPair_ = key;
     const std::array<sensor_msgs::msg::Image::ConstSharedPtr, 2> pair{
       buffers_[0].at(key), buffers_[1].at(key)};
-    for (auto & buffer : buffers_) buffer.erase(key);
-    lastImages_ = now().seconds();
+    for (auto & buffer : buffers_) buffer.erase(buffer.begin(), buffer.upper_bound(key));
+    const auto current = imageClock_.now();
+    if (!fresh_image(key, current, imageAgeNs_)) {
+      staleInput();
+      return;
+    }
+    lastImages_ = static_cast<double>(*current) * 1e-9;
+    lastCapture_ = key;
     const auto started = WallClock::now();
     std::array<cv::Mat, 2> images;
     for (int i = 0; i < 2; ++i) {
@@ -79,10 +106,18 @@ private:
         images[i] = view;
     }
     const double conversionSeconds = elapsed(started);
+    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+      expiredPair();
+      return;
+    }
     const auto detectionStarted = WallClock::now();
     const double capture = seconds(msg->header.stamp);
     const auto detection = stereo_.detect(images[0], images[1], filter_.predict(capture));
     const double detectionSeconds = elapsed(detectionStarted);
+    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+      expiredPair();
+      return;
+    }
     if (!detection) {
       record_.write(
         {{"capture_time", capture},
@@ -94,9 +129,15 @@ private:
       return;
     }
     const auto estimationStarted = WallClock::now();
-    const auto estimate = filter_.observe(detection->point, capture);
+    auto candidate = filter_;
+    const auto estimate = candidate.observe(detection->point, capture);
     const double estimationSeconds = elapsed(estimationStarted);
     const auto publicationStarted = WallClock::now();
+    if (!fresh_image(key, imageClock_.now(), imageAgeNs_)) {
+      expiredPair();
+      return;
+    }
+    filter_ = std::move(candidate);
     geometry_msgs::msg::Vector3Stamped geometry;
     geometry.header.stamp = msg->header.stamp;
     geometry.header.frame_id = "ball";
@@ -138,8 +179,20 @@ private:
        {"state", estimate ? Field(values(*estimate)) : Field(nullptr)}});
   }
   Stereo stereo_;
+  void staleInput()
+  {
+    if (++staleInputs_ == 1) RCLCPP_WARN(get_logger(), "Rejecting stale images before perception");
+  }
+  void expiredPair()
+  {
+    if (++expiredPairs_ == 1)
+      RCLCPP_WARN(get_logger(), "Discarding detections that expired during processing");
+  }
   BallFilter filter_;
   Recorder record_;
+  ImageClock imageClock_;
+  int64_t imageAgeNs_{}, lastCapture_{-1};
+  uint64_t staleInputs_{}, expiredPairs_{};
   int64_t lastPair_{-1};
   double lastImages_{-1};
   std::array<std::map<int64_t, sensor_msgs::msg::Image::ConstSharedPtr>, 2> buffers_;

@@ -24,7 +24,10 @@ def start(context):
     calibration = json.loads(get('calibration'))
     nodes = [Node(package='ball_catching_robot', executable='perception',
                  parameters=[{'use_sim_time': common['use_sim_time'], 'output': common['output'],
-                              **calibration}], output='screen'),
+                              **calibration, 'camera_hz': float(get('camera_hz')),
+                              'image_age_periods': float(get('image_age_periods')),
+                              'gem5_clock_library': get('gem5_clock_library'),
+                              'gem5_time_origin_file': get('gem5_time_origin_file')}], output='screen'),
             Node(package='ball_catching_robot', executable='intercept',
                  parameters=[{**common, 'planner_hz': float(get('planner_hz')),
                               'plan_interval': float(get('plan_interval'))}],
@@ -39,6 +42,8 @@ def start(context):
 def generate_launch_description():
     defaults = dict(robot_file='', output='', use_sim_time='true', control_hz='250',
                     planner_hz='30', plan_interval='0.06',
+                    camera_hz='90', image_age_periods='2',
+                    gem5_clock_library='', gem5_time_origin_file='',
                     initial_pose='auto',
                     calibration='{"focal":400.0,"cx":320.0,"cy":240.0,"baseline":0.3,"camera_origin":[-0.65,0.15,1.0]}')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],

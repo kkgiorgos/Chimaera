@@ -24,7 +24,7 @@ def plan(data, side, package_prefix=None, simulate=False):
     if side == 'guest':
         env.setdefault('ROS_LOG_DIR', '/tmp/chimaera-guest-logs')
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
-                  ('max_serialized_bytes', 'max_pending_messages')}}
+                  ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns')}}
     if side == 'host':
         parameters.update({key: data['bridge'][key] for key in
                            ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',
@@ -34,7 +34,7 @@ def plan(data, side, package_prefix=None, simulate=False):
                                ('gazebo_world', 'physics_step_ns', 'timing_file')})
     else:
         parameters.update({key: data['bridge'][key] for key in
-                           ('m5ops', 'wait_for_application', 'startup_timeout_s')})
+                           ('m5ops', 'wait_for_application', 'startup_timeout_s', 'simulation_time_from_readfile')})
     executable = 'gazebo_host_bridge' if side == 'host' and data['bridge']['timing_backend'] == 'gazebo' else side + '_bridge'
     args = [str(package_prefix / 'lib/chimaera_ros_bridge' / executable), '--ros-args']
     for key, value in parameters.items():

@@ -39,7 +39,7 @@ def start(context):
     world, robot_file, urdf, calibration = generate(scene_directory, **options)
     if output:
         record = {**options, 'start_condition': 'vertical_home',
-                  **{key: float(get(key)) for key in ('control_hz', 'planner_hz', 'plan_interval')}}
+                  **{key: float(get(key)) for key in ('control_hz', 'planner_hz', 'plan_interval', 'image_age_periods')}}
         (Path(output) / 'experiment.json').write_text(json.dumps(record, indent=2) + '\n')
     plugin_path = str(Path(get_package_prefix('ball_catching_sim')) / 'lib')
     env = {'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': plugin_path + ':' + os.environ.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
@@ -66,7 +66,7 @@ def start(context):
             str(share / 'launch/robot.launch.py')), launch_arguments={
                 'robot_file': str(robot_file), 'calibration': json.dumps(calibration),
                 'initial_pose': json.dumps(initial_pose), 'output': output,
-                **{key: get(key) for key in ('control_hz', 'planner_hz', 'plan_interval')}}.items()))
+                **{key: get(key) for key in ('control_hz', 'planner_hz', 'plan_interval', 'camera_hz', 'image_age_periods')}}.items()))
     for process in [gazebo, bridge]:
         actions.append(RegisterEventHandler(OnProcessExit(target_action=process,
             on_exit=[EmitEvent(event=Shutdown(reason='Simulation component exited'))])))
@@ -76,6 +76,7 @@ def start(context):
 def generate_launch_description():
     defaults = dict(gui='true', robot='true', paused='false', output='', partition='ball-catching',
                     control_hz='250', planner_hz='30', plan_interval='0.06',
+                    image_age_periods='2',
                     joint_hz='250', warmup='0',
                     initial_pose='auto', launch_position='[2.08,0.04,2.0]',
                     launch_direction='[-1.0,0.0,0.0]', launch_speed='3.0',

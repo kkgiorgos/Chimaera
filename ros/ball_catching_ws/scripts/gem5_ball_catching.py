@@ -56,6 +56,13 @@ def prepare_roi():
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
     processor.switch()
+    # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile
+    # mechanism to give the guest the exact origin used by the timing server.
+    boot_file = Path(str(board.readfile))
+    (Path(m5.options.outdir) / 'boot-readfile.sh').write_bytes(boot_file.read_bytes())
+    origin = m5.curTick() // 1000
+    boot_file.write_text(f'CHIMAERA_TIME_ORIGIN_NS {origin}\n')
+    (Path(m5.options.outdir) / 'roi_time_origin.json').write_text(json.dumps({'nanoseconds': origin}) + '\n')
 
 class BallTimingServer(TimingServer):
     def _run_once(self):

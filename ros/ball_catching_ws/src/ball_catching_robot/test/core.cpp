@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 #include <json-c/json.h>
+#include <unistd.h>
 #include <urdf/model.h>
 
 #include <Eigen/Eigenvalues>
@@ -10,7 +11,52 @@
 #include <map>
 #include <opencv2/imgproc.hpp>
 
+#include "ball_catching_robot/image_freshness.hpp"
+
 using namespace ball_catching;
+TEST(ImageFreshness, ExactBudgetFutureAndUnavailableTime)
+{
+  constexpr int64_t budget = 22222223;
+  EXPECT_TRUE(fresh_image(100000000, 100000000 + budget, budget));
+  EXPECT_FALSE(fresh_image(100000000, 100000001 + budget, budget));
+  EXPECT_FALSE(fresh_image(100000000, 99999999, budget));
+  EXPECT_FALSE(fresh_image(0, std::nullopt, budget));
+  EXPECT_FALSE(fresh_image(-1, 100, budget));
+}
+TEST(ImageFreshness, NativeUsesSimulationClock)
+{
+  int64_t simulation = 300000000;
+  ImageClock clock([&] { return simulation; });
+  EXPECT_EQ(clock.now(), simulation);
+  simulation += 100000000;
+  EXPECT_EQ(clock.now(), simulation);
+  EXPECT_THROW(ImageClock([] { return 0; }, "/missing-clock", ""), std::invalid_argument);
+  EXPECT_THROW(
+    ImageClock([] { return 0; }, "/missing-clock", "/missing-origin"), std::runtime_error);
+}
+TEST(ImageFreshness, GuestClockAdvancesDespiteDelayedRosClock)
+{
+  const std::string path = "/tmp/chimaera-clock-test-" + std::to_string(getpid());
+  std::remove(path.c_str());
+  void * library = dlopen(FAKE_GEM5_CLOCK, RTLD_NOW | RTLD_LOCAL);
+  ASSERT_NE(library, nullptr);
+  auto set = reinterpret_cast<void (*)(uint64_t)>(dlsym(library, "chimaera_test_set_time_ns"));
+  ASSERT_NE(set, nullptr);
+  ImageClock clock([] { return 0; }, FAKE_GEM5_CLOCK, path);
+  EXPECT_FALSE(clock.now());  // Fail closed before the exact origin is available.
+  const uint64_t origin = 3000000000;
+  std::ofstream(path) << origin << '\n';
+  set(origin + 90000000);
+  EXPECT_EQ(clock.now(), 90000000);
+  EXPECT_TRUE(fresh_image(80000000, clock.now(), 22222223));
+  // Processing can use up the budget while /clock remains unchanged.
+  set(origin + 130000000);
+  EXPECT_FALSE(fresh_image(80000000, clock.now(), 22222223));
+  set(origin - 1);
+  EXPECT_FALSE(clock.now());
+  std::remove(path.c_str());
+  dlclose(library);
+}
 namespace
 {
 std::string robot()

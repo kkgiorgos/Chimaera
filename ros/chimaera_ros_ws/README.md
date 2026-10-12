@@ -84,6 +84,26 @@ For paused Gazebo, enable it on `/clock` to prevent repeated timestamps from
 filling the queue. Keep it disabled on image and event routes when every message
 must be retained. Both sides must agree on the enabled policy.
 
+For stereo images, two `sensor_msgs/msg/Image` routes can additionally set the
+same nonempty `coalesce_group` and `coalesce: true`. They must have the same
+direction. The bridge matches capture timestamps, bounds unmatched arrivals to
+three per camera, and wraps each complete pair as one controller entry (`CBP1`
+containing two unchanged `CBR1` frames). Replacement and controller worker drains
+then affect both cameras atomically. Both bridge versions must support this opt-in
+frame; ordinary routes retain their existing framing and FIFO defaults.
+
+`bridge.max_image_age_ns` optionally rejects incoming stereo pairs before and
+after ROS buffer allocation; zero preserves unlimited age. An authoritative
+simulation-time callback must be supplied when enabling it. The optional guest
+`simulation_time_from_readfile` flag reads `CHIMAERA_TIME_ORIGIN_NS N` from the
+existing m5 readfile after detailed-CPU bootstrap, then uses `m5_rpns()` relative
+to N. The experiment must replace its consumed boot readfile at the CPU switch.
+The origin is also stored in `/tmp/chimaera-sim-time-origin.ns`; applications can
+opt into the installed `libchimaera_gem5_clock.so` clock reader. The
+[ball-catching suite](../../docs/ball-catching-memory-contention.md) wires these
+options and checks freshness again at perception boundaries. Ordinary sessions
+leave both settings disabled.
+
 QoS governs each local ROS hop, not end-to-end DDS identity or acknowledgments.
 Transient-local cache belongs to the bridge publisher and is lost on restart.
 Deadline, lifespan and custom liveliness policies are unsupported. No intra-process

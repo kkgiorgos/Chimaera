@@ -22,6 +22,7 @@ def start(context):
     scripts = Path(execution['scripts'])
     universal = Path(get_package_share_directory('chimaera_ros_bridge'))
     options = {**execution['options'], **execution['rates'], 'robot': False,
+               'image_age_periods': execution['fixed']['image_age_periods'],
                'paused': True, 'gui': False, 'partition': 'ball-memory-suite'}
     options.pop('name', None)
     launch_args = {key: json.dumps(value) if isinstance(value, (list, bool)) else str(value)

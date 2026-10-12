@@ -4,6 +4,7 @@
 
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <set>
@@ -15,7 +16,7 @@ namespace chimaera_ros_bridge
 {
 struct Route
 {
-  std::string host_topic, guest_topic, type, direction, key;
+  std::string host_topic, guest_topic, type, direction, key, coalesce_group;
   bool coalesce{false};
   rclcpp::QoS qos{128};
 };
@@ -90,7 +91,9 @@ inline std::vector<Route> load_config(const std::string & path)
   std::set<std::string> host_topics, guest_topics;
   for (std::size_t i = 0; i < count; ++i) {
     auto * entry = json_object_array_get_idx(topics, i);
-    fields(entry, {"host_topic", "guest_topic", "type", "direction", "qos", "coalesce"});
+    fields(
+      entry,
+      {"host_topic", "guest_topic", "type", "direction", "qos", "coalesce", "coalesce_group"});
     Route route;
     json_object * coalesce = nullptr;
     if (json_object_object_get_ex(entry, "coalesce", &coalesce)) {
@@ -103,6 +106,13 @@ inline std::vector<Route> load_config(const std::string & path)
     route.guest_topic = string(entry, "guest_topic");
     route.type = string(entry, "type");
     route.direction = string(entry, "direction");
+    json_object * group = nullptr;
+    if (json_object_object_get_ex(entry, "coalesce_group", &group)) {
+      route.coalesce_group = string(entry, "coalesce_group");
+      if (!route.coalesce || route.type != "sensor_msgs/msg/Image") {
+        throw std::invalid_argument("coalesce_group requires coalesced Image routes");
+      }
+    }
     if (route.host_topic.front() != '/' || route.guest_topic.front() != '/') {
       throw std::invalid_argument("topic names must be absolute");
     }
@@ -149,7 +159,20 @@ inline std::vector<Route> load_config(const std::string & path)
     if (route.coalesce) {
       route.key += "4:true";
     }
+    if (!route.coalesce_group.empty()) {
+      route.key += std::to_string(route.coalesce_group.size()) + ":" + route.coalesce_group;
+    }
     routes.push_back(std::move(route));
+  }
+  std::map<std::string, std::vector<const Route *>> groups;
+  for (const auto & route : routes) {
+    if (!route.coalesce_group.empty()) groups[route.coalesce_group].push_back(&route);
+  }
+  for (const auto & [name, members] : groups) {
+    if (members.size() != 2 || members[0]->direction != members[1]->direction) {
+      throw std::invalid_argument(
+        "stereo coalescing group needs two routes with the same direction: " + name);
+    }
   }
   return routes;
 }
