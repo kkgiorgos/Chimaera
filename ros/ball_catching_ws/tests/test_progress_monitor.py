@@ -1,10 +1,29 @@
 import json
+import os
 from pathlib import Path
 import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from watch_memory_suite import display, snapshot
+
+
+def test_monitor_follows_active_case_and_then_the_latest_attempt(tmp_path):
+    points = [dict(id=f'case-{i:03d}', status='pending') for i in range(3)]
+    manifest = tmp_path / 'experiment_manifest.json'
+    manifest.write_text(json.dumps(dict(points=points)))
+    assert snapshot(tmp_path)['case'] == 'case-000'
+    points[1]['status'] = 'running'
+    manifest.write_text(json.dumps(dict(points=points)))
+    assert snapshot(tmp_path)['case'] == 'case-001'
+    points[1]['status'] = 'complete'
+    manifest.write_text(json.dumps(dict(points=points)))
+    for i in range(2):
+        attempt = tmp_path / f'case-{i:03d}-attempt-001'
+        attempt.mkdir()
+        os.utime(attempt, (i + 1, i + 1))
+    assert snapshot(tmp_path)['case'] == 'case-001'
+    assert snapshot(tmp_path, 'case-000')['case'] == 'case-000'
 
 
 def test_readiness_and_image_stages_expose_the_blocking_component(tmp_path):

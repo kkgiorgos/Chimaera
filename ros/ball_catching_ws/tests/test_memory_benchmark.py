@@ -52,6 +52,18 @@ def test_timing_validation_preset_contains_only_the_qualified_baseline():
     assert data['fixed']['wall_timeout_s'] == 43200
 
 
+def test_demo_profile_sweeps_only_pressure_with_a_matching_zero_warmup_baseline():
+    baseline = load_config(WORKSPACE / 'experiments/memory_contention_timing_validation.json')
+    demo = load_config(WORKSPACE / 'experiments/memory_contention_demo.json')
+    assert demo['pressure'] == [0, .75, 1.25]
+    assert {k: v for k, v in demo.items() if k != 'pressure'} == {
+        k: v for k, v in baseline.items() if k != 'pressure'}
+    points = plan(demo)
+    assert len(points) == 3
+    assert [p['pattern'] for p in points] == ['none', 'random', 'random']
+    assert all(p['expected_throws'] == 1 for p in points)
+
+
 def test_baselines_not_duplicated_across_patterns(tmp_path):
     raw = configuration(tmp_path)
     raw['patterns'] = ['stream', 'stride', 'random']

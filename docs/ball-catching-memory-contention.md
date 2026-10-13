@@ -145,7 +145,7 @@ The current validation preset is
 [memory_contention_timing_validation.json](../ros/ball_catching_ws/experiments/memory_contention_timing_validation.json).
 It contains one disabled-aggressor 3 m/s loft (`case-000`), 480×360 stereo at
 30 Hz, the existing 30 Hz planner/250 Hz effort controller, four 3 GHz Timing
-cores, and the existing fixed caches/DDR4/coupling settings. The image age limit
+cores, and the fixed caches/Orin-like LPDDR5/coupling settings. The image age limit
 remains two camera periods (66.667 ms). Guest DDS uses an 8 MiB shared-memory
 segment and explicit UDP loopback transport. The robot/perception algorithms are
 unchanged. Diagnostics are enabled for validation and are frozen in provenance;
@@ -157,21 +157,21 @@ Prepare after building and sourcing both overlays:
 python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type timing --case case-000 \
   --config ros/ball_catching_ws/experiments/memory_contention_timing_validation.json \
-  --output ros/ball_catching_ws/results/timing-validation-launch-fixed
+  --output ros/ball_catching_ws/results/timing-validation-orin-warmup0-1p5
 ```
 
 The prepared run executes 1.5 simulated seconds after launch, with a twelve-hour
 wall limit covering boot, readiness and the throw. Run from the repository root:
 
 ```bash
-bash ros/ball_catching_ws/results/timing-validation-launch-fixed/run.sh
+bash ros/ball_catching_ws/results/timing-validation-orin-warmup0-1p5/run.sh
 ```
 
 Track progress in another terminal; this requires no ROS setup:
 
 ```bash
 python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
-  ros/ball_catching_ws/results/timing-validation-launch-fixed --case case-000
+  ros/ball_catching_ws/results/timing-validation-orin-warmup0-1p5 --case case-000
 ```
 
 The monitor reports simulated time, separate arm/fresh-camera readiness, sampled
@@ -181,7 +181,7 @@ suite saves `dashboard.html` and the attempt's binary `result.json` and DRAM
 Preparation executes no gem5 or Gazebo simulation. The full guest outcome awaits
 the user's run; native qualification is a feasibility check.
 
-Both current presets allow twelve wall hours per attempt. The bridge's separate
+Current presets allow twelve wall hours per attempt. The bridge's separate
 15-minute startup deadline covers connecting to gem5 and local ROS routes; it
 does not cap robot readiness after detailed simulation begins. Running processes
 load their limits at startup. Existing prepared directories keep their frozen
@@ -189,6 +189,59 @@ budgets; an increased limit requires a fresh directory and a restarted run.
 The original `timing-validation-480-dds8` directory therefore retains its
 four-hour limit. Stop its running invocation before starting the twelve-hour
 replacement above.
+
+## Coarse interference demonstration
+
+[memory_contention_demo.json](../ros/ball_catching_ws/experiments/memory_contention_demo.json)
+uses the qualified 480×360, 30/30/250 Hz Timing configuration with the Orin-like
+LPDDR5 interface, zero extra ready hold and a 1.5-second scoring window. Only
+aggressor pressure changes across its three cases:
+
+| Case | Offered aggressor demand |
+| --- | --- |
+| `case-000` | Disabled |
+| `case-001` | 75% of calibrated sustainable bandwidth |
+| `case-002` | 125% of calibrated sustainable bandwidth |
+
+Each case has one fixed 3 m/s throw and one binary outcome. The random traffic
+uses 80% reads, a fixed seed, bounded pending work and admission backpressure;
+unaccepted work waits. The percentages describe offered demand relative to the
+aggressor-only calibration, not physical bus occupancy. The previous calibration
+measured 50.453568 GB/s, giving approximately 37.84 and 63.07 GB/s demand for the
+two pressure points. The new suite records its own calibration before running.
+The dashboard records actual served bandwidth, admission stalls and latency.
+
+The steady aggressor runs from the detailed-simulation origin, including robot
+readiness. A failure to reach readiness remains an infrastructure outcome,
+separate from a launched throw's catch/miss. All hardware, geometry, rates,
+diagnostics, coupling and readiness settings stay fixed across the three cases.
+The first case supplies a matching zero-hold baseline; the historical 100 ms
+hold validations cannot replace it. A separate zero-hold validation is not
+needed before this demonstration.
+
+Prepare after sourcing both overlays; preparation runs no simulation:
+
+```bash
+/usr/bin/python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
+  --prepare-only --cpu-type timing \
+  --config ros/ball_catching_ws/experiments/memory_contention_demo.json \
+  --output ros/ball_catching_ws/results/memory-orin-demo-warmup0
+```
+
+Run from the repository root, then monitor in another terminal:
+
+```bash
+bash ros/ball_catching_ws/results/memory-orin-demo-warmup0/run.sh
+
+/usr/bin/python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
+  ros/ball_catching_ws/results/memory-orin-demo-warmup0
+```
+
+The monitor follows the active case automatically, then the latest attempt.
+Use `--case case-001` to inspect a specific case. The runner executes cases
+serially, saves the dashboard after every outcome and resumes completed cases
+when the same `run.sh` is invoked again. Each attempt has its own twelve-hour
+wall limit. Infrastructure failures stop the suite for inspection.
 
 The host verifies the initial free flight on the first physics step after launch,
 using the requested pose/velocity and world gravity. Tolerances are 2 mm in
@@ -960,9 +1013,70 @@ still depends on simulated execution and the robot's settling dynamics.
 The short 100 us aggressor-only calibration warmup is unchanged and is separate
 from the expensive robot startup/hold.
 
-The active `results/timing-validation-orin-timing-routes-1p5` run retains its
+The then-active `results/timing-validation-orin-timing-routes-1p5` run retains its
 frozen 100 ms hold. Its prepared files, binaries, launch condition and execution
 fingerprint are not changed. New zero-hold suites need a fresh output directory;
 changing this setting between pressure points would weaken comparison with
 the previous baseline. No expensive guest or native co-simulation is started
 by this change.
+
+### Separate timing routes validated, 2026-10-13
+
+The user's `results/timing-validation-orin-timing-routes-1p5/case-000-attempt-001`
+completed with a verified ballistic launch and **CATCH**. Its frozen configuration
+retained the 100 ms extra ready hold; the separately prepared zero-hold validation
+has no attempts. Four actual `BaseTimingSimpleCPU` cores, the LPDDR5 configuration,
+simulator/kernel/bundle hashes, installed execution fingerprint and base-image
+metadata matched its `32708b4` provenance. No aggressor requests were accepted.
+
+Launch was at 0.5315 s and scoring at 2.0315 s. Final continuous capture began
+0.968 s after launch, giving 0.532 s of containment. Independent quaternion-based
+conversion of the final motion record passed the polygonal cup check. The cup
+moved about 23.4 cm before final capture. Wall runtime was 10,712.000 seconds
+(2 h 58 min 32 s).
+
+Raw memory and delivered-command recalculations matched the saved benchmark.
+There were 2,112,709 guest DRAM read samples, zero admission retries and a
+1.5005-second measurement window, including 0.5 ms of cleanup beyond scoring.
+Physically served read/write traffic was 0.164836 GB/s, about 0.08049% of the
+204.8 GB/s interface peak. The task delivered 276 distinct effort commands at
+185.061 Hz against its configured 250 Hz timer, with a 12 ms p95 receipt gap.
+
+| Measurement | Mean | P95 | P99 | Samples |
+| --- | ---: | ---: | ---: | ---: |
+| Guest DRAM reads | 77.092 ns | 132 ns | 331 ns | 2,112,709 |
+| Perception + estimation | 25.406 ms | 27.032 ms | 27.849 ms | 44 |
+| Planning searches | 79.156 ms | 116.996 ms | 116.996 ms | 7 |
+| Arm control | 0.239 ms | 0.310 ms | 0.358 ms | 275 |
+
+Application costs use guest gem5 simulation time. These application distributions
+describe the received subset: 275 of 276 delivered task commands have matching
+control timings (99.64%), improving from 217/277 before the separate-topic fix.
+One final command, stamped 2.013 s and received at 2.029 s, has no exported timing.
+The dashboard retains its **partial** label; this check does not prove receipt of
+every record generated by the guest. The last received control completion is
+21.566 ms before scoring, versus the previous 339.983 ms tail. Perception's last
+received completion is 16.638 ms before scoring. The large shared-topic backlog
+is resolved. Planning stops earlier as part of the robot's approach/braking
+behaviour; its tail is not treated as an export backlog.
+
+All four exported stream sequences are contiguous. Of 145 valid sampled image
+diagnostics, none exceeded the 66.667 ms freshness budget; the maximum observed
+age was 50.607 ms. No image overflow, stale-result or expired-processing warning
+was logged. These samples do not establish complete image coverage.
+
+Boot recovered from two virtual-disk read timeouts. Gem5 finished cleanly and
+wrote final statistics. The bridge logged a Gazebo step mismatch after scoring
+and the stop signal, and remaining ROS/Gazebo children needed SIGTERM after the
+five-second shutdown grace period. Those retained shutdown warnings do not
+invalidate the consistent launch, score and memory records. All fixed sockets
+were released.
+
+The checked evaluation and regenerated report are saved as
+`results/timing-validation-orin-timing-routes-1p5/evaluation.json` and
+`dashboard.html`. The actual-data dashboard DOM check passes, including the
+partial-coverage warning and DRAM/application timings. The coarse three-case
+demo above is prepared next; its new matching baseline removes the extra hold.
+The agent has not started a full guest run for that demo. This single catch
+qualifies the configuration for a coarse comparison; the interference failure
+boundary remains to be observed.

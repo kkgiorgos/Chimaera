@@ -55,13 +55,20 @@ def image_stages(path):
     return stages
 
 
-def snapshot(path, case='case-003'):
+def snapshot(path, case=None):
     path = Path(path)
     direct = (path / 'execution.json').exists() or (path / 'timing.csv').exists()
     if direct and '-attempt-' in path.name:
         case = path.name.split('-attempt-')[0]
     suite = path.parent if direct else path
     manifest = read_json(suite / 'experiment_manifest.json')
+    if case is None:
+        points = manifest.get('points', [])
+        active = next((p['id'] for p in points if p.get('status') == 'running'), None)
+        prior = list(suite.glob('case-*-attempt-*'))
+        latest = max(prior, key=lambda p: p.stat().st_mtime) if prior else None
+        case = (active or (latest.name.split('-attempt-')[0] if latest else None)
+                or (points[0]['id'] if points else 'case-003'))
     point = next((point for point in manifest.get('points', []) if point['id'] == case), {})
     attempts = sorted(suite.glob(case + '-attempt-*'))
     attempt = path if direct else attempts[-1] if attempts else None
@@ -183,7 +190,7 @@ def display(state):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path, help='Suite directory or an individual attempt')
-    parser.add_argument('--case', default='case-003')
+    parser.add_argument('--case', help='Inspect a specific case; by default follow the active or latest attempt')
     parser.add_argument('--interval', type=float, default=5, help='Wall seconds between updates')
     parser.add_argument('--once', action='store_true')
     args = parser.parse_args()
