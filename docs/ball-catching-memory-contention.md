@@ -45,12 +45,27 @@ without introducing simulator instructions into native execution. Native checks
 use ROS simulation time. Image delivery fails closed until this clock is ready.
 Readiness reflects capture age, so stale arrivals cannot falsely refresh it.
 
-The reference is four x86 Timing CPUs at 3 GHz, private 32 KiB instruction/data
-L1 caches and an 8 MiB shared Ruby MESI last-level cache. Ramulator models two
-64-bit DDR4-3200AA channels, one 8 GiB rank each, FRFCFS, open rows and all-bank
-refresh. X86Board exposes 3 GiB to the guest; the device uses a disjoint 256 MiB
-window above it. This is a PC-sized parameter set, not a faithful model of a
-specific commercial processor. Timing CPUs do not model its out-of-order core.
+The CPU reference remains four x86 Timing CPUs at 3 GHz, private 32 KiB
+instruction/data L1 caches and an 8 MiB shared Ruby MESI last-level cache.
+The default memory interface now approximates the Jetson AGX Orin 64 GB:
+256-bit LPDDR5 at 6400 MT/s, with a theoretical 204.8 GB/s data-bus peak
+([NVIDIA specifications](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/)).
+The pinned Ramulator LPDDR5-6400 JEDEC preset models eight ganged 32-bit
+channels, two x16 devices per rank, two ranks per channel, FRFCFS scheduling,
+open rows, all-bank refresh and WCK synchronization. This organization provides
+64 GiB modeled capacity and 64-byte BL16 transactions, matching the gem5
+cache-line wrapper. The checked-in Python generator exports every timing
+constraint; it does not reuse DDR4 timings. This channel/rank organization is
+an approximation, not a claim about NVIDIA's physical wiring or proprietary MC.
+The CPU, NVIDIA fabric/QoS and power management are not Orin models.
+X86Board still exposes 3 GiB to the existing Ubuntu guest; the aggressor uses a
+disjoint 256 MiB window above it. A memory-interface change requires a fresh
+suite and calibration; DDR4 results remain a separate historical baseline.
+
+The default scoring duration is 1.5 simulated seconds after launch. Startup,
+readiness and warmup precede that window; the separate twelve-hour wall-time
+limit is unchanged. Both duration and the Ramulator configuration remain
+customizable in the experiment JSON.
 
 The preset uses 0.5 ms physics/exchange intervals, 100 us guest polling and fixed
 1 kHz joint feedback. The experiment owns these settings, so every point uses
@@ -399,13 +414,32 @@ instrument application load-to-use latency:
 - Delivered control cadence uses host simulated-time receipts; it includes
   bridge/coupling effects and is not an internal controller deadline-miss count.
 
-Guest per-update file logging is disabled to avoid adding its memory and I/O
-work to this initial study. The replay comes from host physics records. Native
-computation timings are available in native preflights; detailed guest execution
-timings and consumed-frame attribution are not collected by this version.
-Absent perception/planning logs are shown as unrecorded counts. An existing
-empty log represents a recorded zero. Sampled serial diagnostics provide image
-ages separately; they cannot supply complete per-update counts or timings.
+Guest per-update computation timings are now exported through the small,
+reliable `/benchmark/records` ROS route. They use `m5_rpns()` relative to the
+same detailed-simulation origin as image freshness, with
+`*_simulation_seconds` fields and `timing_clock: "gem5 simulation"`. This
+clock advances during computation even if a ROS `/clock` callback is delayed.
+The host persists envelopes in `guest_records.jsonl`; after shutdown the runner
+checks per-stream sequence continuity and writes `perception.jsonl`,
+`interception.jsonl`, `control_timing.jsonl` and `control.jsonl`. Missing
+perception/control telemetry or a sequence gap is an infrastructure error.
+No guest file logging or serial-console transfer is enabled. Clock reads,
+JSON serialization and DDS export add fixed instrumentation overhead to every
+case; export follows the measured computation but affects later work and DRAM
+traffic. A controller update is measured once, before either timing export.
+
+Dashboard comparison rows include mean/P95/P99 computation in milliseconds,
+image age, host wall duration and delivered control cadence. Detailed timing
+rows show the clock, counts and the perception substeps, admitted planning
+searches (including failed searches), controller updates and capture-to-completion
+age. Expired perception work is recorded with `status: "expired_processing"`
+and the stages actually attempted. Records completed after scoring are
+excluded; records still in flight at shutdown are not counted. Sequence checks
+cannot detect an undelivered final tail. Native preflights retain steady-clock
+`*_wall_seconds` measurements and are labeled separately. Old guest runs did
+not collect these records and still show unrecorded timings; they cannot be
+recovered as full per-update distributions from sampled diagnostics.
+Empty exported streams represent recorded zero counts.
 
 The preset uses 640×480 images with the same field of view and update rates.
 An RGB pair carries 1,843,200 raw image bytes; at 90 Hz it represents
@@ -797,3 +831,36 @@ Use its fixed geometry, diagnostics, hardware and coupling settings for the
 next random-traffic pressure points, initially 75% and 125% of the cached
 calibrated capacity. One successful disabled-aggressor throw is the baseline;
 the interference failure boundary remains to be measured.
+
+### Guest timings and LPDDR5 preset, 2026-10-13
+
+The new defaults use the Orin-like LPDDR5 interface and a 1.5-second scoring
+window. Guest records are exported to the host and the dashboard compares
+mean/P95/P99 perception, planning and controller computation alongside DRAM
+latency. The historical successful DDR4 run above retains its original
+configuration and remains without per-update guest computation timings.
+
+Validation passed 94 Python workflow/report tests, the robot core and runtime
+CTest targets, the scoring target and the paused-launch regression. The runtime
+test holds ROS time at zero while advancing a fake gem5 clock, checks the exact
+processing duration and completion timestamp, confirms pre-ROI records are
+excluded, and receives a sequence-zero telemetry record over local ROS.
+A gem5 memory-only correctness/retry test passed with the new LPDDR5 preset,
+random traffic, backpressure and 100 GB/s offered demand. An independent 100 us
+warmup + 1 ms random-traffic calibration measured 50.453568 GB/s physical bus
+traffic, versus 204.8 GB/s theoretical peak. It does not establish GPU application
+throughput or validate the full robot guest.
+
+Native checks retain their individual binary outcomes:
+
+- `results/native-1p5-timing-telemetry`: MISS; no feasible plan was produced.
+- `results/native-2s-timing-telemetry`: CATCH; continuous capture began 0.9685 s
+  after launch, before either deadline.
+- `results/native-1p5-timing-telemetry-repeat`: CATCH at the requested 1.5 s
+  deadline, with 0.5315 s continuous containment.
+
+The repeat's offline dashboard includes native wall-clock processing timings.
+These coarse host checks demonstrate a viable shortened window and retain the
+observed variability; they do not establish catch reliability. The full-system
+LPDDR5 validation remains user-run in a fresh prepared suite. Its timing export
+and catch/miss result must be checked before sweeping interference levels.

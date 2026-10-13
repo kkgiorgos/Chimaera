@@ -48,7 +48,7 @@ def execution_fingerprint():
     result = hashlib.sha256()
     paths = [SCRIPTS / name for name in ('run_memory_suite.py', 'run_trial.py',
              'gem5_ball_catching.py', 'calibrate_memory.py', 'benchmark_metrics.py',
-             'benchmark_status.py')]
+             'benchmark_status.py', 'guest_records.py')]
     for package in ('ball_catching_robot', 'ball_catching_sim', 'chimaera_ros_bridge'):
         root = Path(get_package_prefix(package))
         paths += [path for path in root.rglob('*') if path.is_file()
@@ -185,10 +185,12 @@ def load_config(path, cpu_type=None):
     controllers = memory['memory_system']['controllers']
     peak = sum(controller['dram']['channel_width'] / 8 *
                controller['dram']['timing'][0] / 1000 for controller in controllers)
-    if not controllers or any(controller['dram']['impl'] != 'DDR4' for controller in controllers):
-        raise ValueError('This preset requires DDR4 controllers with 64-byte transactions')
-    if any(controller['dram']['channel_width'] != 64 for controller in controllers):
-        raise ValueError('This benchmark currently requires 64-bit DDR4 channels')
+    prefetch = {'DDR4': 8, 'LPDDR5': 16}
+    if not controllers or any(c['dram']['impl'] not in prefetch for c in controllers):
+        raise ValueError('Supported memory standards are DDR4 and LPDDR5')
+    if any(c['dram']['channel_width'] * prefetch[c['dram']['impl']] // 8 != 64
+           for c in controllers):
+        raise ValueError('Each DRAM transaction must match the 64-byte gem5 cache line')
     capacity = sum(math.prod(c['dram']['org']['count']) * c['dram']['channel_width'] // 8 for c in controllers)
     if 3 * 1024**3 + aggressor['window'] > capacity:
         raise ValueError('Guest and aggressor windows exceed physical DRAM capacity')
@@ -208,6 +210,7 @@ def plan(data):
         index = len(points)
         cpu_type = data['hardware']['cpu_type']
         points.append(dict(id=f'case-{index:03d}', cpu_type=cpu_type,
+                           ramulator_sha256=data['ramulator_sha256'],
                            label=f'{cpu_type.upper()} · {throw["name"]} · {rates["name"]} · '
                            + ('baseline' if pressure == 0 else f'{pattern} {pressure:.0%}'),
                            throw=throw, rates=rates, pattern=pattern if pressure else 'none',
@@ -224,10 +227,12 @@ def routes():
             ('/robot/joint_states', 'sensor_msgs/msg/JointState', 'host_to_guest', False),
             ('/robot/effort_command', 'sensor_msgs/msg/JointState', 'guest_to_host', False),
             ('/robot/ready', 'std_msgs/msg/Bool', 'guest_to_host', True),
-            ('/robot/perception_ready', 'std_msgs/msg/Bool', 'guest_to_host', True)]:
+            ('/robot/perception_ready', 'std_msgs/msg/Bool', 'guest_to_host', True),
+            ('/benchmark/records', 'std_msgs/msg/String', 'guest_to_host', True)]:
         result.append(dict(host_topic=topic, guest_topic=topic, type=kind, direction=direction,
                            coalesce=topic == '/clock' or 'image_raw' in topic,
-                           qos=dict(history='keep_last', depth=2 if 'image' in topic else 1,
+                           qos=dict(history='keep_last', depth=128 if topic == '/benchmark/records'
+                                    else 2 if 'image' in topic else 1,
                                     reliability='reliable' if reliable else 'best_effort', durability='volatile')))
     for route in result:
         if route['type'] == 'sensor_msgs/msg/Image':
@@ -243,6 +248,7 @@ def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=F
             f'image_diagnostics:={str(image_diagnostics).lower()}',
             'gem5_clock_library:=' + GUEST_ROOT + '/lib/libchimaera_gem5_clock.so',
             'gem5_time_origin_file:=/tmp/chimaera-sim-time-origin.ns',
+            'record_telemetry:=true',
             *[f'{key}:={point["rates"][key]}' for key in ('control_hz', 'planner_hz', 'plan_interval', 'camera_hz')]]
 
 
@@ -517,11 +523,17 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
         finally:
             stop(process)
     result = json.loads((directory / 'result.json').read_text())
+    from guest_records import import_guest_records
+    telemetry = import_guest_records(directory)
     metrics = memory_metrics(roi, data['peak_gbps'])
     write_json(directory / 'benchmark.json', dict(mode='gem5', point=point,
         memory=metrics, hardware=data['hardware'], aggressor=aggressor,
+        ramulator_sha256=data['ramulator_sha256'],
+        memory_profile=dict(standard=json.loads(frozen_memory.read_text())['memory_system']['controllers'][0]['dram']['impl'],
+                            peak_gbps=data['peak_gbps']),
         calibrated_sustainable_gbps=calibration[point['pattern']]['sustainable_gbps'] if point['pressure'] else None,
         peak_gbps=data['peak_gbps'], wall_seconds=time.monotonic() - started,
+        telemetry=telemetry,
         measurement_window='launch boundary to final evaluation; boundary quantization applies',
         commands=command_metrics(directory / 'commands.csv', result['launch_time'], result['result_time'],
                                  point['rates']['control_hz'])))

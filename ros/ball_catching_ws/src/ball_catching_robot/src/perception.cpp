@@ -20,11 +20,12 @@ public:
     stereo_(
       declare_parameter("focal", 400.), declare_parameter("cx", 320.),
       declare_parameter("cy", 240.), declare_parameter("baseline", .3), cameraOrigin()),
-    record_(declare_parameter<std::string>("output", ""), "perception"),
+    record_(declare_parameter<std::string>("output", ""), "perception", this),
+    processingClock_(*this),
     imageClock_(
       [this] { return now().nanoseconds(); },
-      declare_parameter<std::string>("gem5_clock_library", ""),
-      declare_parameter<std::string>("gem5_time_origin_file", ""))
+      get_parameter("gem5_clock_library").as_string(),
+      get_parameter("gem5_time_origin_file").as_string())
   {
     const auto cameraHz = declare_parameter("camera_hz", 90.);
     const auto periods = declare_parameter("image_age_periods", 2.);
@@ -89,7 +90,15 @@ private:
     }
     lastImages_ = static_cast<double>(*current) * 1e-9;
     lastCapture_ = key;
-    const auto started = WallClock::now();
+    const auto started = processingClock_.now();
+    const auto recordExpired = [&](Field conversion, Field detection = nullptr,
+                                   Field estimation = nullptr) {
+      record_.write({{"capture_time", seconds(msg->header.stamp)},
+        {"receive_time", lastImages_}, {"status", "expired_processing"},
+        {"processing_wall_seconds", processingClock_.elapsed(started)},
+        {"image_conversion_wall_seconds", conversion},
+        {"detection_wall_seconds", detection}, {"estimation_wall_seconds", estimation}});
+    };
     std::array<cv::Mat, 2> images;
     for (int i = 0; i < 2; ++i) {
       const auto & frame = *pair[i];
@@ -107,36 +116,39 @@ private:
       else
         images[i] = view;
     }
-    const double conversionSeconds = elapsed(started);
+    const auto conversionSeconds = processingClock_.elapsed(started);
     if (!fresh_image(key, imageTime("converted", key), imageAgeNs_)) {
       expiredPair();
+      recordExpired(conversionSeconds);
       return;
     }
-    const auto detectionStarted = WallClock::now();
+    const auto detectionStarted = processingClock_.now();
     const double capture = seconds(msg->header.stamp);
     const auto detection = stereo_.detect(images[0], images[1], filter_.predict(capture));
-    const double detectionSeconds = elapsed(detectionStarted);
+    const auto detectionSeconds = processingClock_.elapsed(detectionStarted);
     if (!fresh_image(key, imageTime("detected", key), imageAgeNs_)) {
       expiredPair();
+      recordExpired(conversionSeconds, detectionSeconds);
       return;
     }
     if (!detection) {
       record_.write(
         {{"capture_time", capture},
          {"receive_time", lastImages_},
-         {"processing_wall_seconds", elapsed(started)},
+         {"processing_wall_seconds", processingClock_.elapsed(started)},
          {"image_conversion_wall_seconds", conversionSeconds},
          {"detection_wall_seconds", detectionSeconds},
          {"status", "no_detection"}});
       return;
     }
-    const auto estimationStarted = WallClock::now();
+    const auto estimationStarted = processingClock_.now();
     auto candidate = filter_;
     const auto estimate = candidate.observe(detection->point, capture);
-    const double estimationSeconds = elapsed(estimationStarted);
-    const auto publicationStarted = WallClock::now();
+    const auto estimationSeconds = processingClock_.elapsed(estimationStarted);
+    const auto publicationStarted = processingClock_.now();
     if (!fresh_image(key, imageTime("estimated", key), imageAgeNs_)) {
       expiredPair();
+      recordExpired(conversionSeconds, detectionSeconds, estimationSeconds);
       return;
     }
     filter_ = std::move(candidate);
@@ -167,12 +179,12 @@ private:
         }
       state_->publish(state);
     }
-    const double publicationSeconds = elapsed(publicationStarted);
+    const auto publicationSeconds = processingClock_.elapsed(publicationStarted);
     if (imageDiagnostics_) imageTime("published", key);
     record_.write(
       {{"capture_time", capture},
        {"receive_time", lastImages_},
-       {"processing_wall_seconds", elapsed(started)},
+       {"processing_wall_seconds", processingClock_.elapsed(started)},
        {"image_conversion_wall_seconds", conversionSeconds},
        {"detection_wall_seconds", detectionSeconds},
        {"estimation_wall_seconds", estimationSeconds},
@@ -209,6 +221,7 @@ private:
   }
   BallFilter filter_;
   Recorder record_;
+  ProcessingClock processingClock_;
   ImageClock imageClock_;
   int64_t imageAgeNs_{}, lastCapture_{-1};
   uint64_t staleInputs_{}, expiredPairs_{};

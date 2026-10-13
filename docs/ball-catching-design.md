@@ -36,7 +36,7 @@ cup orientation fixed upward in world coordinates while moving its position;
 coordinate wrist motion to preserve that orientation despite the rigid
 attachment. Investigate vertical velocity
 matching if contact tests show excessive bounce. Success is evaluated at a
-configurable deadline, defaulting to 2 simulated seconds after launch. The ball must be physically inside the cup at that
+configurable deadline, defaulting to 1.5 simulated seconds after launch. The ball must be physically inside the cup at that
 instant; earlier contact or containment alone does not qualify. Every trial
 starts from the fixed vertical home for comparable runs. The robot detects the
 throw visually;
@@ -107,7 +107,7 @@ physics/contact parameters, seeds, and software provenance. For a fixed vector,
 sample success versus speed and repeat trials where variability exists. Do not
 assume success is strictly monotonic with speed or that a single trial defines
 a reliable maximum. Experiment duration uses simulated time and defaults to
-2.0 seconds after launch. Record the configured duration, final containment,
+1.5 seconds after launch. Record the configured duration, final containment,
 and uninterrupted containment duration. Pause Gazebo at evaluation and exclude
 shutdown activity from performance statistics.
 Reset and settle the arm at the configured starting pose before each throw;

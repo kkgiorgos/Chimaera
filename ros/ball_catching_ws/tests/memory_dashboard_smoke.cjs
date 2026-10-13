@@ -49,6 +49,9 @@ assert.equal(rows.children.length, 4);
 assert.deepEqual(rows.children.map(row => row.children[1].textContent),
                  ['CATCH', 'MISS', 'CATCH', 'infrastructure failure']);
 assert.equal(rows.children[1].children[9].textContent, '2.00×');
+assert.equal(rows.children[0].children[11].textContent, '3.000 / 3.000 / 3.000');
+assert.equal(rows.children[0].children[12].textContent, '5.000 / 5.000 / 5.000');
+assert.equal(rows.children[0].children[13].textContent, '0.200 / 0.200 / 0.200');
 assert.equal(rows.children[2].children[8].textContent, '—');
 assert.equal(rows.children[3].children[8].textContent, '—');
 rows.children[1].click(); assert.equal(selected, data.points[1].id);
@@ -72,6 +75,7 @@ assert.equal(exported.type, 'application/json');
 exported.text().then(text => {
   const saved = JSON.parse(text); assert.equal(saved.length, 4);
   assert.equal(saved[1].result.success, false);
+  assert.equal(saved[1].timings.processing.Planning.p95_ms, 5);
   assert.equal(saved[3].status, 'infrastructure_failure');
   assert.equal(saved[3].result, undefined);
   console.log('Comparison filters, latency plots, outcomes, baseline ratios and export passed');

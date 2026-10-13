@@ -36,8 +36,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cases', choices=list(CASES), nargs='+', default=list(CASES))
-    parser.add_argument('--duration', type=float, default=2.,
-                        help='Simulated seconds after launch before final evaluation (default: 2)')
+    parser.add_argument('--duration', type=float, default=1.5,
+                        help='Simulated seconds after launch before final evaluation (default: 1.5)')
     parser.add_argument('--wall-timeout', type=float, default=120.)
     parser.add_argument('--flat', action='store_true', help='Use the earlier, shorter flat throws as challenges')
     args = parser.parse_args()

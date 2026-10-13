@@ -13,8 +13,9 @@ public:
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
     home_(
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())))),
-    record_(declare_parameter<std::string>("output", ""), "control"),
-    timing_(get_parameter("output").as_string(), "control_timing")
+    record_(declare_parameter<std::string>("output", ""), "control", this),
+    timing_(get_parameter("output").as_string(), "control_timing", this),
+    processingClock_(*this)
   {
     arm_.validateHome(home_);
     const double hz = declare_parameter("control_hz", 250.);
@@ -64,7 +65,7 @@ private:
     const auto stamp = now();
     const double time = stamp.seconds();
     if (!feedback_.valid || time - feedback_.time < 0 || time - feedback_.time >= .05) return;
-    const auto started = WallClock::now();
+    const auto started = processingClock_.now();
     MotionState desired{home_, Vec7::Zero(), Vec7::Zero()};
     for (const auto & trajectory : trajectories_) {
       desired = trajectory.sample(time);
@@ -93,7 +94,8 @@ private:
     msg.name = arm_.names;
     msg.effort = values(effort);
     commands_->publish(msg);
-    timing_.write({{"time", time}, {"processing_wall_seconds", elapsed(started)}});
+    const auto processingSeconds = processingClock_.elapsed(started);
+    timing_.write({{"time", time}, {"processing_wall_seconds", processingSeconds}});
     if (time - lastLog_ > .04) {
       lastLog_ = time;
       std_msgs::msg::Bool ready;
@@ -108,12 +110,13 @@ private:
          {"desired", values(desired.q)},
          {"integral_torque", values(integral_)},
          {"effort", values(effort)},
-         {"processing_wall_seconds", elapsed(started)}});
+         {"processing_wall_seconds", processingSeconds}});
     }
   }
   Arm arm_;
   Vec7 home_;
   Recorder record_, timing_;
+  ProcessingClock processingClock_;
   Feedback feedback_;
   double lastLog_{-1}, lastControl_{-1};
   Vec7 integral_ = Vec7::Zero();

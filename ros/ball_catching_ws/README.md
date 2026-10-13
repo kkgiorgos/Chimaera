@@ -49,8 +49,8 @@ catch and 1 for a miss. Its default throw is the original flat challenge from
 `[2.08, 0.04, 2]` m at 3 m/s along `[-1, 0, 0]`. Configure `--position`,
 `--direction`, `--speed`, `--duration`, `--camera-position`, `--camera-hz`,
 `--resolution`, and `--wall-timeout`; add `--gui` to show Gazebo.
-Each trial runs for 2 simulated seconds after launch by default. Change this with
-`--duration 1.5` on either runner. Every outcome is evaluated at the deadline: a
+Each trial runs for 1.5 simulated seconds after launch by default. Change this with
+`--duration 2.0` on either runner. Every outcome is evaluated at the deadline: a
 catch succeeds if the ball is inside the cup then, even if it entered recently.
 An earlier catch that escapes before the deadline fails. Gazebo pauses when the
 result is published, and the runner shuts down the processes. Evaluation occurs
@@ -59,7 +59,7 @@ physics step). `--wall-timeout` separately limits startup or stalled runs in wal
 
 For interactive launch, run `ros2 launch ball_catching_sim application.launch.py`.
 Launch arguments also configure `cup_radius`, `cup_depth`, `physics_step`,
-`duration` (default `2.0`), and `auto_throw`. With `auto_throw:=false`, queue a throw using
+`duration` (default `1.5`), and `auto_throw`. With `auto_throw:=false`, queue a throw using
 `ros2 service call /experiment/throw std_srvs/srv/Trigger '{}'` after readiness.
 Set `robot:=false` to supply the robot computation through the interfaces below.
 

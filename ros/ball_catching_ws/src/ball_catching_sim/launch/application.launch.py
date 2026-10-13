@@ -85,6 +85,6 @@ def generate_launch_description():
                     launch_direction='[-1.0,0.0,0.0]', launch_speed='3.0',
                     camera_hz='90.0', camera_width='640', camera_height='480',
                     physics_step='0.001', cup_radius='0.12', cup_depth='0.14',
-                    auto_throw='true', duration='2.0', camera_position='[-0.65,0.0,1.0]')
+                    auto_throw='true', duration='1.5', camera_position='[-0.65,0.0,1.0]')
     return LaunchDescription([*[DeclareLaunchArgument(k, default_value=v) for k, v in defaults.items()],
                               OpaqueFunction(function=start)])

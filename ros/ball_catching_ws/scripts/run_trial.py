@@ -54,8 +54,8 @@ def main():
     parser.add_argument('--cup-depth', type=float, default=.14)
     parser.add_argument('--gui', action='store_true')
     parser.add_argument('--image-diagnostics', action='store_true')
-    parser.add_argument('--duration', type=float, default=2.,
-                        help='Simulated seconds after launch before final evaluation (default: 2)')
+    parser.add_argument('--duration', type=float, default=1.5,
+                        help='Simulated seconds after launch before final evaluation (default: 1.5)')
     parser.add_argument('--wall-timeout', type=float, default=120.)
     args = parser.parse_args()
     if not math.isfinite(args.duration) or args.duration <= 0:

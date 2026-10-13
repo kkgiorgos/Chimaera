@@ -8,7 +8,7 @@
   const format = (value, digits = 1) => finite(value) ? value.toFixed(digits) : '—';
   el('memory-panel').hidden = false;
   el('report-title').textContent = 'Ball catching under memory interference';
-  el('report-description').textContent = 'Compare binary task outcomes, guest DRAM latency, and delivered control updates.';
+  el('report-description').textContent = 'Compare binary task outcomes, guest DRAM latency, processing times, and delivered control updates.';
   el('points-title').textContent = 'Benchmark cases';
   for (const [id, key] of [['memory-throw', 'throw'], ['memory-rates', 'rates']]) {
     for (const name of [...new Set(data.points.map(point => point[key].name))]) {
@@ -16,9 +16,11 @@
       option.value = name; option.textContent = name; el(id).append(option);
     }
   }
+  const timing = stats => stats ? [stats.mean_ms, stats.p95_ms, stats.p99_ms].map(value => format(value, 3)).join(' / ') : 'Not recorded';
   const trialFor = point => byId.get(point.trials[0]);
   const comparable = (a, b) => a.throw.name === b.throw.name && a.rates.name === b.rates.name &&
-    (a.cpu_type || 'timing') === (b.cpu_type || 'timing');
+    (a.cpu_type || 'timing') === (b.cpu_type || 'timing') &&
+    (a.ramulator_sha256 || null) === (b.ramulator_sha256 || null);
   function svgElement(name, attributes, text) {
     const node = document.createElementNS('http://www.w3.org/2000/svg', name);
     for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value);
@@ -47,12 +49,17 @@
         `${Math.round(point.pressure * 100)}%`, format(memory?.aggressor_accepted_gbps, 2),
         finite(memory?.dram_bus_peak_fraction) ? `${(100 * memory.dram_bus_peak_fraction).toFixed(1)}%` : '—',
         format(memory?.total_mean_ns), format(memory?.total_p95_ns), format(memory?.total_p99_ns),
-        finite(ratio) ? `${ratio.toFixed(2)}×` : '—', format(benchmark?.commands?.delivered_control_hz)];
+        finite(ratio) ? `${ratio.toFixed(2)}×` : '—', format(benchmark?.commands?.delivered_control_hz),
+        timing(trial?.summary?.processing?.['Perception + estimation']),
+        timing(trial?.summary?.processing?.Planning), timing(trial?.summary?.processing?.['Arm control']),
+        format(trial?.summary?.observation_age?.p95_ms),
+        finite(benchmark?.wall_seconds) ? `${format(benchmark.wall_seconds / 60)} min` : '—'];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';
         row.append(cell);
       }
+      row.title = `Processing clock: ${trial?.summary?.processing_clock || 'not recorded'}; memory: ${benchmark?.memory_profile?.standard || 'see execution configuration'}, peak ${format(benchmark?.peak_gbps)} GB/s`;
       row.tabIndex = 0;
       row.setAttribute('aria-label', `Inspect ${point.label}`);
       const select = () => el('points').children[data.points.indexOf(point)]?.click();
@@ -89,7 +96,7 @@
   for (const id of ['memory-throw', 'memory-rates', 'memory-metric']) el(id).onchange = render;
   el('memory-export').onclick = () => {
     const measurements = data.points.map(point => ({...point, benchmark: trialFor(point)?.benchmark,
-      result: trialFor(point)?.result}));
+      result: trialFor(point)?.result, timings: trialFor(point)?.summary}));
     const url = URL.createObjectURL(new Blob([JSON.stringify(measurements, null, 2)], {type: 'application/json'}));
     const link = document.createElement('a'); link.href = url; link.download = 'memory-comparison.json';
     link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

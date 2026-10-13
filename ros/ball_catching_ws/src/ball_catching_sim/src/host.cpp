@@ -83,6 +83,8 @@ public:
       if (!readiness_) throw std::runtime_error("Cannot open readiness output");
       readiness_ << "time,arm_ready,perception_ready,warmup_elapsed,warmup_required\n"
                  << std::setprecision(17);
+      guestRecords_.open(output_ + "/guest_records.jsonl");
+      if (!guestRecords_) throw std::runtime_error("Cannot open guest telemetry output");
     }
     context_ = std::make_shared<rclcpp::Context>();
     context_->init(0, nullptr);
@@ -94,6 +96,15 @@ public:
       "/evaluation/ball_pose", rclcpp::SensorDataQoS());
     result_ = node_->create_publisher<std_msgs::msg::String>(
       "/evaluation/result", rclcpp::QoS(1).reliable().transient_local());
+    recordsSub_ = node_->create_subscription<std_msgs::msg::String>(
+      "/benchmark/records", rclcpp::QoS(128).reliable(),
+      [this](std_msgs::msg::String::ConstSharedPtr msg) {
+        // Persist on the host; no guest disk I/O or serial-console transfer.
+        if (guestRecords_) {
+          guestRecords_ << msg->data << '\n';
+          guestRecords_.flush();
+        }
+      });
     command_ = node_->create_subscription<sensor_msgs::msg::JointState>(
       "/robot/effort_command", rclcpp::QoS(1).best_effort(),
       [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
@@ -325,7 +336,7 @@ private:
   gz::Model ballModel_;
   gz::Link ball_, cup_;
   Vector initial_, velocity_, gravity_{0, 0, -9.81};
-  double duration_{2}, radius_{0.12}, depth_{0.14};
+  double duration_{1.5}, radius_{0.12}, depth_{0.14};
   double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
   double feedbackPeriod_{.004}, warmup_{0}, readySince_{-1}, worldTime_{0};
   std::ofstream commands_;
@@ -337,6 +348,8 @@ private:
   bool launched_{false}, launchChecked_{false}, finished_{false};
   std::mutex mutex_;
   std::string output_;
+  std::ofstream guestRecords_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr recordsSub_;
   std::ofstream samples_;
   rclcpp::Context::SharedPtr context_;
   rclcpp::Node::SharedPtr node_;

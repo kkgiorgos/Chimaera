@@ -92,7 +92,7 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
              launch_direction=(-1, 0, 0), launch_speed=3.0,
              camera_hz=90.0, camera_width=640, camera_height=480,
              physics_step=0.001, cup_radius=0.12, cup_depth=0.14,
-             auto_throw=True, duration=2.0, output='', camera_position=(-.65, 0., 1.),
+             auto_throw=True, duration=1.50, output='', camera_position=(-.65, 0., 1.),
              joint_hz=250., warmup=0.):
     initial_pose = home_pose() if initial_pose is None else initial_pose
     if len(initial_pose) != 7 or not all(math.isfinite(x) for x in initial_pose):

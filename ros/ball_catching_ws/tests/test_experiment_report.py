@@ -162,3 +162,27 @@ def test_report_excludes_processing_and_motion_after_final_evaluation(tmp_path):
     assert summary['planning_counts']['planned'] == 1
     assert summary['perception_counts']['pairs'] == 2
     assert trial['frames'][-1]['time'] == 2.
+
+
+def test_guest_processing_uses_gem5_clock_and_excludes_unfinished_updates(tmp_path):
+    write_trial(tmp_path)
+    for name in ('perception', 'interception', 'control_timing'):
+        path = tmp_path / (name + '.jsonl')
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        for record in records:
+            record['timing_clock'] = 'gem5 simulation'
+            record['completed_time'] = record.get('receive_time', record.get('time')) + .006
+            for key in list(record):
+                if key.endswith('_wall_seconds'):
+                    record[key.replace('_wall_seconds', '_simulation_seconds')] = record.pop(key)
+        late = {**records[0], 'completed_time': 3.001}
+        records.append(late)
+        path.write_text(''.join(json.dumps(r) + '\n' for r in records))
+    summary = load_trial(tmp_path)['summary']
+    assert summary['processing_clock'] == 'gem5 simulation'
+    assert summary['processing']['Planning']['mean_ms'] == 5.
+    assert summary['processing']['Arm control']['samples'] == 3
+    assert summary['perception_counts']['pairs'] == 2
+    detail = next(r for r in summary['timing_detail'] if r['stage'] == 'control')
+    assert detail['clock'] == 'gem5 simulation'
+    assert detail['field'] == 'processing_simulation_seconds'

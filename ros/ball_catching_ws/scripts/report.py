@@ -37,6 +37,23 @@ def _cadence(records, field):
     return dict(rate_hz=1/statistics.mean(gaps), gaps=_stats(gaps)) if gaps else None
 
 
+def _duration_field(records, wall_field):
+    if not records:
+        return wall_field, 'not recorded'
+    if any(r.get('timing_clock') == 'gem5 simulation' for r in records):
+        return wall_field.replace('_wall_seconds', '_simulation_seconds'), 'gem5 simulation'
+    return wall_field, 'wall'
+
+
+def _completed_by(record, end):
+    return record.get('completed_time', end) <= end
+
+
+def _processing_stats(records, wall_field):
+    field, _ = _duration_field(records, wall_field)
+    return _stats([r.get(field) for r in records])
+
+
 def load_trial(directory):
     directory = Path(directory)
     failure = launch_failure(directory / 'launch_validation.json')
@@ -48,10 +65,10 @@ def load_trial(directory):
     start_condition = config['start_condition']
     launch = result['launch_time']
     end = result['result_time']
-    perception = [r for r in _records(directory / 'perception.jsonl') if launch <= r['capture_time'] <= end and r['receive_time'] <= end]
-    plans = [r for r in _records(directory / 'interception.jsonl') if launch <= r['time'] <= end]
+    perception = [r for r in _records(directory / 'perception.jsonl') if launch <= r['capture_time'] <= end and r['receive_time'] <= end and _completed_by(r, end)]
+    plans = [r for r in _records(directory / 'interception.jsonl') if launch <= r['time'] <= end and _completed_by(r, end)]
     control_timing = [r for r in _records(directory / 'control_timing.jsonl')
-                      if launch <= r['time'] <= end]
+                      if launch <= r['time'] <= end and _completed_by(r, end)]
     with (directory / 'ground_truth.csv').open() as source:
         rows = [{k: float(v) for k, v in row.items()} for row in csv.DictReader(source)]
     rows = [r for r in rows if r['launched'] and launch <= r['time'] <= end]
@@ -111,12 +128,20 @@ def load_trial(directory):
              'control_timing.jsonl',
              'processing_wall_seconds', 'wall', 'time'),
             ('Capture → matched stereo callback', 'transport', perception, 'perception.jsonl',
-             'observation_age', 'simulation', 'capture_time')]:
+             'observation_age', 'simulation', 'capture_time'),
+            ('Capture → completed perception', 'transport', perception, 'perception.jsonl',
+             'completion_age', 'simulation', 'capture_time')]:
         timed = [r for r in records if isinstance(r.get(field), (int, float))]
+        if field.endswith('_wall_seconds'):
+            field, clock = _duration_field(records, field)
+            timed = [r for r in records if isinstance(r.get(field), (int, float))]
         durations = [r[field] for r in timed]
         if field == 'observation_age':
             timed = perception
             durations = [r['receive_time']-r['capture_time'] for r in perception]
+        if field == 'completion_age':
+            timed = [r for r in perception if isinstance(r.get('completed_time'), (int, float))]
+            durations = [r['completed_time']-r['capture_time'] for r in timed]
         cadence = _cadence(timed, timestamp)
         # These are the rates expected of the recorded stream: camera frames
         # for perception, admitted searches for planning (60 ms gate), and
@@ -127,7 +152,8 @@ def load_trial(directory):
                       config.get('planner_hz', 30.) if stage == 'planning' else
                       config.get('control_hz', 250.) if stage == 'control' else None)
         details.append(dict(name=name, stage=stage, source=source,
-                            field='receive_time - capture_time' if field == 'observation_age' else field, clock=clock,
+                            field='receive_time - capture_time' if field == 'observation_age' else
+                            'completed_time - capture_time' if field == 'completion_age' else field, clock=clock,
                             stats=_stats(durations), cadence=cadence,
                             desired_hz=desired_hz,
                             achieved_hz=cadence['rate_hz'] if cadence else None,
@@ -137,6 +163,10 @@ def load_trial(directory):
                    evaluation_seconds=end-launch, duration=result['duration'],
                    contained_duration=result['contained_duration'],
                    timing_detail=details,
+                   processing_clock=next((r['clock'] for r in details
+                                          if r['stage'] in ('perception', 'planning', 'control') and r['stats']),
+                                         'not recorded'),
+                   expired_perception_count=sum(r.get('status') == 'expired_processing' for r in perception),
                    perception_counts=dict(pairs=len(perception),
                                           detected=sum('observation' in r for r in perception),
                                           tracked=len(tracked))
@@ -158,9 +188,9 @@ def load_trial(directory):
                    first_track_seconds=first_track-launch if first_track is not None else None,
                    first_plan_lead_ms=(actual_plans[0]['intercept_time']-actual_plans[0]['time'])*1000 if actual_plans else None,
                    processing={
-                       'Perception + estimation': _stats([r.get('processing_wall_seconds') for r in perception]),
-                       'Planning': _stats([r.get('planning_wall_seconds') for r in plans]),
-                       'Arm control': _stats([r.get('processing_wall_seconds') for r in control_timing if launch <= r['time'] <= end])},
+                       'Perception + estimation': _processing_stats(perception, 'processing_wall_seconds'),
+                       'Planning': _processing_stats(plans, 'planning_wall_seconds'),
+                       'Arm control': _processing_stats(control_timing, 'processing_wall_seconds')},
                    observation_age=_stats([r['receive_time']-r['capture_time'] for r in perception]),
                    end_kind=end_kind)
     frames = []

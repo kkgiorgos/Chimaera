@@ -14,7 +14,8 @@ public:
   Intercept()
   : Node("ball_intercept"),
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
-    record_(declare_parameter<std::string>("output", ""), "interception")
+    record_(declare_parameter<std::string>("output", ""), "interception", this),
+    processingClock_(*this)
   {
     const auto home =
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())));
@@ -79,7 +80,7 @@ private:
       holdUntil_ = time + 2.;
       return;
     }
-    const auto started = WallClock::now();
+    const auto started = processingClock_.now();
     lastPlan_ = time;
     const MotionState initial = desired(time);
     std::vector<Quintic> best;
@@ -129,7 +130,7 @@ private:
          {"capture_time", ball_->time},
          {"status", "no_feasible_intercept"},
          {"inverse_solutions", static_cast<double>(inverseSolutions)},
-         {"planning_wall_seconds", elapsed(started)}});
+         {"planning_wall_seconds", processingClock_.elapsed(started)}});
       return;
     }
     publish(best);
@@ -144,7 +145,7 @@ private:
        {"cup_velocity", values(bestVelocity)},
        {"braking_start_time", best.back().start},
        {"braking_end_time", best.back().start + best.back().duration},
-       {"planning_wall_seconds", elapsed(started)}});
+       {"planning_wall_seconds", processingClock_.elapsed(started)}});
   }
   void publish(const std::vector<Quintic> & segments)
   {
@@ -178,6 +179,7 @@ private:
   }
   Arm arm_;
   Recorder record_;
+  ProcessingClock processingClock_;
   Feedback feedback_;
   Vec7 home_;
   // A bent numerical seed avoids the singularity at the physical vertical home.

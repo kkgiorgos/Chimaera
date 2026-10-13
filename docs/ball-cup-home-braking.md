@@ -138,3 +138,8 @@ speed of 0.0040–0.0058 m/s from 50 ms after the brake until scoring. These che
 are saved in `braking_validation.json`; they use evaluation records offline.
 All 41 Python tests, native robot tests and the scorer passed. Chromium checks
 verified replay, timing filters, pipeline references and desktop/mobile layout.
+
+Guest memory benchmarks export the same computation stages with
+`*_simulation_seconds` fields, measured with the authoritative gem5 clock.
+Native runs retain the `*_wall_seconds` fields listed above. The dashboard
+labels each clock and excludes guest callbacks completed after evaluation.

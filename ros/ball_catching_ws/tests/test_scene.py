@@ -48,7 +48,7 @@ def test_scene_matches_the_cup_model_and_calibration(tmp_path):
     assert arm.findall("joint[@type='revolute']") and len(arm.findall("joint[@type='revolute']")) == 7
     plugin = world.find("plugin[@name='ball_catching::Host']")
     assert [float(q) for q in plugin.findtext('initial_pose').split()] == home_pose()
-    assert float(plugin.findtext('duration')) == 2.
+    assert float(plugin.findtext('duration')) == 1.5
     assert robot_path.read_text() == urdf
     assert calibration['baseline'] == .3
     assert calibration['camera_origin'] == [-.65, .15, 1.]

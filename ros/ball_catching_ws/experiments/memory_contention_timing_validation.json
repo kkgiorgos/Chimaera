@@ -1,7 +1,7 @@
 {
   "version": 1,
   "fixed": {
-    "duration": 2.0,
+    "duration": 1.5,
     "warmup": 0.1,
     "physics_step": 0.0005,
     "joint_hz": 1000.0,
@@ -32,7 +32,7 @@
     "l2_size": "8MiB",
     "l2_assoc": 16
   },
-  "ramulator_config": "../../../gem5/ext/ramulator2/configs/ddr4-3200-dual.json",
+  "ramulator_config": "../../../gem5/ext/ramulator2/configs/lpddr5-6400-orin.json",
   "throws": [
     {
       "name": "loft-3",

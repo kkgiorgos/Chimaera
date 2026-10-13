@@ -31,7 +31,8 @@ def test_default_has_one_binary_trial_per_point(tmp_path):
     data = load(tmp_path, configuration(tmp_path))
     points = plan(data)
     assert len(points) == 12
-    assert data['peak_gbps'] == pytest.approx(51.2)
+    assert data['peak_gbps'] == pytest.approx(204.8)
+    assert data['fixed']['duration'] == 1.5
     assert all(point['expected_throws'] == 1 for point in points)
     assert len({point['id'] for point in points}) == len(points)
 
@@ -260,7 +261,7 @@ def test_invalid_launch_stops_without_accepting_a_task_miss(tmp_path, monkeypatc
 
 def test_host_truth_and_throw_settings_never_cross_bridge():
     topic_routes = routes()['topics']
-    assert len(topic_routes) == 7
+    assert len(topic_routes) == 8
     assert sum(route['type'] == 'sensor_msgs/msg/Image' for route in topic_routes) == 2
     assert all(not route['host_topic'].startswith(('/evaluation', '/experiment')) for route in topic_routes)
     assert all('ball_state' not in route['host_topic'] for route in topic_routes)
@@ -279,6 +280,28 @@ def test_guest_launch_has_no_empty_ros_arguments(tmp_path):
     assert 'camera_hz:=60.0' in command
     assert 'image_age_periods:=2.0' in command
     assert any(arg.startswith('gem5_clock_library:=') for arg in command)
+    assert 'record_telemetry:=true' in command
+
+
+def test_orin_memory_interface_capacity_and_transaction_size(tmp_path):
+    data = load(tmp_path, configuration(tmp_path))
+    memory = json.loads(Path(data['ramulator_config']).read_text())
+    controllers = memory['memory_system']['controllers']
+    assert len(controllers) == 8
+    assert all(c['impl'] == 'LPDDR5' and c['dram']['impl'] == 'LPDDR5' for c in controllers)
+    assert all(c['dram']['channel_width'] == 32 and c['dram']['timing'][0] == 6400 for c in controllers)
+    import math
+    capacity = sum(math.prod(c['dram']['org']['count']) * c['dram']['channel_width'] // 8 for c in controllers)
+    assert capacity == 64 * 1024**3
+    # An ordinary x16 LPDDR5 channel has a 32-byte BL16 transaction and cannot
+    # be used with this wrapper's unsplit 64-byte cache-line requests.
+    controllers[0]['dram']['channel_width'] = 16
+    path = tmp_path / 'wrong-transaction.json'
+    path.write_text(json.dumps(memory))
+    raw = configuration(tmp_path)
+    raw['ramulator_config'] = str(path)
+    with pytest.raises(ValueError, match='64-byte'):
+        load(tmp_path, raw)
 
 
 def test_each_tuple_gets_its_own_simulated_freshness_budget(tmp_path, monkeypatch):
