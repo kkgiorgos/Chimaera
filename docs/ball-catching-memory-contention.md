@@ -62,9 +62,10 @@ X86Board still exposes 3 GiB to the existing Ubuntu guest; the aggressor uses a
 disjoint 256 MiB window above it. A memory-interface change requires a fresh
 suite and calibration; DDR4 results remain a separate historical baseline.
 
-The default scoring duration is 1.5 simulated seconds after launch. Startup,
-readiness and warmup precede that window; the separate twelve-hour wall-time
-limit is unchanged. Both duration and the Ramulator configuration remain
+The default scoring duration is 1.5 simulated seconds after launch. Startup
+and readiness precede that window. Extra continuous-ready warmup defaults to
+zero; `fixed.warmup` can add a hold if an experiment needs one. The separate
+twelve-hour wall-time limit is unchanged. Both duration and the Ramulator configuration remain
 customizable in the experiment JSON.
 
 The preset uses 0.5 ms physics/exchange intervals, 100 us guest polling and fixed
@@ -159,7 +160,7 @@ python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --output ros/ball_catching_ws/results/timing-validation-launch-fixed
 ```
 
-The prepared run executes two simulated seconds after launch, with a twelve-hour
+The prepared run executes 1.5 simulated seconds after launch, with a twelve-hour
 wall limit covering boot, readiness and the throw. Run from the repository root:
 
 ```bash
@@ -380,9 +381,12 @@ accepted and physically served traffic separately. Calibration is configuration
 and binary specific and is reused only when fingerprints match.
 
 The aggressor starts at the detailed ROI and remains active through home/camera
-readiness and a fixed 100 ms simulated warmup before launch. Every attempt
+readiness. The default extra warmup is zero: launch can occur at the first
+physics step with both flags true. Robot readiness still requires the fixed
+home tracking tolerances and low joint speeds; perception readiness still
+requires a fresh stereo pair. Every attempt
 starts a new simulation from the fixed vertical home. The host scorer still
-requires containment at two simulated seconds after launch, allowing escape
+requires containment at 1.5 simulated seconds after launch, allowing escape
 and recapture before that deadline. Neither readiness nor elapsed wall time
 changes the task's evaluation duration.
 
@@ -935,3 +939,30 @@ installed execution fingerprint and base-image metadata matched the manifest's
 The evaluation is saved in `results/timing-validation-orin-timings-1p5/evaluation.json`.
 A fresh user-run Timing validation is prepared to check export coverage through
 the deadline before expanding the memory-interference sweep.
+
+
+### Remove the extra ready hold, 2026-10-13
+
+Both default experiment presets now set `fixed.warmup` to zero, removing the
+additional 100 ms of continuously ready simulation time before launch. The
+existing host already supports zero; its home/low-joint-speed and fresh-camera
+readiness gates remain in effect. This is a configuration change and requires
+no rebuild or simulator change. The monitor distinguishes waiting for the arm
+or camera from the extra ready hold.
+
+In the completed LPDDR5 run above, both readiness flags first became true at
+0.454 simulated seconds and launch occurred at 0.554 seconds. Summing the
+corresponding `timing.csv` intervals gives 2,178.234 wall seconds (36 min 18 s)
+to reach readiness and another 454.437 seconds (7 min 34 s) for the extra hold.
+Removing that hold saves roughly 7.5 minutes at those observed speeds; this is
+an estimate, not a timing guarantee for a new configuration. Readiness startup
+still depends on simulated execution and the robot's settling dynamics.
+The short 100 us aggressor-only calibration warmup is unchanged and is separate
+from the expensive robot startup/hold.
+
+The active `results/timing-validation-orin-timing-routes-1p5` run retains its
+frozen 100 ms hold. Its prepared files, binaries, launch condition and execution
+fingerprint are not changed. New zero-hold suites need a fresh output directory;
+changing this setting between pressure points would weaken comparison with
+the previous baseline. No expensive guest or native co-simulation is started
+by this change.

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import sys
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from watch_memory_suite import display, snapshot
@@ -20,11 +21,32 @@ def test_readiness_and_image_stages_expose_the_blocking_component(tmp_path):
         'CHIMAERA_IMAGE component=perception stage=input capture_ns=')
     state = snapshot(tmp_path)
     assert state['readiness'] == dict(arm=True, perception=False, warmup_elapsed=0, warmup_required=.1)
+    assert state['phase'] == 'Waiting for fresh camera readiness'
     assert state['image_stages']['bridge.copied']['age_ms'] == 10
     assert state['image_stages']['perception.detected']['age_ms'] == 40
     assert 'fresh camera ready: no' in display(state)
     assert 'detected=40.0 ms' in display(state)
     assert 'outcome' not in state
+
+
+@pytest.mark.parametrize('arm,camera,required,phase', [
+    (0, 0, .1, 'Waiting for arm and camera readiness'),
+    (0, 1, .1, 'Waiting for arm readiness'),
+    (1, 1, .1, 'Extra warmup after readiness'),
+    (1, 1, 0., 'Ready; waiting for launch')])
+def test_extra_warmup_is_distinct_from_waiting_for_readiness(tmp_path, arm, camera, required, phase):
+    attempt = tmp_path / 'case-003-attempt-001'
+    attempt.mkdir()
+    (attempt / 'timing.csv').write_text('step,sim_seconds,elapsed_wall_seconds\n1,0.1,50\n')
+    (attempt / 'readiness.csv').write_text(
+        'time,arm_ready,perception_ready,warmup_elapsed,warmup_required\n'
+        f'0.1,{arm},{camera},0,{required}\n')
+    state = snapshot(tmp_path)
+    assert state['phase'] == phase
+    if not (arm and camera):
+        assert 'starts after readiness' in display(state)
+    else:
+        assert 'Extra warmup: 0.000 /' in display(state)
 
 
 def test_prepared_environment_does_not_report_a_throw_or_result(tmp_path):

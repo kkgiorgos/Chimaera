@@ -91,6 +91,18 @@ def snapshot(path, case='case-003'):
                 perception=row['perception_ready'] == '1',
                 warmup_elapsed=number(row.get('warmup_elapsed')),
                 warmup_required=number(row.get('warmup_required')))
+            if timing:
+                ready = state['readiness']
+                if ready['arm'] and ready['perception']:
+                    remaining = (ready['warmup_required'] or 0) - (ready['warmup_elapsed'] or 0)
+                    state['phase'] = ('Extra warmup after readiness' if remaining > 0
+                                      else 'Ready; waiting for launch')
+                elif ready['arm']:
+                    state['phase'] = 'Waiting for fresh camera readiness'
+                elif ready['perception']:
+                    state['phase'] = 'Waiting for arm readiness'
+                else:
+                    state['phase'] = 'Waiting for arm and camera readiness'
     stages = image_stages(attempt / 'gem5/board.pc.com_1.device')
     if stages:
         state['image_stages'] = stages
@@ -142,12 +154,17 @@ def display(state):
     if state.get('throw_percent') is not None:
         lines.append(f"Throw: {state['throw_seconds']:.3f} / {state['duration_seconds']:.3f} simulated seconds"
                      + f" ({state['throw_percent']:.1f}%)")
-    if 'readiness' in state and state['phase'] == 'Waiting for robot readiness / warmup':
+    if 'readiness' in state and 'throw_percent' not in state and 'outcome' not in state:
         ready = state['readiness']
         lines.append('Arm ready: ' + ('yes' if ready['arm'] else 'no')
                      + ' | fresh camera ready: ' + ('yes' if ready['perception'] else 'no'))
         if ready['warmup_elapsed'] is not None and ready['warmup_required'] is not None:
-            lines.append(f"Continuous ready warmup: {ready['warmup_elapsed']:.3f} / {ready['warmup_required']:.3f} simulated seconds")
+            if ready['arm'] and ready['perception']:
+                lines.append(f"Extra warmup: {ready['warmup_elapsed']:.3f} / {ready['warmup_required']:.3f} simulated seconds")
+            elif ready['warmup_required'] > 0:
+                lines.append(f"Extra warmup starts after readiness: {ready['warmup_required']:.3f} simulated seconds configured")
+            else:
+                lines.append('No extra warmup configured; launch waits for readiness')
     for component in ('bridge', 'perception'):
         stages = [(key.split('.', 1)[1], value) for key, value in state.get('image_stages', {}).items()
                   if key.startswith(component + '.')]

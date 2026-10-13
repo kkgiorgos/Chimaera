@@ -2,7 +2,7 @@
   "version": 1,
   "fixed": {
     "duration": 1.5,
-    "warmup": 0.1,
+    "warmup": 0.0,
     "physics_step": 0.0005,
     "joint_hz": 1000.0,
     "camera_position": [-2.0, 0.0, 2.0],

@@ -33,6 +33,7 @@ def test_default_has_one_binary_trial_per_point(tmp_path):
     assert len(points) == 12
     assert data['peak_gbps'] == pytest.approx(204.8)
     assert data['fixed']['duration'] == 1.5
+    assert data['fixed']['warmup'] == 0
     assert all(point['expected_throws'] == 1 for point in points)
     assert len({point['id'] for point in points}) == len(points)
 
@@ -47,6 +48,7 @@ def test_timing_validation_preset_contains_only_the_qualified_baseline():
     assert (data['fixed']['camera_width'], data['fixed']['camera_height']) == (480, 360)
     assert data['fixed']['guest_dds_shm_bytes'] == 8 * 1024 * 1024
     assert data['fixed']['image_age_periods'] == 2
+    assert data['fixed']['warmup'] == 0
     assert data['fixed']['wall_timeout_s'] == 43200
 
 
