@@ -68,7 +68,7 @@ class Recorder {
       simulationTiming_ = !recordingParameter<std::string>(*node, "gem5_clock_library", "").empty();
       if (recordingParameter<bool>(*node, "record_telemetry", false)) {
         telemetry_ = node->create_publisher<std_msgs::msg::String>(
-          "/benchmark/records", rclcpp::QoS(128).reliable());
+          "/benchmark/" + name_, rclcpp::QoS(128).reliable());
         completionClock_ = std::make_unique<ImageClock>(
           [node] { return node->now().nanoseconds(); },
           node->get_parameter("gem5_clock_library").as_string(),

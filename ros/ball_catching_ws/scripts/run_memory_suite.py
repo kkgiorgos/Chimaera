@@ -228,10 +228,11 @@ def routes():
             ('/robot/effort_command', 'sensor_msgs/msg/JointState', 'guest_to_host', False),
             ('/robot/ready', 'std_msgs/msg/Bool', 'guest_to_host', True),
             ('/robot/perception_ready', 'std_msgs/msg/Bool', 'guest_to_host', True),
-            ('/benchmark/records', 'std_msgs/msg/String', 'guest_to_host', True)]:
+            *[(f'/benchmark/{name}', 'std_msgs/msg/String', 'guest_to_host', True)
+              for name in ('perception', 'interception', 'control', 'control_timing')]]:
         result.append(dict(host_topic=topic, guest_topic=topic, type=kind, direction=direction,
                            coalesce=topic == '/clock' or 'image_raw' in topic,
-                           qos=dict(history='keep_last', depth=128 if topic == '/benchmark/records'
+                           qos=dict(history='keep_last', depth=128 if topic.startswith('/benchmark/')
                                     else 2 if 'image' in topic else 1,
                                     reliability='reliable' if reliable else 'best_effort', durability='volatile')))
     for route in result:

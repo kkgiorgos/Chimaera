@@ -53,7 +53,10 @@
         timing(trial?.summary?.processing?.['Perception + estimation']),
         timing(trial?.summary?.processing?.Planning), timing(trial?.summary?.processing?.['Arm control']),
         format(trial?.summary?.observation_age?.p95_ms),
-        finite(benchmark?.wall_seconds) ? `${format(benchmark.wall_seconds / 60)} min` : '—'];
+        finite(benchmark?.wall_seconds) ? `${format(benchmark.wall_seconds / 60)} min` : '—',
+        trial?.summary?.timing_coverage?.status === 'partial' ?
+          `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
+          trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked'];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';

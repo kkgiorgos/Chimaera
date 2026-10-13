@@ -29,6 +29,7 @@
 #include <std_msgs/msg/string.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <thread>
+#include <vector>
 
 #include "ball_catching_sim/scoring.hpp"
 
@@ -96,15 +97,17 @@ public:
       "/evaluation/ball_pose", rclcpp::SensorDataQoS());
     result_ = node_->create_publisher<std_msgs::msg::String>(
       "/evaluation/result", rclcpp::QoS(1).reliable().transient_local());
-    recordsSub_ = node_->create_subscription<std_msgs::msg::String>(
-      "/benchmark/records", rclcpp::QoS(128).reliable(),
-      [this](std_msgs::msg::String::ConstSharedPtr msg) {
-        // Persist on the host; no guest disk I/O or serial-console transfer.
-        if (guestRecords_) {
-          guestRecords_ << msg->data << '\n';
-          guestRecords_.flush();
-        }
-      });
+    for (const auto * stream : {"perception", "interception", "control", "control_timing"}) {
+      recordsSubs_.push_back(node_->create_subscription<std_msgs::msg::String>(
+        std::string("/benchmark/") + stream, rclcpp::QoS(128).reliable(),
+        [this](std_msgs::msg::String::ConstSharedPtr msg) {
+          // Persist on the host; no guest disk I/O or serial-console transfer.
+          if (guestRecords_) {
+            guestRecords_ << msg->data << '\n';
+            guestRecords_.flush();
+          }
+        }));
+    }
     command_ = node_->create_subscription<sensor_msgs::msg::JointState>(
       "/robot/effort_command", rclcpp::QoS(1).best_effort(),
       [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
@@ -349,7 +352,7 @@ private:
   std::mutex mutex_;
   std::string output_;
   std::ofstream guestRecords_;
-  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr recordsSub_;
+  std::vector<rclcpp::Subscription<std_msgs::msg::String>::SharedPtr> recordsSubs_;
   std::ofstream samples_;
   rclcpp::Context::SharedPtr context_;
   rclcpp::Node::SharedPtr node_;

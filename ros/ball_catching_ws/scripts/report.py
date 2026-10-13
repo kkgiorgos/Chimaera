@@ -11,6 +11,7 @@ import statistics
 
 from replay_assets import export_robot_assets
 from benchmark_status import launch_failure
+from guest_records import timing_coverage
 
 
 def _records(path):
@@ -166,6 +167,7 @@ def load_trial(directory):
                    processing_clock=next((r['clock'] for r in details
                                           if r['stage'] in ('perception', 'planning', 'control') and r['stats']),
                                          'not recorded'),
+                   timing_coverage=timing_coverage(directory, launch, end),
                    expired_perception_count=sum(r.get('status') == 'expired_processing' for r in perception),
                    perception_counts=dict(pairs=len(perception),
                                           detected=sum('observation' in r for r in perception),

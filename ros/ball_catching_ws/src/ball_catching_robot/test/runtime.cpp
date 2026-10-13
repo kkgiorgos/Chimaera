@@ -25,7 +25,7 @@ TEST(Recording, GuestClockAndExportAreIndependentOfRosClock)
   auto node = std::make_shared<rclcpp::Node>("timing_test", options);
   std::optional<std::string> received;
   auto subscriber = node->create_subscription<std_msgs::msg::String>(
-    "/benchmark/records", rclcpp::QoS(128).reliable(),
+    "/benchmark/control_timing", rclcpp::QoS(128).reliable(),
     [&](std_msgs::msg::String::ConstSharedPtr msg) { received = msg->data; });
   {
     Recorder record(directory.string(), "control_timing", node.get());
@@ -68,5 +68,37 @@ TEST(Recording, GuestClockAndExportAreIndependentOfRosClock)
   subscriber.reset();
   dlclose(library);
   std::filesystem::remove_all(directory);
+  rclcpp::shutdown();
+}
+
+TEST(Recording, OnePumpServicesEveryPendingTimingStream)
+{
+  rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("timing_stream_test",
+    rclcpp::NodeOptions().parameter_overrides({rclcpp::Parameter("record_telemetry", true)}));
+  std::array<unsigned, 4> received{};
+  std::vector<rclcpp::Subscription<std_msgs::msg::String>::SharedPtr> subscribers;
+  std::vector<std::unique_ptr<Recorder>> recorders;
+  const std::array<std::string, 4> names{"perception", "interception", "control", "control_timing"};
+  for (size_t i = 0; i < names.size(); ++i) {
+    subscribers.push_back(node->create_subscription<std_msgs::msg::String>(
+      "/benchmark/" + names[i], rclcpp::QoS(128).reliable(),
+      [&, i](std_msgs::msg::String::ConstSharedPtr) { ++received[i]; }));
+    recorders.push_back(std::make_unique<Recorder>("", names[i], node.get()));
+  }
+  // A backlog in one stream must not consume every callback slot and leave
+  // all other streams behind the same FIFO. Match the bridge's bounded pump.
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  for (int sample = 0; sample < 10; ++sample)
+    for (auto & recorder : recorders) recorder->write({{"time", double(sample)}});
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+  executor.spin_some();
+  for (auto count : received) EXPECT_EQ(count, 1);
+  executor.remove_node(node);
+  recorders.clear();
+  subscribers.clear();
+  node.reset();
   rclcpp::shutdown();
 }

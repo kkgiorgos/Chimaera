@@ -261,13 +261,17 @@ def test_invalid_launch_stops_without_accepting_a_task_miss(tmp_path, monkeypatc
 
 def test_host_truth_and_throw_settings_never_cross_bridge():
     topic_routes = routes()['topics']
-    assert len(topic_routes) == 8
+    assert len(topic_routes) == 11
     assert sum(route['type'] == 'sensor_msgs/msg/Image' for route in topic_routes) == 2
     assert all(not route['host_topic'].startswith(('/evaluation', '/experiment')) for route in topic_routes)
     assert all('ball_state' not in route['host_topic'] for route in topic_routes)
     assert [route['host_topic'] for route in topic_routes if route['coalesce']] == [
         '/clock', '/stereo/left/image_raw', '/stereo/right/image_raw']
     assert [route['coalesce_group'] for route in topic_routes if 'coalesce_group' in route] == ['stereo', 'stereo']
+    telemetry = [r for r in topic_routes if r['host_topic'].startswith('/benchmark/')]
+    assert len(telemetry) == 4
+    assert all(r['direction'] == 'guest_to_host' and not r['coalesce']
+               and r['qos']['reliability'] == 'reliable' for r in telemetry)
 
 
 def test_guest_launch_has_no_empty_ros_arguments(tmp_path):
