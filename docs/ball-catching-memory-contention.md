@@ -403,6 +403,9 @@ Guest per-update file logging is disabled to avoid adding its memory and I/O
 work to this initial study. The replay comes from host physics records. Native
 computation timings are available in native preflights; detailed guest execution
 timings and consumed-frame attribution are not collected by this version.
+Absent perception/planning logs are shown as unrecorded counts. An existing
+empty log represents a recorded zero. Sampled serial diagnostics provide image
+ages separately; they cannot supply complete per-update counts or timings.
 
 The preset uses 640×480 images with the same field of view and update rates.
 An RGB pair carries 1,843,200 raw image bytes; at 90 Hz it represents
@@ -741,3 +744,56 @@ A fresh environment is prepared in `results/timing-validation-launch-fixed`
 with the same Timing hardware, camera/freshness settings, disabled aggressor and
 twelve-hour wall budget. Full guest execution after this repair awaits the user;
 the agent has not started that run.
+
+### Successful Timing baseline, 2026-10-13
+
+The user's run of `results/timing-validation-launch-fixed/case-000-attempt-001`
+completed with a verified ballistic launch and **CATCH**. The actual detailed
+cores were four `BaseTimingSimpleCPU` instances, matching the frozen 3 GHz
+architecture. The fixed 3 m/s throw launched at 0.529 s, continuous final
+containment began at 1.497 s, and evaluation at 2.529 s found the ball still
+inside the cup: 1.032 s of continuous containment. Independent quaternion-based
+conversion of the final motion record also passed the polygonal cavity check.
+The cup moved about 24.2 cm from launch to the start of final containment.
+
+The saved benchmark matches a fresh calculation from raw gem5/Ramulator data:
+
+| Guest DRAM read metric | Cost |
+| --- | ---: |
+| Mean | 55.247647 ns |
+| P95 | 85 ns |
+| P99 | 337 ns |
+
+There were 2,382,945 completed guest read samples and zero admission retries.
+Accepted and total wrapper latency therefore agree. The measured window was
+2.0005 s, including 0.5 ms beyond the task deadline during shutdown; this is
+0.025% of the task window and remains visible in `benchmark.json`. The aggressor
+accepted no requests. Physically served reads/writes used 0.140272 GB/s,
+about 0.274% of the fixed 51.2 GB/s bus peak.
+
+During the task, 380 distinct effort receipts gave an effective 190.93 Hz
+delivery cadence against the configured 250 Hz controller timer; the p95 gap
+was 12 ms. This measures host receipts through the coupling, not internal guest
+deadline misses. Sampled completed detections were 33.8–48.3 ms old and sampled
+published estimates were 34.3–37.3 ms old, within the 66.667 ms freshness budget.
+No freshness warning or queue overflow was logged. These sampled records do not
+establish complete frame counts. The arm first reported ready at 0.429 s and
+the camera at 0.117 s; the fixed 100 ms warmup preceded launch.
+
+Wall runtime including startup and cleanup was 11,875.774 s (3 h 17 min 56 s).
+Boot recovered from one virtual-disk read timeout. Shutdown used SIGTERM for
+remaining ROS/Gazebo children after their initial signal timeout; gem5 finished
+cleanly, final memory records were saved, and all fixed sockets were released.
+Neither event invalidated the scored throw or its measurements. Simulator,
+kernel, guest bundle, runner/installed artifacts and base-image metadata matched
+the saved execution provenance (`cb2591d`).
+
+The evaluation is saved as `results/timing-validation-launch-fixed/evaluation.json`,
+and the regenerated `dashboard.html` contains the catch, motion replay, memory
+metrics and explicit unrecorded guest details. Offline report checks passed
+eight tests and a DOM check using the actual dashboard data. This run qualifies
+the 480×360, 30/30/250 Hz configuration for coarse interference comparisons.
+Use its fixed geometry, diagnostics, hardware and coupling settings for the
+next random-traffic pressure points, initially 75% and 125% of the cached
+calibrated capacity. One successful disabled-aggressor throw is the baseline;
+the interference failure boundary remains to be measured.
