@@ -18,7 +18,7 @@ import tarfile
 import time
 
 from benchmark_metrics import command_metrics, memory_metrics, read_stats, controller_counters
-from benchmark_status import check_local_transport, guest_failure, host_failure
+from benchmark_status import check_local_transport, guest_failure, host_failure, launch_failure
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 REPOSITORY = WORKSPACE.parents[1]
@@ -485,6 +485,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
         try:
             while process.poll() is None:
                 now = time.monotonic()
+                failure = launch_failure(directory / 'launch_validation.json')
+                if failure:
+                    raise RuntimeError(failure + '; inspect launch_validation.json and ground_truth.csv')
                 if now >= next_guest_check and not (directory / 'result.json').exists():
                     failure = guest_failure(roi / 'board.pc.com_1.device')
                     if failure:
@@ -501,8 +504,13 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                 if time.monotonic() - started > fixed['wall_timeout_s']:
                     raise TimeoutError('Attempt exceeded wall time; inspect logs')
                 time.sleep(.01)
+            failure = launch_failure(directory / 'launch_validation.json')
+            if failure:
+                raise RuntimeError(failure + '; inspect launch_validation.json and ground_truth.csv')
             if not (directory / 'result.json').exists():
-                failure = guest_failure(roi / 'board.pc.com_1.device') or host_failure(directory / 'launch.log')
+                failure = (launch_failure(directory / 'launch_validation.json')
+                           or guest_failure(roi / 'board.pc.com_1.device')
+                           or host_failure(directory / 'launch.log'))
                 if failure:
                     raise RuntimeError('Co-simulation failed: ' + failure)
                 raise RuntimeError('Co-simulation exited without task result; inspect launch.log and guest serial')

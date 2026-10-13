@@ -98,6 +98,16 @@ def test_deadline_miss_does_not_become_a_successful_flight_window(tmp_path):
     assert summary['cup_displacement_to_flight_end'] is None
 
 
+def test_invalid_launch_cannot_be_reported_as_a_completed_task_miss(tmp_path):
+    write_trial(tmp_path, success=False)
+    raw_result = (tmp_path / 'result.json').read_bytes()
+    (tmp_path / 'launch_validation.json').write_text(
+        '{"valid":false,"reason":"launch_pose_or_velocity_reset"}')
+    with pytest.raises(ValueError, match='Invalid ball launch'):
+        load_trial(tmp_path)
+    assert (tmp_path / 'result.json').read_bytes() == raw_result
+
+
 def test_dashboard_embeds_cup_report_and_assets(tmp_path):
     write_trial(tmp_path)
     destination = create_dashboard([tmp_path], tmp_path/'dashboard.html')

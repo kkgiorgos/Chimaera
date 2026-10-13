@@ -9,6 +9,7 @@
 #include <ignition/gazebo/Link.hh>
 #include <ignition/gazebo/Model.hh>
 #include <ignition/gazebo/System.hh>
+#include <ignition/gazebo/components/Gravity.hh>
 #include <ignition/gazebo/components/Joint.hh>
 #include <ignition/gazebo/components/JointForceCmd.hh>
 #include <ignition/gazebo/components/JointPosition.hh>
@@ -50,12 +51,14 @@ public:
   }
 
   void Configure(
-    const gz::Entity &, const std::shared_ptr<const sdf::Element> & sdf,
-    gz::EntityComponentManager &, gz::EventManager & events) override
+    const gz::Entity & world, const std::shared_ptr<const sdf::Element> & sdf,
+    gz::EntityComponentManager & ecm, gz::EventManager & events) override
   {
     events_ = &events;
     initial_ = sdf->Get<Vector>("launch_position");
     velocity_ = sdf->Get<Vector>("launch_velocity");
+    if (const auto gravity = ecm.Component<gz::components::Gravity>(world))
+      gravity_ = gravity->Data();
     radius_ = sdf->Get<double>("cup_radius");
     depth_ = sdf->Get<double>("cup_depth");
     duration_ = sdf->Get<double>("duration");
@@ -136,8 +139,15 @@ public:
 
   void PreUpdate(const gz::UpdateInfo & info, gz::EntityComponentManager & ecm) override
   {
-    if (info.paused) return;
     const double now = std::chrono::duration<double>(info.simTime).count();
+    // Physics applies commands even during paused updates. After the launch
+    // step it retains the pose command and zeros the velocity command. Clear
+    // both before the first paused callback can reset the free ballistic flight.
+    if (launched_ && (info.paused || now > launchTime_)) {
+      ecm.RemoveComponent<gz::components::LinearVelocityCmd>(ball_.Entity());
+      ecm.RemoveComponent<gz::components::WorldPoseCmd>(ballModel_.Entity());
+    }
+    if (info.paused) return;
     if (!initialized_) {
       auto armEntity = ecm.EntityByComponents(gz::components::Model(), gz::components::Name("fr3"));
       auto ballEntity =
@@ -161,12 +171,6 @@ public:
     }
     std::lock_guard<std::mutex> lock(mutex_);
     worldTime_ = now;
-    // Fortress clears velocity commands to zero but leaves the component:
-    // remove it after the launch step so subsequent motion is free ballistic.
-    if (launched_ && now > launchTime_) {
-      ecm.RemoveComponent<gz::components::LinearVelocityCmd>(ball_.Entity());
-      ecm.RemoveComponent<gz::components::WorldPoseCmd>(ballModel_.Entity());
-    }
     for (size_t i = 0; i < names_.size(); ++i) {
       const double stamp = commandTime_;
       const double torque = now - stamp <= 0.1 && stamp <= now + 0.002 ? torque_[i] : 0;
@@ -218,6 +222,38 @@ public:
       std::lock_guard<std::mutex> lock(mutex_);
       launched = launched_;
     }
+    const Vector bv = ball_.WorldLinearVelocity(ecm).value_or(Vector::Zero);
+    if (launched && !launchChecked_ && now > launchTime_) {
+      launchChecked_ = true;
+      const double step = std::chrono::duration<double>(info.dt).count();
+      const double elapsed = now - launchTime_ + step;
+      const Vector expectedVelocity = velocity_ + gravity_ * elapsed;
+      const Vector expectedPosition =
+        initial_ + velocity_ * elapsed + gravity_ * (.5 * elapsed * (elapsed + step));
+      const bool valid =
+        (bv - expectedVelocity).Length() <= .02 && (bp->Pos() - expectedPosition).Length() <= .002;
+      if (!output_.empty()) {
+        std::ofstream validation(output_ + "/launch_validation.json");
+        validation << std::boolalpha << std::setprecision(17) << "{\"valid\":" << valid
+                   << ",\"launch_time\":" << launchTime_ << ",\"checked_at\":" << now
+                   << ",\"reason\":\""
+                   << (valid ? "ballistic_launch_verified" : "launch_pose_or_velocity_reset")
+                   << "\",\"expected_velocity_mps\":[" << expectedVelocity.X() << ','
+                   << expectedVelocity.Y() << ',' << expectedVelocity.Z()
+                   << "],\"observed_velocity_mps\":[" << bv.X() << ',' << bv.Y() << ',' << bv.Z()
+                   << "],\"expected_position_m\":[" << expectedPosition.X() << ','
+                   << expectedPosition.Y() << ',' << expectedPosition.Z()
+                   << "],\"observed_position_m\":[" << bp->Pos().X() << ',' << bp->Pos().Y() << ','
+                   << bp->Pos().Z() << "]}\n";
+      }
+      if (!valid) {
+        finished_ = true;
+        if (samples_) samples_.flush();
+        events_->Emit<gz::events::Pause>(true);
+        RCLCPP_ERROR(node_->get_logger(), "Invalid ball launch: pose or velocity reset");
+        return;
+      }
+    }
     // Track containment at every physics step. Evaluate on the first step at
     // the deadline, even when it falls between normal 250 Hz feedback samples.
     const auto evaluation = launched ? score_->Update(inside, now, launchTime_) : std::nullopt;
@@ -243,7 +279,6 @@ public:
     truth.pose.position.z = bp->Pos().Z();
     truth.pose.orientation.w = 1;
     truth_->publish(truth);
-    const Vector bv = ball_.WorldLinearVelocity(ecm).value_or(Vector::Zero);
     if (samples_) {
       samples_ << std::setprecision(10) << now << ',' << bp->Pos().X() << ',' << bp->Pos().Y()
                << ',' << bp->Pos().Z() << ',' << cp->Pos().X() << ',' << cp->Pos().Y() << ','
@@ -289,7 +324,7 @@ private:
   gz::EventManager * events_{};
   gz::Model ballModel_;
   gz::Link ball_, cup_;
-  Vector initial_, velocity_;
+  Vector initial_, velocity_, gravity_{0, 0, -9.81};
   double duration_{2}, radius_{0.12}, depth_{0.14};
   double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
   double feedbackPeriod_{.004}, warmup_{0}, readySince_{-1}, worldTime_{0};
@@ -299,7 +334,7 @@ private:
   bool loggedReady_{false}, loggedCameras_{false};
   std::optional<DeadlineScore> score_;
   bool initialized_{false}, auto_{true}, ready_{false}, cameras_{false}, requested_{false};
-  bool launched_{false}, finished_{false};
+  bool launched_{false}, launchChecked_{false}, finished_{false};
   std::mutex mutex_;
   std::string output_;
   std::ofstream samples_;

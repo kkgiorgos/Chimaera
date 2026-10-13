@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 import time
 
-from benchmark_status import guest_failure, host_failure
+from benchmark_status import guest_failure, host_failure, launch_failure
 
 
 def read_json(path):
@@ -107,7 +107,8 @@ def snapshot(path, case='case-003'):
         elapsed = max(0, state.get('simulated_seconds', 0) - launch['launch_time'])
         state.update(throw_seconds=elapsed, duration_seconds=duration,
                      throw_percent=min(100, 100 * elapsed / duration) if duration and duration > 0 else None)
-    if type(result.get('success')) is bool:
+    launch_error = launch_failure(attempt / 'launch_validation.json')
+    if type(result.get('success')) is bool and not launch_error:
         state.update(phase='Task scored', outcome='CATCH' if result['success'] else 'MISS')
     if point.get('reason'):
         state['reason'] = point['reason']
@@ -118,6 +119,8 @@ def snapshot(path, case='case-003'):
         reason = state.get('reason', failure) if guest_error else failure
         state.update(status='infrastructure_failure', phase=phase, reason=reason,
                      host_running_after_guest_failure=point.get('status') == 'running')
+    if launch_error:
+        state.update(status='infrastructure_failure', phase='Ball launch failed', reason=launch_error)
     return state
 
 

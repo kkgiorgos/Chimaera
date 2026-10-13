@@ -221,6 +221,43 @@ def test_guest_failure_stops_attempt_without_waiting_for_wall_timeout(tmp_path, 
     assert not (directory / 'benchmark.json').exists()
 
 
+@pytest.mark.parametrize('scored', [False, True])
+@pytest.mark.parametrize('exited', [False, True])
+def test_invalid_launch_stops_without_accepting_a_task_miss(tmp_path, monkeypatch, scored, exited):
+    from types import SimpleNamespace
+    import ball_catching_sim.scene
+    import run_memory_suite as runner
+    data = load(tmp_path, configuration(tmp_path))
+    directory = tmp_path / 'case-000-attempt-001'
+    stopped = []
+
+    class RunningHost:
+        def __init__(self, *args, **kwargs):
+            (directory / 'launch.json').write_text('{"launch_time":0.5}')
+            (directory / 'launch_validation.json').write_text(
+                '{"valid":false,"reason":"launch_pose_or_velocity_reset"}')
+            if scored:
+                (directory / 'result.json').write_text('{"success":false}')
+
+        def poll(self):
+            return 0 if exited else None
+
+    monkeypatch.setattr(ball_catching_sim.scene, 'generate', lambda *args, **kwargs: (
+        None, tmp_path / 'robot.urdf', None, {'focal': 640}))
+    monkeypatch.setattr(runner, 'session', lambda *args: {})
+    monkeypatch.setattr(runner.subprocess, 'Popen', RunningHost)
+    monkeypatch.setattr(runner, 'stop', lambda process: stopped.append(process))
+    monkeypatch.setattr(runner, 'timing_command', lambda *args: pytest.fail('Do not measure an invalid throw'))
+    args = SimpleNamespace(image=tmp_path / 'image', kernel=tmp_path / 'kernel',
+                           gem5_root=tmp_path / 'gem5')
+    with pytest.raises(RuntimeError, match='Invalid ball launch: launch_pose_or_velocity_reset'):
+        runner.gem5_trial(directory, tmp_path, data, plan(data)[0], args, {}, tmp_path / 'guest.tar.gz')
+    assert len(stopped) == 1
+    assert not (directory / 'benchmark.json').exists()
+    if scored:
+        assert json.loads((directory / 'result.json').read_text()) == {'success': False}
+
+
 def test_host_truth_and_throw_settings_never_cross_bridge():
     topic_routes = routes()['topics']
     assert len(topic_routes) == 7

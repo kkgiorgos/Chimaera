@@ -19,10 +19,16 @@ ament_python_install_package(${PROJECT_NAME})
 install(TARGETS ball_catching_host LIBRARY DESTINATION lib)
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
   enable_testing()
   add_executable(scoring_test test/scoring.cpp)
   target_include_directories(scoring_test PRIVATE include)
   target_compile_options(scoring_test PRIVATE -UNDEBUG)
   add_test(NAME scoring COMMAND scoring_test)
+  add_test(NAME launch_stepping COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/launch_stepping.py
+    --plugin-dir $<TARGET_FILE_DIR:ball_catching_host>
+    --output ${CMAKE_CURRENT_BINARY_DIR}/launch-stepping-validation --require-validation)
+  set_tests_properties(launch_stepping PROPERTIES TIMEOUT 120)
 endif()
 ament_package()

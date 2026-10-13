@@ -141,21 +141,21 @@ Prepare after building and sourcing both overlays:
 python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type timing --case case-000 \
   --config ros/ball_catching_ws/experiments/memory_contention_timing_validation.json \
-  --output ros/ball_catching_ws/results/timing-validation-480-dds8-12h
+  --output ros/ball_catching_ws/results/timing-validation-launch-fixed
 ```
 
 The prepared run executes two simulated seconds after launch, with a twelve-hour
 wall limit covering boot, readiness and the throw. Run from the repository root:
 
 ```bash
-bash ros/ball_catching_ws/results/timing-validation-480-dds8-12h/run.sh
+bash ros/ball_catching_ws/results/timing-validation-launch-fixed/run.sh
 ```
 
 Track progress in another terminal; this requires no ROS setup:
 
 ```bash
 python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
-  ros/ball_catching_ws/results/timing-validation-480-dds8-12h --case case-000
+  ros/ball_catching_ws/results/timing-validation-launch-fixed --case case-000
 ```
 
 The monitor reports simulated time, separate arm/fresh-camera readiness, sampled
@@ -173,6 +173,14 @@ budgets; an increased limit requires a fresh directory and a restarted run.
 The original `timing-validation-480-dds8` directory therefore retains its
 four-hour limit. Stop its running invocation before starting the twelve-hour
 replacement above.
+
+The host verifies the initial free flight on the first physics step after launch,
+using the requested pose/velocity and world gravity. Tolerances are 2 mm in
+position and 0.02 m/s in velocity. `launch_validation.json` records the requested
+and observed state. A mismatch pauses physics and produces no task score; the
+suite stops, the monitor reports a launch failure, and reporting rejects an
+invalid throw. These privileged checks remain on the host. They add no guest
+inputs and keep their settings fixed across interference points.
 
 ## Timing versus O3 comparison
 
@@ -430,9 +438,17 @@ colcon --log-base ros/chimaera_ros_ws/log test \
 colcon --log-base ros/chimaera_ros_ws/log test-result \
   --test-result-base ros/chimaera_ros_ws/build --verbose
 node --check ros/ball_catching_ws/dashboard/memory_comparison.js
+ctest --test-dir ros/ball_catching_ws/build/ball_catching_sim --output-on-failure
 ```
 
 Full simulation outcomes are separate from unit and transport checks.
+
+The simulation package's `launch_stepping` test checks real Fortress continuous,
+batched and individually paused physics updates without booting gem5 or running
+robot computation. An injected velocity controller also checks that a broken
+launch stops before scoring. Source and diagnostics are in
+[`launch_stepping.py`](../ros/ball_catching_ws/src/ball_catching_sim/test/launch_stepping.py)
+and `build/ball_catching_sim/launch-stepping-validation/`.
 
 ### Local validation, 2026-10-12
 
@@ -682,3 +698,46 @@ The single Timing baseline is prepared under
 `results/timing-validation-480-dds8`; preparation runs no simulator. The full
 guest validation is delegated to the user with the launch and monitoring commands
 above. Its outcome and memory measurements remain pending.
+
+### Paused launch repair, 2026-10-13
+
+The twelve-hour Timing attempt completed its two-second throw after about
+2 h 56 min of wall time. At launch (0.5285 s), the ball had the requested
+velocity: approximately (-1.342, 0, 2.678) m/s after gravity for one physics step.
+One millisecond later its velocity was (0, 0, -0.00981) m/s and its x position
+had returned to 1.8 m. It fell vertically outside the arm's interception
+workspace. The guest delivered 444 effort commands, and sampled image results
+were about 40 ms old, within their 66.667 ms budget. The raw scorer reported
+`outside_cup_at_deadline`; this is an invalid launch, not evidence of the robot's
+memory-interference boundary.
+
+Fortress applies physics commands during paused callbacks even though it skips
+integrating time; its velocity-command component remains present with zero data
+after the launch step. See the upstream
+[Physics implementation](https://github.com/gazebosim/gz-sim/blob/ign-gazebo6/src/systems/physics/Physics.cc).
+The host's cleanup previously returned early on every paused callback. It now
+removes both launch command components before that return. Continuous and
+batched execution had masked the issue because cleanup ran before the next
+physics update.
+
+A short native regression reproduced the velocity reset with individually
+paused steps and passed with continuous and batched execution before the fix.
+All three modes preserve the requested ballistic trajectory after the fix.
+An injected velocity override is rejected within one further 0.5 ms physics
+step and produces no catch/miss score. Both simulation CTest suites and all
+84 ball-catching Python checks passed. The unchanged native 480×360, 30 Hz
+throw caught the ball with a verified launch after the repair.
+
+The old attempt remains under `results/timing-validation-480-dds8-12h`, including
+its raw scorer, DRAM records and logs. An offline launch-validation record marks
+it invalid; its suite/dashboard now show an infrastructure failure and retain
+the attempt name in `invalid_trials`. The previous manifest is saved alongside
+it. Regression records are under `results/timing-recovery-20261013/launch-stepping-before`,
+`build/ball_catching_sim/launch-stepping-validation`,
+`results/timing-recovery-20261013/launch-stepping-after`, and
+`results/timing-recovery-20261013/native-480-camera30-launch-fixed`.
+
+A fresh environment is prepared in `results/timing-validation-launch-fixed`
+with the same Timing hardware, camera/freshness settings, disabled aggressor and
+twelve-hour wall budget. Full guest execution after this repair awaits the user;
+the agent has not started that run.

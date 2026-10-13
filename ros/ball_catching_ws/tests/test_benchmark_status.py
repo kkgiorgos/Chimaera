@@ -42,3 +42,14 @@ def test_preflight_stops_before_output_or_simulation(tmp_path, monkeypatch, caps
     assert 'Local Chimaera socket paths already exist' in capsys.readouterr().err
     assert not output.exists()
     assert path.read_bytes() == b'occupied'
+
+
+def test_launch_validation_distinguishes_failed_and_incomplete_checks(tmp_path):
+    path = tmp_path / 'launch_validation.json'
+    assert benchmark_status.launch_failure(path) is None
+    path.write_text('{"valid":')
+    assert benchmark_status.launch_failure(path) is None
+    path.write_text('{"valid":true,"reason":"ballistic_launch_verified"}')
+    assert benchmark_status.launch_failure(path) is None
+    path.write_text('{"valid":false,"reason":"launch_pose_or_velocity_reset"}')
+    assert benchmark_status.launch_failure(path) == 'Invalid ball launch: launch_pose_or_velocity_reset'

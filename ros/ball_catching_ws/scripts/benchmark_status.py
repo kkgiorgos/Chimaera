@@ -1,4 +1,5 @@
 """Local transport preflight and explicit co-simulation failure diagnostics."""
+import json
 import re
 from pathlib import Path
 
@@ -37,3 +38,14 @@ def host_failure(path):
     return explicit_failure(path, (
         r'^\[[^\r\n]+\] .*\b(?:panic|fatal): .+\r?$',
         r'^\[[^\r\n]+\] Host bridge: .+\r?$'))
+
+
+def launch_failure(path):
+    """A broken physical throw is an infrastructure failure, not a task miss."""
+    try:
+        validation = json.loads(Path(path).read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    if isinstance(validation, dict) and validation.get('valid') is False:
+        return 'Invalid ball launch: ' + str(validation.get('reason', 'launch validation failed'))
+    return None

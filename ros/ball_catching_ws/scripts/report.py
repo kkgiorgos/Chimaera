@@ -10,6 +10,7 @@ from pathlib import Path
 import statistics
 
 from replay_assets import export_robot_assets
+from benchmark_status import launch_failure
 
 
 def _records(path):
@@ -38,6 +39,9 @@ def _cadence(records, field):
 
 def load_trial(directory):
     directory = Path(directory)
+    failure = launch_failure(directory / 'launch_validation.json')
+    if failure:
+        raise ValueError(failure + ': ' + str(directory))
     result = json.loads((directory / 'result.json').read_text())
     config = json.loads((directory / 'experiment.json').read_text())
     initial = config['initial_pose']

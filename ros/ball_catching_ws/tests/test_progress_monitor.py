@@ -103,3 +103,18 @@ def test_boot_panic_replaces_an_uninformative_saved_reason(tmp_path):
     assert state['phase'] == 'Co-simulation component failed'
     assert state['reason'] == failure
     assert 'outcome' not in state
+
+
+def test_invalid_launch_does_not_display_a_raw_scorer_miss(tmp_path):
+    attempt = tmp_path / 'case-003-attempt-001'
+    attempt.mkdir()
+    (tmp_path / 'experiment_manifest.json').write_text(json.dumps(dict(
+        points=[dict(id='case-003', status='complete')])))
+    (attempt / 'result.json').write_text('{"success":false}')
+    (attempt / 'launch_validation.json').write_text(
+        '{"valid":false,"reason":"launch_pose_or_velocity_reset"}')
+    state = snapshot(tmp_path)
+    assert state['status'] == 'infrastructure_failure'
+    assert state['phase'] == 'Ball launch failed'
+    assert 'outcome' not in state
+    assert 'Result: MISS' not in display(state)
