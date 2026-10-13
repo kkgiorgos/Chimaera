@@ -108,6 +108,23 @@ def test_invalid_launch_cannot_be_reported_as_a_completed_task_miss(tmp_path):
     assert (tmp_path / 'result.json').read_bytes() == raw_result
 
 
+@pytest.mark.parametrize('recorded', [False, True])
+def test_missing_guest_logs_are_distinct_from_recorded_zero_counts(tmp_path, recorded):
+    write_trial(tmp_path)
+    for name in ('perception.jsonl', 'interception.jsonl'):
+        if recorded:
+            (tmp_path / name).write_text('')
+        else:
+            (tmp_path / name).unlink()
+    summary = load_trial(tmp_path)['summary']
+    if recorded:
+        assert summary['perception_counts'] == dict(pairs=0, detected=0, tracked=0)
+        assert summary['planning_counts'] == dict(updates=0, planned=0, infeasible=0)
+    else:
+        assert summary['perception_counts'] is None
+        assert summary['planning_counts'] is None
+
+
 def test_dashboard_embeds_cup_report_and_assets(tmp_path):
     write_trial(tmp_path)
     destination = create_dashboard([tmp_path], tmp_path/'dashboard.html')

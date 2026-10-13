@@ -139,9 +139,11 @@ def load_trial(directory):
                    timing_detail=details,
                    perception_counts=dict(pairs=len(perception),
                                           detected=sum('observation' in r for r in perception),
-                                          tracked=len(tracked)),
+                                          tracked=len(tracked))
+                       if (directory / 'perception.jsonl').exists() else None,
                    planning_counts=dict(updates=len(plans), planned=len(actual_plans),
-                                        infeasible=sum(r.get('status') == 'no_feasible_intercept' for r in plans)),
+                                        infeasible=sum(r.get('status') == 'no_feasible_intercept' for r in plans))
+                       if (directory / 'interception.jsonl').exists() else None,
                    home_error_at_launch_degrees=math.degrees(home_error) if home_error is not None else None,
                    braking_start_seconds=braking['braking_start_time']-launch if braking else None,
                    braking_end_seconds=braking['braking_end_time']-launch if braking else None,
