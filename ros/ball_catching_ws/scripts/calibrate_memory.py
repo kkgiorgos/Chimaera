@@ -1,6 +1,7 @@
 """gem5 config: calibrate the independent device with an idle guest port."""
 import argparse
 import json
+import math
 from pathlib import Path
 
 import m5
@@ -17,7 +18,11 @@ parser.add_argument('--window', type=int, default=268435456)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--warmup-ns', type=int, default=100000)
 parser.add_argument('--duration-ns', type=int, default=1000000)
+parser.add_argument('--offered-gbps', type=float, default=0,
+                    help='Optional paced demand for rate validation; zero calibrates the unpaced source')
 args = parser.parse_args()
+if not math.isfinite(args.offered_gbps) or args.offered_gbps < 0:
+    parser.error('offered-gbps must be finite and nonnegative')
 m5.ticks.setGlobalFrequency('1THz')
 system = System(mem_mode='timing', mem_ranges=[AddrRange('3GiB')])
 system.clk_domain = SrcClockDomain(clock='3GHz', voltage_domain=VoltageDomain())
@@ -26,6 +31,7 @@ system.system_port = system.membus.cpu_side_ports
 system.memory = Ramulator2(range=system.mem_ranges[0],
     ramulator_config=Path(args.config).read_text(), aggressor_pattern=args.pattern,
     aggressor_interval=1, aggressor_backpressure=True,
+    aggressor_gbps=args.offered_gbps,
     aggressor_read_percent=args.read_percent, aggressor_stride=args.stride,
     aggressor_max_pending=args.max_pending, aggressor_window=args.window,
     aggressor_seed=args.seed)

@@ -145,9 +145,13 @@ Ramulator2Base::injectAggressor()
     if (!aggressorHeld) {
         const double spacing = aggressorGbps > 0 ?
             bytes / (aggressorGbps * clockPeriod / 1000.0) : aggressorInterval;
-        // Never accumulate unbounded catch-up work while the device is stalled.
+        // Preserve fractional deadlines when rounding offers to controller
+        // cycles. Clamping to cycle + 1 discards fractional credit, making
+        // distinct offered rates (e.g. 75% and 90%) produce identical traffic.
+        // Cap overdue work at the current cycle after a stall, so catch-up
+        // remains bounded to one request per cycle.
         aggressorNextOffer = std::max(aggressorNextOffer + spacing,
-                                     static_cast<double>(cycle) + 1);
+                                     static_cast<double>(cycle));
     }
 }
 
