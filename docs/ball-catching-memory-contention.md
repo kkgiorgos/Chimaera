@@ -7,6 +7,13 @@ operating boundary, with no statistical reliability claim. Container execution
 is a later step; configuration, per-attempt records and the report remain
 independent of the local execution backend.
 
+Docker preparation and isolated parallel workers are now available through the
+[ball-catching container workflow](../containers/ball-catching/README.md). Its
+[pattern preset](../ros/ball_catching_ws/experiments/memory_contention_patterns.json)
+uses the qualified single 3 m/s throw with one shared no-aggressor baseline and
+stream/stride/random traffic at 50%, 80% and 90% of per-pattern calibration.
+Preparation does not run robot benchmark cases.
+
 Local Gazebo, its ROS bridge and the Chimaera host bridge use `IGN_IP=127.0.0.1`.
 This restricts discovery to loopback and prevents unrelated Docker network
 removal from invalidating discovery sockets during a long run. The native
@@ -1176,3 +1183,65 @@ The parser/report/telemetry checks pass 76 tests, including scientific labels,
 duplicate rounded labels, final-snapshot selection, invalid bins and true sample
 count mismatches. The actual-data dashboard is checked separately before handoff.
 These two catches do not establish reliability or locate the failure boundary.
+
+### Docker integration and fractional pacing, 2026-10-14
+
+The user's remaining local 90% case completed with a verified launch and **CATCH**,
+0.532 s of final containment and a 1.5005 s memory window. It retained 1,820,938
+guest read samples: admission-inclusive mean 78.522950 ns, p95 143 ns and p99
+387 ns. Timing correspondence is partial by one final command (218/219), and
+the dashboard keeps that limitation visible. These records remain under
+`results/memory-orin-demo-warmup0-90` with their original execution provenance.
+
+Checking achieved bandwidth exposed a source pacing bug: both the nominal 75%
+and 90% random-traffic cases accepted about 34.131 GB/s despite different offered
+rates. After accepting a request, the old deadline update clamped fractional
+deadlines to the next integer controller cycle. This repeatedly discarded
+fractional credit and made distinct pressures issue the same traffic. The fix
+preserves fractional deadlines while clamping overdue work at the current cycle;
+issue remains bounded to one request per cycle, and admission backpressure still
+retains pending work. Historical results describe their recorded achieved traffic
+and are not reinterpreted as accurate nominal-load comparisons.
+
+The rebuilt simulator passes memory-only stream pacing checks at the new levels:
+
+| Pressure | Offered GB/s | Accepted GB/s |
+| --- | ---: | ---: |
+| 50% | 25.600384 | 25.600384 |
+| 80% | 40.9606144 | 40.960640 |
+| 90% | 46.0806912 | 46.080640 |
+
+All relative errors are below 0.000112%, against the 0.5% regression tolerance.
+The gate would reject the old quantized rates and is included in Docker
+preparation. Seven Ramulator integration cases passed: single/vector correctness,
+all three patterns, backpressure/retries and aggressor draining. No full-system
+guest benchmark was used for these checks. The calibrated stream/stride/random
+capacities are 51.200768/20.060352/50.453568 GB/s. They measure the bounded source
+and controller together; the source's one-request-per-cycle ceiling can limit
+throughput before the theoretical 204.8 GB/s bus peak.
+
+The Docker workflow builds an application image over the shared SDK, resolves
+installed package prefixes for guest staging and launcher setup, freezes host
+scripts and memory configuration, calibrates each pattern once and stages one
+guest bundle. Every case has its own private network/IPC, `/tmp` sockets and
+output directory. The generic scheduler controls concurrency and pins the image
+ID. Read-only disk/kernel inputs and per-simulation COW overlays preserve the
+existing Ubuntu 22.04 / ROS Humble guest. Workers keep strict configuration and
+execution-provenance resume checks. A supplied source revision permits frozen
+exports to run without a mounted Git checkout.
+
+Real Docker probes confirmed that two concurrent workers can bind the same three
+Chimaera socket names independently, that inputs are read-only, and that KVM and
+all four ROS packages are available. The full-system configuration instantiated
+at **tick zero** with four Timing cores and no simulation. A short native Docker
+throw also produced **CATCH**, with a verified launch and 0.5315 s containment.
+This smoke test checks Gazebo/application dependencies; it is not a coupled
+gem5 result. Records are under `results/docker-integration-20261014`.
+
+The host workflow tests passed 148 checks, including the ten-case matrix, single
+baseline, frozen-input validation, portable package prefixes, worker reuse/resume,
+isolated Docker commands, aggregate failure handling and fractional-rate gating.
+Preparation/reporting and actual worker handoff are checked separately in Docker.
+The final prepared suite remains entirely pending; no full benchmark is started
+by the agent. Run/monitor/report and image-transfer commands are in the container
+README. Full coupled validation remains user-run on the larger system.

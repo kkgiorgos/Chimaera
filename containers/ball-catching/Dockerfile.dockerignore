@@ -1,0 +1,12 @@
+**
+!ros/
+!ros/franka_ws/
+!ros/franka_ws/src/
+!ros/franka_ws/src/franka_description/
+!ros/franka_ws/src/franka_description/**
+!ros/ball_catching_ws/
+!ros/ball_catching_ws/src/
+!ros/ball_catching_ws/src/**
+**/.git
+**/__pycache__
+**/*.pyc

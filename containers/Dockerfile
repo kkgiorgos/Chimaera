@@ -1,4 +1,5 @@
 ARG BASE_IMAGE=ubuntu:22.04@sha256:281c5745f657873d78e5531fc5ba8575f46ab7769b94550ac99543f122679986
+ARG GEM5_STAGE=gem5-build
 FROM ${BASE_IMAGE} AS dependencies
 ARG STACK_PROFILE=jammy-humble-fortress
 ARG ROS_DISTRO=humble
@@ -18,7 +19,19 @@ COPY containers/scripts/compile-gem5.sh /opt/chimaera/scripts/compile-gem5.sh
 RUN --mount=type=cache,id=chimaera-${STACK_PROFILE}-compile,target=/var/cache/chimaera,sharing=locked \
     /bin/bash /opt/chimaera/scripts/compile-gem5.sh "${BUILD_JOBS}"
 
-FROM gem5-build AS bridge-build
+# Optional reuse of already built, compatible Ubuntu 22.04 artifacts. The
+# default still builds gem5 from source; this stage avoids recompiling it locally.
+FROM dependencies AS gem5-prebuilt
+COPY --from=gem5-artifacts / /opt/chimaera/
+COPY gem5/include/ /src/gem5/include/
+COPY gem5/util/m5/src/ /src/gem5/util/m5/src/
+ENV LD_LIBRARY_PATH=/opt/chimaera/ramulator2
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      libhdf5-103-1 libhdf5-cpp-103-1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && /opt/chimaera/gem5/build/X86/gem5.opt --build-info
+
+FROM ${GEM5_STAGE} AS bridge-build
 COPY gem5-transport/ /src/gem5-transport/
 COPY ros/chimaera_ros_ws/src/ /src/ros/chimaera_ros_ws/src/
 RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
@@ -37,7 +50,7 @@ RUN python3 -c 'import json,pathlib; p=pathlib.Path("/opt/chimaera"); (p/"build-
 # identical environment and export an overlay via a bind mount.
 FROM bridge-build AS image
 COPY containers/scripts/entrypoint.sh /opt/chimaera/scripts/entrypoint.sh
-ENV ROS_LOCALHOST_ONLY=1
+ENV ROS_LOCALHOST_ONLY=1 LD_LIBRARY_PATH=/opt/chimaera/ramulator2
 WORKDIR /tmp
 ENTRYPOINT ["/bin/bash", "/opt/chimaera/scripts/entrypoint.sh"]
 CMD ["/bin/bash"]

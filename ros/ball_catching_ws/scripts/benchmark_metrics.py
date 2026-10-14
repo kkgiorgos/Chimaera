@@ -4,9 +4,6 @@ from decimal import Decimal, InvalidOperation
 import math
 from pathlib import Path
 
-import yaml
-
-
 def read_stats(path):
     text = Path(path).read_text()
     blocks = text.split('---------- Begin Simulation Statistics ----------')
@@ -37,6 +34,7 @@ def percentile(histogram, fraction):
 
 def controller_counters(path):
     """Only physically served commands contribute to DRAM bus bandwidth."""
+    import yaml
     result = dict(read=0, write=0)
     def visit(value):
         if isinstance(value, list):

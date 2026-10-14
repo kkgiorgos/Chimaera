@@ -2,6 +2,8 @@
 
 For local gem5/Ramulator interference experiments, see the
 [memory benchmark guide](../../docs/ball-catching-memory-contention.md).
+For portable isolated workers and the 50/80/90% access-pattern suite, see the
+[Docker workflow](../../containers/ball-catching/README.md).
 
 ROS 2 Humble / Gazebo Fortress application using the upstream FR3 arm with a
 rigid cup, stereo RGB perception, ballistic flight estimation, interception and

@@ -64,6 +64,29 @@ def test_demo_profile_sweeps_only_pressure_with_a_matching_zero_warmup_baseline(
     assert all(p['expected_throws'] == 1 for p in points)
 
 
+def test_patterns_profile_has_one_baseline_and_three_pressures_per_pattern():
+    demo = load_config(WORKSPACE / 'experiments/memory_contention_demo.json')
+    data = load_config(WORKSPACE / 'experiments/memory_contention_patterns.json')
+    assert data['patterns'] == ['stream', 'stride', 'random']
+    assert data['pressure'] == [0, .5, .8, .9]
+    assert {k:v for k,v in data.items() if k not in ('patterns', 'pressure')} == {
+        k:v for k,v in demo.items() if k not in ('patterns', 'pressure')}
+    points = plan(data)
+    assert len(points) == 10
+    assert sum(p['pressure'] == 0 for p in points) == 1
+    for pattern in data['patterns']:
+        assert [p['pressure'] for p in points if p['pattern'] == pattern] == [.5, .8, .9]
+
+
+def test_session_uses_the_resolved_package_prefix_for_container_staging(tmp_path, monkeypatch):
+    import ament_index_python.packages
+    from run_memory_suite import session
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: '/opt/container/' + name)
+    data = load_config(WORKSPACE / 'experiments/memory_contention_patterns.json')
+    trees = session(tmp_path, data, plan(data)[0])['deploy']['install_trees']
+    assert trees == [dict(source='/opt/container/ball_catching_robot', destination='app')]
+
+
 def test_baselines_not_duplicated_across_patterns(tmp_path):
     raw = configuration(tmp_path)
     raw['patterns'] = ['stream', 'stride', 'random']
@@ -108,6 +131,7 @@ def test_cpu_override_changes_only_the_fixed_cpu_model(tmp_path):
 
 
 def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_path, monkeypatch):
+    import ament_index_python.packages
     import run_memory_suite as runner
     import report
     config = tmp_path / 'config.json'
@@ -131,9 +155,11 @@ def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_p
     monkeypatch.setattr(runner, 'calibrate', lambda *args: pytest.fail('Preparation must not simulate calibration'))
     monkeypatch.setattr(runner, 'gem5_trial', lambda *args: pytest.fail('Preparation must not boot gem5'))
     monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: '/container/' + name)
     monkeypatch.setattr(runner.subprocess, 'check_output', lambda *args, **kwargs: 'test-revision\n')
     monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
     command = ['run_memory_suite.py', '--prepare-only', '--cpu-type', 'o3', '--case', 'case-003',
+               '--source-revision', 'frozen-source-revision',
                '--config', str(config), '--gem5-root', str(gem5_root), '--output', str(output)]
     monkeypatch.setattr(sys, 'argv', command)
     assert runner.main() == 0
@@ -144,6 +170,10 @@ def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_p
     assert json.loads((output / 'cpu_check.json').read_text())['aggressor']['gbps'] == 0
     script = (output / 'run.sh').read_text()
     assert '--cpu-type o3' in script and '--case case-003' in script and '--resume' in script
+    assert '--source-revision frozen-source-revision' in script
+    assert manifest['provenance']['git_revision'] == 'frozen-source-revision'
+    assert 'source /container/ball_catching_robot/share/ball_catching_robot/local_setup.bash' in script
+    assert 'source /container/chimaera_ros_bridge/share/chimaera_ros_bridge/local_setup.bash' in script
     assert '--prepare-only' not in script
     assert load_config(output / 'prepared_config.json') == load_config(config, 'o3')
     monkeypatch.setattr(sys, 'argv', command + ['--resume'])
@@ -159,6 +189,7 @@ def test_prepare_only_stages_without_launching_and_rejects_a_different_cpu(tmp_p
 
 
 def test_prepared_suite_resumes_into_a_real_trial(tmp_path, monkeypatch):
+    import ament_index_python.packages
     # The previous test checks preparation in isolation; exercise the branch
     # that consumes its manifest and existing guest bundle next.
     import run_memory_suite as runner
@@ -188,6 +219,7 @@ def test_prepared_suite_resumes_into_a_real_trial(tmp_path, monkeypatch):
     monkeypatch.setattr(runner, 'check_local_transport', lambda: None)
     monkeypatch.setattr(runner, 'calibrate', lambda *args: {})
     monkeypatch.setattr(runner, 'execution_fingerprint', lambda: 'installed-artifacts')
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: '/container/' + name)
     monkeypatch.setattr(runner.subprocess, 'check_output', lambda *args, **kwargs: 'test-revision\n')
     monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
     command = ['run_memory_suite.py', '--cpu-type', 'o3', '--case', 'case-003',

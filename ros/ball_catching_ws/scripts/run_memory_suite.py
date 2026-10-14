@@ -254,6 +254,7 @@ def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=F
 
 
 def session(output, data, point, calibration=None):
+    from ament_index_python.packages import get_package_prefix
     fixed = data['fixed']
     robot = robot_command(point, calibration, fixed['image_age_periods'], fixed['image_diagnostics'])
     guest_env = dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu',
@@ -276,7 +277,7 @@ def session(output, data, point, calibration=None):
                     simulation_time_from_readfile=True,
                     startup_timeout_s=fixed['startup_timeout_s'], status_bar=False),
         deploy=dict(guest_root=GUEST_ROOT,
-                    install_trees=[dict(source=str(WORKSPACE / 'install/ball_catching_robot'), destination='app')]))
+                    install_trees=[dict(source=get_package_prefix('ball_catching_robot'), destination='app')]))
 
 
 def guest_dds_profile(segment_bytes):
@@ -555,6 +556,7 @@ def main():
     parser.add_argument('--calibrate-only', action='store_true')
     parser.add_argument('--prepare-only', action='store_true',
                         help='Check artifacts and stage the guest; do not run calibration, gem5 or Gazebo')
+    parser.add_argument('--source-revision', help='Source revision for a frozen export without a Git checkout')
     parser.add_argument('--resume', action='store_true')
     args = parser.parse_args()
     if args.prepare_only and (args.native_preflight or args.calibrate_only):
@@ -621,7 +623,8 @@ def main():
             execution_sha256=execution_fingerprint(),
             image=str(args.image), image_size=args.image.stat().st_size,
             image_mtime_ns=args.image.stat().st_mtime_ns, bundle_sha256=digest(bundle) if bundle else None,
-            git_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPOSITORY, text=True).strip())
+            git_revision=args.source_revision or subprocess.check_output(
+                ['git', 'rev-parse', 'HEAD'], cwd=REPOSITORY, text=True).strip())
         prior = manifest.get('provenance', {})
         for key in ('gem5_sha256', 'kernel_sha256', 'execution_sha256', 'image', 'image_size', 'image_mtime_ns', 'bundle_sha256'):
             if prior.get(key) is not None and prior[key] != provenance[key]:
@@ -635,6 +638,7 @@ def main():
         create_dashboard(completed, output / 'dashboard.html', manifest['points'])
     save()
     if args.prepare_only:
+        from ament_index_python.packages import get_package_prefix
         write_json(output / 'cpu_check.json', dict(hardware=data['hardware'],
             ramulator_config=data['ramulator_config'],
             aggressor=dict(data['aggressor'], pattern='none', interval=1, gbps=0)))
@@ -648,11 +652,14 @@ def main():
                    '--kernel', str(args.kernel), '--output', str(output), '--resume']
         for case in args.case or []:
             command += ['--case', case]
+        if args.source_revision:
+            command += ['--source-revision', args.source_revision]
         run_script = output / 'run.sh'
+        setup = [Path(get_package_prefix(package)) / 'share' / package / 'local_setup.bash'
+                 for package in ('chimaera_ros_bridge', 'franka_description', 'ball_catching_robot', 'ball_catching_sim')]
         run_script.write_text('#!/usr/bin/env bash\nset -eo pipefail\ncd ' + shlex.quote(str(REPOSITORY))
             + '\nsource /opt/ros/humble/setup.bash\n'
-            + 'source ' + shlex.quote(str(REPOSITORY / 'ros/chimaera_ros_ws/install/local_setup.bash')) + '\n'
-            + 'source ' + shlex.quote(str(WORKSPACE / 'install/local_setup.bash')) + '\n'
+            + ''.join('source ' + shlex.quote(str(path)) + '\n' for path in setup)
             + 'exec ' + shlex.join(command) + '\n')
         run_script.chmod(0o755)
         print('Prepared ' + data['hardware']['cpu_type'] + ' guest bundle: ' + str(bundle))
