@@ -53,7 +53,8 @@
         timing(trial?.summary?.processing?.['Perception + estimation']),
         timing(trial?.summary?.processing?.Planning), timing(trial?.summary?.processing?.['Arm control']),
         format(trial?.summary?.observation_age?.p95_ms),
-        finite(benchmark?.wall_seconds) ? `${format(benchmark.wall_seconds / 60)} min` : '—',
+        finite(benchmark?.wall_seconds) ?
+          `${benchmark.wall_seconds_lower_bound ? '≥ ' : ''}${format(benchmark.wall_seconds / 60)} min` : '—',
         trial?.summary?.timing_coverage?.status === 'partial' ?
           `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
           trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked'];
@@ -62,7 +63,8 @@
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';
         row.append(cell);
       }
-      row.title = `Processing clock: ${trial?.summary?.processing_clock || 'not recorded'}; memory: ${benchmark?.memory_profile?.standard || 'see execution configuration'}, peak ${format(benchmark?.peak_gbps)} GB/s`;
+      row.title = `Processing clock: ${trial?.summary?.processing_clock || 'not recorded'}; memory: ${benchmark?.memory_profile?.standard || 'see execution configuration'}, peak ${format(benchmark?.peak_gbps)} GB/s` +
+        (benchmark?.wall_seconds_lower_bound ? '; wall time through last recorded exchange; cleanup/export duration unavailable' : '');
       row.tabIndex = 0;
       row.setAttribute('aria-label', `Inspect ${point.label}`);
       const select = () => el('points').children[data.points.indexOf(point)]?.click();

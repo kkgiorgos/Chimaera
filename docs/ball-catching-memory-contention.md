@@ -201,14 +201,15 @@ aggressor pressure changes across its three cases:
 | --- | --- |
 | `case-000` | Disabled |
 | `case-001` | 75% of calibrated sustainable bandwidth |
-| `case-002` | 125% of calibrated sustainable bandwidth |
+| `case-002` | 90% of calibrated sustainable bandwidth |
 
 Each case has one fixed 3 m/s throw and one binary outcome. The random traffic
 uses 80% reads, a fixed seed, bounded pending work and admission backpressure;
 unaccepted work waits. The percentages describe offered demand relative to the
 aggressor-only calibration, not physical bus occupancy. The previous calibration
-measured 50.453568 GB/s, giving approximately 37.84 and 63.07 GB/s demand for the
-two pressure points. The new suite records its own calibration before running.
+measured 50.453568 GB/s, giving approximately 37.84 and 45.41 GB/s demand for the
+two pressure points. Fresh suites calibrate before running; the continuation
+below reuses the verified saved calibration.
 The dashboard records actual served bandwidth, admission stalls and latency.
 
 The steady aggressor runs from the detailed-simulation origin, including robot
@@ -225,16 +226,16 @@ Prepare after sourcing both overlays; preparation runs no simulation:
 /usr/bin/python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
   --prepare-only --cpu-type timing \
   --config ros/ball_catching_ws/experiments/memory_contention_demo.json \
-  --output ros/ball_catching_ws/results/memory-orin-demo-warmup0
+  --output ros/ball_catching_ws/results/memory-orin-demo-warmup0-90
 ```
 
 Run from the repository root, then monitor in another terminal:
 
 ```bash
-bash ros/ball_catching_ws/results/memory-orin-demo-warmup0/run.sh
+bash ros/ball_catching_ws/results/memory-orin-demo-warmup0-90/run.sh
 
 /usr/bin/python3 ros/ball_catching_ws/scripts/watch_memory_suite.py \
-  ros/ball_catching_ws/results/memory-orin-demo-warmup0
+  ros/ball_catching_ws/results/memory-orin-demo-warmup0-90 --case case-002
 ```
 
 The monitor follows the active case automatically, then the latest attempt.
@@ -242,6 +243,13 @@ Use `--case case-001` to inspect a specific case. The runner executes cases
 serially, saves the dashboard after every outcome and resumes completed cases
 when the same `run.sh` is invoked again. Each attempt has its own twelve-hour
 wall limit. Infrastructure failures stop the suite for inspection.
+
+The prepared local `memory-orin-demo-warmup0-90` continuation imports the completed
+baseline and recovered 75% throw with their original provenance. Its `run.sh`
+selects only `case-002` at 90%. The original suite retains its frozen configuration
+and archived reporting failure; its unrun 125% point is marked skipped at the
+user's request. Use the continuation's launcher to proceed. The two completed
+throws and the memory-only calibration are not repeated.
 
 The host verifies the initial free flight on the first physics step after launch,
 using the requested pose/velocity and world gravity. Tolerances are 2 mm in
@@ -1080,3 +1088,91 @@ demo above is prepared next; its new matching baseline removes the extra hold.
 The agent has not started a full guest run for that demo. This single catch
 qualifies the configuration for a coarse comparison; the interference failure
 boundary remains to be observed.
+
+### Scientific latency labels recovered and 90% continuation, 2026-10-14
+
+The user's first two zero-hold demo throws both produced **CATCH**, verified
+ballistic launches and 0.532 s of final containment. Startup reached readiness
+and launched without the extra 100 ms hold. The 75% case completed simulation,
+then its reporting step failed with `cpuReadTotalLatencyNs sample count mismatch`.
+The suite stopped before the originally planned 125% case. Both scored outcomes
+and their raw guest/memory records remained on disk.
+
+The exact failure was one guest read's long admission-inclusive latency bucket,
+printed by gem5 as `3.74686e+06` ns. The previous parser accepted only digits in
+bucket labels, so it omitted that one sample: 1,850,751 parsed bins versus
+1,850,752 reads. Gem5 had exported the sample correctly; the old suggestion to
+rebuild the simulator was misleading. The parser now accepts scientific and
+decimal integer labels, sums repeated rounded labels directly from the final
+statistics block, and still rejects invalid bins or genuine count mismatches.
+The mean remains calculated from the independent tick sum.
+
+Gem5 samples at 1 ns but its six-significant-digit text labels can lose precision
+for long latencies. Here the rare 3.75 ms label resolves to 10 ns. The benchmark
+records `histogram_label_resolution_ns`, and the dashboard describes this export
+limitation. This sample lies above both percentile thresholds, so the reported
+p95/p99 below do not depend on its rounded coordinate.
+
+| Guest DRAM read cost, including admission waiting | Baseline | 75% aggressor |
+| --- | ---: | ---: |
+| Mean | 77.562504 ns | 80.447173 ns |
+| P95 | 132 ns | 142 ns |
+| P99 | 331 ns | 387 ns |
+| Samples | 1,744,668 | 1,850,752 |
+| Guest admission retries | 0 | 153 |
+| Physically served read/write bandwidth | 0.136502 GB/s | 34.275748 GB/s |
+| Delivered effort cadence | 183.216 Hz | 176.037 Hz |
+
+The 75% point offered 37.840176 GB/s and accepted 34.131342 GB/s of aggressor
+traffic. It recorded 71,257 aggressor blocked attempts/stall cycles; pending work
+waited under congestion. Total physical traffic was 16.736% of the theoretical
+204.8 GB/s peak. Offered pressure is relative to the measured 50.453568 GB/s
+random-traffic capacity, not the theoretical bus peak.
+
+| Guest computation, mean/P95/P99 | Baseline | 75% aggressor |
+| --- | ---: | ---: |
+| Perception + estimation | 25.688 / 28.357 / 29.668 ms | 26.824 / 29.665 / 30.874 ms |
+| Planning | 82.135 / 119.891 / 119.891 ms | 82.968 / 113.145 / 113.145 ms |
+| Arm control | 0.214 / 0.258 / 0.313 ms | 0.220 / 0.288 / 0.314 ms |
+
+These are guest simulation-time costs from received task-window records:
+44 perception and seven planning callbacks in each case, with 274/267 control
+callbacks whose start and completion fall within the respective task windows.
+Timing correspondence separately matches every delivered task command stamp,
+275/275 and 264/264, including timings that started before launch. That check does
+not prove receipt of every record generated by the guest. All stream sequences
+are contiguous. No valid sampled image diagnostic exceeds the 66.667 ms budget;
+the maximum sampled ages were 46.138 and 53.340 ms.
+
+Before changing the parser, the original execution fingerprint, simulator,
+kernel, guest bundle, memory configuration and base-image metadata were checked
+against the saved `4cb3a2a` provenance. Raw CPU/configuration, launch-boundary
+reset, histogram counts, telemetry and independent final cup containment also
+passed. Both memory windows are 1.5005 s, retaining the 0.5 ms cleanup tail.
+Gem5 finished cleanly. The already observed bridge step-mismatch warning occurred
+after scoring during shutdown; ROS/Gazebo children required SIGTERM.
+
+The baseline recorded 10,023.387 wall seconds (2 h 47 min). Recovery cannot
+reconstruct the 75% runner's exact final cleanup/export elapsed time, so its
+14,849.100 seconds through the last exchange are shown as a lower bound
+(`≥ 247.5 min`) in the dashboard, with an explanatory tooltip and exported scope.
+
+The original manifest is archived as
+`experiment_manifest.before-scientific-latency-recovery.json`. Recovered metrics,
+raw hashes, validation checks, original failure and analysis parser hash are
+saved in the suite/attempt evaluations; original execution provenance remains
+intact. The original dashboard now includes both catches and their timings.
+The unrun 125% point is skipped because the user requested 90% instead.
+
+The new `results/memory-orin-demo-warmup0-90` continuation preserves all fixed
+settings and imports both completed trials by local links, recording their source
+provenance. It has a fresh configuration identity and current execution
+fingerprint; resume checks are not weakened to accept a changed runner. It also
+links the verified compatible calibration. Only the new `case-002` at 90%
+(45.4082112 GB/s offered demand) is pending. Its launcher and monitoring commands
+are above. No full guest simulation has been started by the agent.
+
+The parser/report/telemetry checks pass 76 tests, including scientific labels,
+duplicate rounded labels, final-snapshot selection, invalid bins and true sample
+count mismatches. The actual-data dashboard is checked separately before handoff.
+These two catches do not establish reliability or locate the failure boundary.

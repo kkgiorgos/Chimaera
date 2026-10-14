@@ -64,7 +64,7 @@
   "pressure": [
     0,
     0.75,
-    1.25
+    0.9
   ],
   "aggressor": {
     "read_percent": 80,

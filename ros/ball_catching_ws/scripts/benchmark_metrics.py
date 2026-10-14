@@ -1,8 +1,8 @@
 """Read run-level guest DRAM measurements without averaging percentiles."""
 import csv
+from decimal import Decimal, InvalidOperation
 import math
 from pathlib import Path
-import re
 
 import yaml
 
@@ -52,6 +52,33 @@ def controller_counters(path):
     return result
 
 
+def latency_histogram(path, name):
+    """Read every bin, including scientific labels and aliases rounded by gem5."""
+    block = Path(path).read_text().split('---------- Begin Simulation Statistics ----------')[-1]
+    histogram, label_resolution = {}, 1
+    prefix = name + '::'
+    for line in block.splitlines():
+        fields = line.split()
+        if len(fields) < 2 or not fields[0].startswith(prefix):
+            continue
+        label = fields[0][len(prefix):]
+        if label == 'samples':
+            continue
+        try:
+            coordinate, count = Decimal(label), Decimal(fields[1])
+        except InvalidOperation as error:
+            raise ValueError(f'Invalid latency histogram bin: {fields[0]}') from error
+        if any(not value.is_finite() or value < 0 or value != value.to_integral_value()
+               for value in (coordinate, count)):
+            raise ValueError(f'Invalid latency histogram bin: {fields[0]}')
+        key = int(coordinate)
+        # SparseHistogram uses six significant digits for its text labels.
+        # Several distinct large bins can therefore have the same printed name.
+        histogram[key] = histogram.get(key, 0) + int(count)
+        label_resolution = max(label_resolution, 10 ** max(0, coordinate.as_tuple().exponent))
+    return histogram, label_resolution
+
+
 def memory_metrics(directory, peak_gbps):
     directory = Path(directory)
     stats = read_stats(directory / 'stats.txt')
@@ -74,19 +101,19 @@ def memory_metrics(directory, peak_gbps):
                   aggressor_stall_cycles=int(get('aggressorStallCycles')),
                   aggressor_accepted_gbps=get('aggressorBytes') / seconds / 1e9,
                   latency_resolution_ns=1,
+                  histogram_label_resolution_ns=1,
                   latency_end='Ramulator backend read completion',
                   guest_scope='all guest DRAM reads; instruction, data, OS and ROS clients')
     for metric, histogram_name, sum_name in [
             ('accepted', 'cpuReadLatencyNs', 'cpuReadLatencyTicks'),
             ('total', 'cpuReadTotalLatencyNs', 'cpuReadTotalLatencyTicks')]:
-        histogram = {}
-        pattern = re.compile(re.escape(prefix + '.' + histogram_name + '::') + r'(\d+)$')
-        for key, value in stats.items():
-            match = pattern.fullmatch(key)
-            if match:
-                histogram[int(match[1])] = value
+        histogram, label_resolution = latency_histogram(
+            directory / 'stats.txt', prefix + '.' + histogram_name)
         if sum(histogram.values()) != samples:
-            raise ValueError(f'{histogram_name} sample count mismatch; rebuild gem5')
+            raise ValueError(f'{histogram_name} sample count mismatch: '
+                             f'{sum(histogram.values())} bins vs {samples:g} reads; inspect stats.txt')
+        result['histogram_label_resolution_ns'] = max(
+            result['histogram_label_resolution_ns'], label_resolution)
         result[metric + '_mean_ns'] = get(sum_name) / samples / frequency * 1e9 if samples else None
         result[metric + '_p95_ns'] = percentile(histogram, .95)
         result[metric + '_p99_ns'] = percentile(histogram, .99)

@@ -55,7 +55,7 @@ def test_timing_validation_preset_contains_only_the_qualified_baseline():
 def test_demo_profile_sweeps_only_pressure_with_a_matching_zero_warmup_baseline():
     baseline = load_config(WORKSPACE / 'experiments/memory_contention_timing_validation.json')
     demo = load_config(WORKSPACE / 'experiments/memory_contention_demo.json')
-    assert demo['pressure'] == [0, .75, 1.25]
+    assert demo['pressure'] == [0, .75, .9]
     assert {k: v for k, v in demo.items() if k != 'pressure'} == {
         k: v for k, v in baseline.items() if k != 'pressure'}
     points = plan(demo)
@@ -471,6 +471,37 @@ def test_memory_units_tail_and_physical_bus(tmp_path):
 def test_missing_histogram_rejects_old_binary(tmp_path):
     write_memory(tmp_path, samples=99)
     with pytest.raises(ValueError, match='sample count mismatch'):
+        memory_metrics(tmp_path, 51.2)
+
+
+def test_scientific_latency_labels_and_rounded_aliases_preserve_all_samples(tmp_path):
+    write_memory(tmp_path)
+    path = tmp_path / 'stats.txt'
+    prior = path.read_text()
+    current = prior.replace('system.memory.cpuReadTotalLatencyNs::70 5',
+        'system.memory.cpuReadTotalLatencyNs::3.74686e+06 4\n'
+        'system.memory.cpuReadTotalLatencyNs::3.74686e+06 1').replace(
+        'system.memory.cpuReadTotalLatencyNs::12000 1',
+        'system.memory.cpuReadTotalLatencyNs::3.746860E+06 1')
+    path.write_text(prior + '\n' + current)
+    result = memory_metrics(tmp_path, 51.2)
+    assert result['total_histogram_ns'] == [[50, 94], [3746860, 6]]
+    assert result['total_p95_ns'] == 3746860
+    assert result['total_p99_ns'] == 3746860
+    assert result['histogram_label_resolution_ns'] == 10
+    assert result['latency_resolution_ns'] == 1
+    assert result['total_mean_ns'] == pytest.approx(170.5)
+
+
+@pytest.mark.parametrize('label,count', [
+    ('3.5', '1'), ('-1', '1'), ('nan', '1'), ('inf', '1'),
+    ('3746860', '-1'), ('3746860', '.5'), ('3746860', 'nan')])
+def test_invalid_latency_bins_are_rejected(tmp_path, label, count):
+    write_memory(tmp_path)
+    path = tmp_path / 'stats.txt'
+    path.write_text(path.read_text().replace('system.memory.cpuReadTotalLatencyNs::12000 1',
+        f'system.memory.cpuReadTotalLatencyNs::{label} {count}'))
+    with pytest.raises(ValueError, match='Invalid latency histogram bin'):
         memory_metrics(tmp_path, 51.2)
 
 
