@@ -38,53 +38,114 @@ SDK_ID = 'sha256:' + 'a' * 64
 
 
 @pytest.fixture
-def sdk_stream(tmp_path):
+def sdk_stream(tmp_path, monkeypatch):
+    import os
     script = tmp_path / 'peer.py'
     marker = tmp_path / 'loaded'
-    script.write_text('''import pathlib,sys,time
-role, marker, mode, command = sys.argv[1:]
+    script.write_text('''import gzip,pathlib,random,sys
+marker, mode, command = sys.argv[1:]
 marker = pathlib.Path(marker)
 image = 'sha256:' + 'a' * 64
-if role != 'source' and 'inspect' in command:
+if 'inspect' in command:
     if not marker.exists():
         sys.exit(1)
     print(marker.read_text())
-elif role == 'source':
-    assert 'docker image tag ' + image + ' chimaera:transfer-' in command
-    assert 'docker image save chimaera:transfer-' in command
-    if mode == 'block':
-        time.sleep(60)
-    if mode == 'slow':
-        print('CHIMAERA_TRANSFER_SIZE', 4000000, file=sys.stderr, flush=True)
-        print('CHIMAERA_TRANSFER_BYTES', 1000000, file=sys.stderr, flush=True)
-        sys.stdout.buffer.write(b'archive-content' * 32768)
-        sys.stdout.buffer.flush()
-        time.sleep(1.3)
-        print('CHIMAERA_TRANSFER_BYTES', 2000000, file=sys.stderr, flush=True)
-        sys.stdout.buffer.write(b'archive-content' * 32768)
-        sys.stdout.buffer.flush()
-        time.sleep(1.1)
-    else:
-        sys.stdout.buffer.write(b'archive-content' * 65536)
-    if mode == 'sender_failure':
-        print('export failed', file=sys.stderr)
-        sys.exit(7)
 else:
-    data = sys.stdin.buffer.read()
+    data = gzip.decompress(sys.stdin.buffer.read())
     if mode == 'receiver_failure':
         print('load failed', file=sys.stderr)
         sys.exit(9)
-    assert data == b'archive-content' * 65536
+    expected = (random.Random(0).randbytes(14 * 32768) * 2 if mode == 'slow' else b'archive-content' * 65536)
+    assert data == expected
     print('Loaded image: chimaera:transfer-' + 'a' * 64, flush=True)
     if mode == 'missing_after_load':
         sys.exit(0)
     marker.write_text('sha256:' + 'b' * 64 if mode == 'wrong_identity' else image)
 ''')
+    docker = tmp_path / 'docker'
+    docker.write_text('''#!/usr/bin/env python3
+import os,random,sys,time
+args=sys.argv[1:]
+mode=os.environ['TRANSFER_TEST_MODE']
+if args[:2] == ['image', 'tag']:
+    assert args[2] == 'sha256:' + 'a' * 64
+    assert args[3] == 'chimaera:transfer-' + 'a' * 64
+elif args[:2] == ['image', 'inspect']:
+    if mode != 'no_metadata':
+        print('CHIMAERA_TRANSFER_SIZE', 4000000)
+elif args[:2] == ['image', 'save']:
+    assert args[2] == 'chimaera:transfer-' + 'a' * 64
+    if mode == 'block':
+        time.sleep(60)
+    if mode == 'slow':
+        sys.stdout.buffer.write(random.Random(0).randbytes(14 * 32768))
+        sys.stdout.buffer.flush()
+        time.sleep(1.3)
+    sys.stdout.buffer.write(random.Random(0).randbytes(14 * 32768) if mode == 'slow' else b'archive-content' * 65536)
+    sys.stdout.buffer.flush()
+    if mode == 'slow':
+        time.sleep(1.1)
+    if mode == 'sender_failure':
+        print('export failed', file=sys.stderr)
+        sys.exit(7)
+else:
+    sys.exit(2)
+''')
+    docker.chmod(0o755)
+    monkeypatch.setenv('PATH', str(tmp_path) + os.pathsep + os.environ['PATH'])
     ssh = SSH()
     def configure(mode='success'):
-        ssh.base = lambda machine: [sys.executable, str(script), machine['role'], str(marker), mode]
+        monkeypatch.setenv('TRANSFER_TEST_MODE', mode)
+        ssh.base = lambda machine: (['bash', '-c'] if machine['role'] == 'source' else
+                                   [sys.executable, str(script), str(marker), mode])
         return ssh
     return configure, marker
+
+
+def test_controller_launches_only_producer_and_receives_json_progress(sdk_stream):
+    import json
+    import os
+    configure, _ = sdk_stream
+    processes = []
+    real_popen = subprocess.Popen
+
+    def start(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        processes.append((process, kwargs))
+        return process
+
+    def progress(value):
+        if value['phase'] == 'Complete':
+            output = processes[-1][1]['stdout']
+            messages = os.pread(output.fileno(), 65536, 0)
+            assert all(isinstance(json.loads(line), dict) for line in messages.splitlines())
+
+    with patch('transport.subprocess.Popen', side_effect=start):
+        assert configure().copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                                      progress=progress) == SDK_ID
+    # One destination cache probe, then one producer control connection. The
+    # destination loader and both archive pipes exist only inside the producer.
+    assert len(processes) == 2
+    assert processes[1][0].args[:2] == ['bash', '-c']
+    assert processes[1][1]['stdout'] != subprocess.PIPE
+
+
+def test_producer_stops_when_control_connection_closes(sdk_stream):
+    configure, _ = sdk_stream
+    real_popen = subprocess.Popen
+    processes = []
+
+    def start(*args, **kwargs):
+        process = real_popen(*args, **kwargs)
+        processes.append(process)
+        if process.args[:2] == ['bash', '-c']:
+            process.stdin.close()
+        return process
+
+    with patch('transport.subprocess.Popen', side_effect=start):
+        with pytest.raises(RuntimeError, match='Image transfer cancelled'):
+            configure('block').copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID)
+    assert all(process.poll() is not None for process in processes)
 
 
 def test_sdk_stream_verifies_identity_and_skips_existing_image(sdk_stream):
@@ -108,7 +169,7 @@ def test_sdk_stream_rejects_failed_export_load_or_wrong_image(sdk_stream, mode, 
 
 
 @pytest.mark.parametrize('cancel', [False, True])
-def test_sdk_stream_cancellation_and_timeout_reap_both_processes(sdk_stream, cancel):
+def test_sdk_stream_cancellation_and_timeout_reap_control_process(sdk_stream, cancel):
     configure, _ = sdk_stream
     ssh = configure('block')
     cancelled = threading.Event()
@@ -128,8 +189,8 @@ def test_sdk_stream_cancellation_and_timeout_reap_both_processes(sdk_stream, can
                                cancel=cancelled, timeout=5 if cancel else 0.1)
     finally:
         timer.cancel()
-    # The initial cache probe and both streaming subprocesses have exited.
-    assert len(processes) == 3
+    # The controller starts only a cache probe and a producer control connection.
+    assert len(processes) == 2
     assert all(process.poll() is not None for process in processes)
 
 
@@ -147,7 +208,7 @@ def test_transfer_reports_bytes_and_load_verification_phases(sdk_stream):
                            progress=updates.append)
     assert updates[0]['phase'] == 'Checking destination cache'
     assert {'Streaming', 'Loading image', 'Verifying image', 'Complete'} <= {u['phase'] for u in updates}
-    assert updates[-1]['bytes_sent'] == len(b'archive-content') * 65536
+    assert 0 < updates[-1]['bytes_sent'] < len(b'archive-content') * 65536
     assert updates[-1]['bytes_per_second'] > 0
     assert [u['bytes_sent'] for u in updates] == sorted(u['bytes_sent'] for u in updates)
 
@@ -175,7 +236,7 @@ def test_transfer_eta_waits_for_samples_and_excludes_loading(sdk_stream):
 def test_transfer_eta_is_unknown_without_size_metadata(sdk_stream):
     configure, _ = sdk_stream
     updates = []
-    configure().copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+    configure('no_metadata').copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
                            progress=updates.append)
     assert all(u['eta_seconds'] is None for u in updates if u['phase'] == 'Streaming')
 

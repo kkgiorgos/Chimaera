@@ -12,9 +12,11 @@ Requirements:
 - Docker Engine with Compose, and an up-to-date checkout of this repository.
 - Linux x86-64 workers with Docker Engine/Compose, writable repositories, KVM,
   and permission for the SSH user to use Docker and the guest assets.
-- Bash and gzip on workers for compressed SDK image streams.
+- Bash and gzip on workers for compressed image streams. The producer also needs
+  Python 3 and an OpenSSH client on its host.
 - SSH key access from the webserver to each worker. No inbound worker HTTP ports
-  are required. The SSH user does not need a host Python installation.
+  are required. Each image producer must also have noninteractive SSH key access
+  to its destination workers, with verified host keys in its own `known_hosts`.
 - Internet access on workers for initial image builds and the pinned kernel.
 
 Create a **dedicated** SSH directory containing an identity, `known_hosts`, and
@@ -57,8 +59,12 @@ Leave these fields empty to prepare them automatically. Choose the
 **Image preparation & calibration machine** when creating an experiment; it must
 be one of the selected machines.
 That machine produces the frozen calibration reference, SDK image, and application
-image. The controller streams both exact images to the other workers over
-authenticated SSH, without storing an image archive on the webserver. Workers do not need SSH access to each other.
+image. The producer streams both exact images directly to the other workers over
+authenticated SSH. The controller coordinates transfers and receives progress;
+image bytes never pass through the webserver. Configure the destination SSH targets
+(including aliases, ports, identities, and any jump hosts) to work from the producer
+host as well as the controller. Producer credentials and SSH configuration belong
+to its host SSH user; the controller does not copy credentials or forward an agent.
 Every machine uses its own configured asset paths or constructs its own guest disk
 and downloads the pinned kernel. Guest disks remain local.
 
@@ -97,8 +103,8 @@ arrives, preparation runs automatically:
 2. Prepare its local guest assets, run memory-only calibration and fractional-rate
    checks, and freeze the guest bundle. These steps do not run robot benchmark cases.
 3. Record both immutable Docker image IDs with the calibration. Stream those images
-   with `docker image save`, gzip and `docker image load` over the controller's SSH
-   connections to each remaining worker. Skip each transfer when that exact image already
+   with `docker image save`, gzip and `docker image load` over a direct SSH
+   connection from the producer to each remaining worker. Skip each transfer when that exact image already
    exists there. Archives carry a dedicated `chimaera:transfer-<image-id>` tag so
    loaded images retain a named reference. Imported images do not replace
    source-keyed local SDK tags.
@@ -114,15 +120,16 @@ and an estimated ETA for the current image based on its uncompressed Docker size
 and measured export/network throughput. The ETA excludes loading and verification;
 those stages display their status instead. ETA appears after throughput is sampled.
 The report also shows the cache-check, streaming, loading, or verification stage. Byte counts measure
-data forwarded to the destination SSH connection; loading can continue after all
+data forwarded by the producer to the destination SSH connection; loading can continue after all
 bytes have been sent. A percentage is not shown because the compressed archive
 size is unknown until export finishes. Verification errors include Docker's load
 output, and streaming errors distinguish source export from destination load.
 Transfer failures are preparation failures with **Retry preparation**. Stop cancels active transfers;
 controller restarts recheck the destination cache and repeat incomplete transfers.
-Transfers have a one-hour limit and use the same verified SSH hosts as other remote
-operations. No image archive is retained by the controller, but the network carries
-each compressed image once per worker that lacks it. Old experiments without an explicit
+Transfers have a one-hour limit and require verified destination SSH host keys on
+the producer. The producer stops its export and destination connection when the
+controller cancels or disconnects. No image archive is retained; compressed bytes
+travel directly from producer to destination once per worker that lacks the image. Old experiments without an explicit
 calibration-machine choice retain their original first-machine default.
 
 Worker slots and the case table always show simulation speed as a real-time
