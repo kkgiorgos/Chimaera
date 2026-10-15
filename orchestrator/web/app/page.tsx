@@ -156,7 +156,7 @@ export default function Dashboard() {
                   const stats = m.snapshot?.stats.find(s => s.Name === `chimaera-${a?.id}`);
                   return <div key={index} className={`worker-slot ${c ? 'occupied' : ''}`}>
                     <div><span className="slot-mark">{c ? <Activity size={15} /> : <span />}</span><strong>{c ? c.id : 'Available'}</strong>{a && <button className="icon-button" onClick={() => showLogs(m.id, a.id, c.id)} aria-label={`Logs for ${c.id}`}><Terminal size={15} /></button>}</div>
-                    {c && a ? <><p>{a.progress?.phase || label(c.status)}</p><div className="slot-data"><span title={c.eta_basis}><Clock3 size={12} />{stale ? 'Progress stale' : time(c.eta_seconds)}</span><span>{stats ? `${stats.CPUPerc} CPU` : 'CPU awaiting sample'}</span></div><div className="slot-data"><span>Simulation speed</span><SimulationSpeed attempt={a} stale={stale || (a.progress?.last_update_age_seconds ?? 0) > 30} /></div><small>{stats?.MemUsage || 'RAM awaiting sample'}</small>
+                    {c && a ? <><p>{a.progress?.phase || label(c.status)}</p><div className="slot-data"><span title={c.eta_basis}><Clock3 size={12} />{stale ? 'Progress stale' : time(c.eta_seconds)}</span><span>{stats ? `${stats.CPUPerc} CPU` : 'CPU awaiting sample'}</span></div><small>{stats?.MemUsage || 'RAM awaiting sample'}</small>
                       <div className="progress-track"><div style={{ width: `${a.progress?.throw_percent || 0}%` }} /></div></> : <p>Next case assigned automatically</p>}
                   </div>;
                 })}</div>

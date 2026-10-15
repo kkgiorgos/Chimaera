@@ -156,9 +156,9 @@ controller cancels or disconnects. No image archive is retained; compressed byte
 travel directly from producer to destination once per worker that lacks the image. Old experiments without an explicit
 calibration-machine choice retain their original first-machine default.
 
-Worker slots and the case table always show simulation speed as a real-time
+The case table shows simulation speed as a real-time
 multiplier (simulated seconds per wall-clock second), averaged through the latest
-timing sample. Before timing data arrives they show **Awaiting sample**. Stale
+timing sample. Before timing data arrives it shows **Awaiting sample**. Stale
 active samples are labeled **last sample**, and finished cases retain their last
 recorded speed.
 
