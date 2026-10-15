@@ -17,7 +17,7 @@ import sys
 import tarfile
 import time
 
-from benchmark_metrics import command_metrics, memory_metrics, read_stats, controller_counters
+from benchmark_metrics import validate_node_registration, command_metrics, memory_metrics, read_stats, controller_counters
 from benchmark_status import check_local_transport, guest_failure, host_failure, launch_failure
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -75,6 +75,7 @@ def load_config(path, cpu_type=None):
     # Older experiment files retain the original Timing CPU behaviour.
     data['hardware'].setdefault('cpu_type', 'timing')
     data['fixed'].setdefault('image_diagnostics', False)
+    data['fixed'].setdefault('dram_node_latency', False)
     data['fixed'].setdefault('guest_dds_shm_bytes', 0)
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
@@ -82,7 +83,7 @@ def load_config(path, cpu_type=None):
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
-                  'guest_dds_shm_bytes'},
+                  'guest_dds_shm_bytes', 'dram_node_latency'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -92,6 +93,10 @@ def load_config(path, cpu_type=None):
         if set(data[section]) != keys:
             raise ValueError(f'{section} fields must be: ' + ', '.join(sorted(keys)))
     fixed = data['fixed']
+    if type(fixed['dram_node_latency']) is not bool:
+        raise ValueError('dram_node_latency must be boolean')
+    if fixed['dram_node_latency'] and data['hardware']['cpu_type'] != 'timing':
+        raise ValueError('Per-node DRAM attribution currently requires Timing CPUs')
     if type(fixed['image_diagnostics']) is not bool:
         raise ValueError('image_diagnostics must be boolean')
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
@@ -257,6 +262,7 @@ def session(output, data, point, calibration=None):
     from ament_index_python.packages import get_package_prefix
     fixed = data['fixed']
     robot = robot_command(point, calibration, fixed['image_age_periods'], fixed['image_diagnostics'])
+    robot += ['dram_node_latency:=' + str(fixed['dram_node_latency']).lower()]
     guest_env = dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu',
                      RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
     if fixed['guest_dds_shm_bytes']:
@@ -275,6 +281,7 @@ def session(output, data, point, calibration=None):
                     max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
                     image_diagnostics=fixed['image_diagnostics'],
                     simulation_time_from_readfile=True,
+                    dram_node_latency=fixed['dram_node_latency'],
                     startup_timeout_s=fixed['startup_timeout_s'], status_bar=False),
         deploy=dict(guest_root=GUEST_ROOT,
                     install_trees=[dict(source=get_package_prefix('ball_catching_robot'), destination='app')]))
@@ -528,6 +535,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
     metrics = memory_metrics(roi, data['peak_gbps'])
+    if fixed['dram_node_latency']:
+        validate_node_registration(metrics, directory / 'launch.log')
     write_json(directory / 'benchmark.json', dict(mode='gem5', point=point,
         memory=metrics, hardware=data['hardware'], aggressor=aggressor,
         ramulator_sha256=data['ramulator_sha256'],

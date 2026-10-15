@@ -16,7 +16,8 @@ def start(context):
               'initial_pose': None,
               'gem5_clock_library': get('gem5_clock_library'),
               'gem5_time_origin_file': get('gem5_time_origin_file'),
-              'record_telemetry': get('record_telemetry').lower() == 'true'}
+              'record_telemetry': get('record_telemetry').lower() == 'true',
+              'dram_node_latency': get('dram_node_latency').lower() == 'true'}
     upright = [0., 0., 0., -.14, 0., .50, math.pi/4]
     common['initial_pose'] = json.loads(get('initial_pose')) if get('initial_pose') != 'auto' else upright
     if len(common['initial_pose']) != 7 or any(
@@ -32,7 +33,8 @@ def start(context):
                               'image_diagnostics': get('image_diagnostics').lower() == 'true',
                               'gem5_clock_library': get('gem5_clock_library'),
                               'gem5_time_origin_file': common['gem5_time_origin_file'],
-                              'record_telemetry': common['record_telemetry']}], output='screen'),
+                              'record_telemetry': common['record_telemetry'],
+                              'dram_node_latency': common['dram_node_latency']}], output='screen'),
             Node(package='ball_catching_robot', executable='intercept',
                  parameters=[{**common, 'planner_hz': float(get('planner_hz')),
                               'plan_interval': float(get('plan_interval'))}],
@@ -48,7 +50,7 @@ def generate_launch_description():
     defaults = dict(robot_file='', output='', use_sim_time='true', control_hz='250',
                     planner_hz='30', plan_interval='0.06',
                     camera_hz='90', image_age_periods='2',
-                    image_diagnostics='false', record_telemetry='false',
+                    image_diagnostics='false', record_telemetry='false', dram_node_latency='false',
                     gem5_clock_library='', gem5_time_origin_file='',
                     initial_pose='auto',
                     calibration='{"focal":400.0,"cx":320.0,"cy":240.0,"baseline":0.3,"camera_origin":[-0.65,0.15,1.0]}')

@@ -40,6 +40,7 @@
  */
 
 #include "cpu/simple/timing.hh"
+#include "chimaera/memory_workload.hh"
 
 #include "arch/generic/decoder.hh"
 #include "base/compiler.hh"
@@ -470,6 +471,7 @@ TimingSimpleCPU::initiateMemRead(Addr addr, unsigned size,
     req->setByteEnable(byte_enable);
 
     req->taskId(taskId());
+    chimaera::tagMemoryRequest(req, thread);
 
     Addr split_addr = roundDown(addr + size - 1, block_size);
     assert(split_addr <= addr || split_addr - addr < block_size);
@@ -552,6 +554,7 @@ TimingSimpleCPU::writeMem(uint8_t *data, unsigned size,
     req->setByteEnable(byte_enable);
 
     req->taskId(taskId());
+    chimaera::tagMemoryRequest(req, thread);
 
     Addr split_addr = roundDown(addr + size - 1, block_size);
     assert(split_addr <= addr || split_addr - addr < block_size);
@@ -610,6 +613,7 @@ TimingSimpleCPU::initiateMemAMO(Addr addr, unsigned size,
     assert(req->hasAtomicOpFunctor());
 
     req->taskId(taskId());
+    chimaera::tagMemoryRequest(req, thread);
 
     Addr split_addr = roundDown(addr + size - 1, block_size);
 
@@ -702,6 +706,7 @@ TimingSimpleCPU::fetch()
         _status = BaseSimpleCPU::Running;
         RequestPtr ifetch_req = std::make_shared<Request>();
         ifetch_req->taskId(taskId());
+        chimaera::tagMemoryRequest(ifetch_req, thread);
         ifetch_req->setContext(thread->contextId());
         setupFetchRequest(ifetch_req);
         DPRINTF(SimpleCPU, "Translating address %#x\n", ifetch_req->getVaddr());
@@ -1253,6 +1258,7 @@ TimingSimpleCPU::initiateMemMgmtCmd(Request::Flags flags)
     req->setPC(pc);
     req->setContext(thread->contextId());
     req->taskId(taskId());
+    chimaera::tagMemoryRequest(req, thread);
     req->setInstCount(t_info.numInst);
 
     assert(req->isHTMCmd() || req->isTlbiCmd());
@@ -1308,6 +1314,7 @@ TimingSimpleCPU::htmSendAbortSignal(ThreadID tid, uint64_t htm_uid,
     req->setPC(pc);
     req->setContext(thread->contextId());
     req->taskId(taskId());
+    chimaera::tagMemoryRequest(req, thread);
     req->setInstCount(t_info.numInst);
     req->setHtmAbortCause(cause);
 

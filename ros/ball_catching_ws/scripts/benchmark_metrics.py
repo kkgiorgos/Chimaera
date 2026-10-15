@@ -2,6 +2,7 @@
 import csv
 from decimal import Decimal, InvalidOperation
 import math
+import re
 from pathlib import Path
 
 def read_stats(path):
@@ -123,6 +124,51 @@ def memory_metrics(directory, peak_gbps):
     bus = sum(counters.values()) * 64 / seconds / 1e9
     result.update(dram_bus_gbps=bus, dram_bus_peak_fraction=bus / peak_gbps,
                   dram_read_commands=counters['read'], dram_write_commands=counters['write'])
+    result['read_latency_tracking_version'] = int(get('readLatencyTrackingVersion'))
+    result['admission_latency_valid'] = result['read_latency_tracking_version'] >= 2
+    if not result['admission_latency_valid']:
+        result['admission_latency_warning'] = (
+            'Legacy Ruby packet retries can reuse another request first-attempt timestamp; '
+            'admission-inclusive latency is unverified. Post-admission latency is separate.')
+    if get('nodeAttributionEnabled'):
+        names = ('unattributed', 'perception', 'planning', 'control',
+                 'guest_bridge', 'kernel', 'other_user')
+        nodes = {}
+        accepted_sum = total_sum = retries_sum = 0
+        for name in names:
+            node_prefix = prefix + '.' + name + '.'
+            field = lambda key: stats.get(node_prefix + key, 0)
+            if node_prefix + 'reads' not in stats:
+                raise ValueError('Missing per-node DRAM counters: ' + name)
+            count = int(field('reads'))
+            node = dict(samples=count, retries=int(field('retries')),
+                        read_fraction=count / samples if samples else None)
+            for metric, bins, ticks in (('accepted', 'acceptedNs', 'acceptedTicks'),
+                                        ('total', 'totalNs', 'totalTicks')):
+                histogram, resolution = latency_histogram(directory / 'stats.txt',
+                                                          node_prefix + bins)
+                if sum(histogram.values()) != count:
+                    raise ValueError('Per-node histogram sample count mismatch: ' + name)
+                node[metric + '_mean_ns'] = field(ticks) / count / frequency * 1e9 if count else None
+                node[metric + '_p95_ns'] = percentile(histogram, .95)
+                node[metric + '_p99_ns'] = percentile(histogram, .99)
+                node[metric + '_histogram_ns'] = [[key, value] for key, value in sorted(histogram.items())]
+                node[metric + '_label_resolution_ns'] = resolution
+            accepted_sum += field('acceptedTicks')
+            total_sum += field('totalTicks')
+            retries_sum += node['retries']
+            nodes[name] = node
+        if (sum(n['samples'] for n in nodes.values()) != samples or
+                accepted_sum != get('cpuReadLatencyTicks') or
+                total_sum != get('cpuReadTotalLatencyTicks') or
+                retries_sum != get('cpuRetries')):
+            raise ValueError('Per-node counters do not reconcile with aggregate DRAM statistics')
+        result['nodes'] = nodes
+        result['node_scope'] = (
+            'DRAM read transactions attributed to the initiating miss process, '
+            'including its user-space ROS/DDS threads; coalesced misses count once. '
+            'Kernel execution, other user processes, and untagged traffic are separate. '
+            'Retries include reads and writes; cached accesses and host activity are excluded.')
     return result
 
 
@@ -140,3 +186,15 @@ def command_metrics(path, start, end, control_hz):
                 if gaps else None,
                 command_late_fraction=sum(gap > 1.5 / control_hz for gap in gaps) / len(gaps)
                 if gaps else None)
+
+
+def validate_node_registration(metrics, log_path):
+    """Distinguish a genuinely empty DRAM bucket from missing instrumentation."""
+    if 'nodes' not in metrics:
+        raise ValueError('Per-node DRAM statistics were not exported')
+    required = {'perception', 'planning', 'control', 'guest_bridge'}
+    registered = set(re.findall(r'ROS_DRAM_REGISTER role=(\w+) address_space=',
+                               Path(log_path).read_text(errors='replace')))
+    if required - registered:
+        raise ValueError('Missing DRAM node registration: ' + ', '.join(sorted(required - registered)))
+    metrics['registered_node_roles'] = sorted(required)

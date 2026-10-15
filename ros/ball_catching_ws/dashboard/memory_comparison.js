@@ -29,25 +29,34 @@
   }
   function render() {
     const metric = el('memory-metric').value;
+    const node = el('memory-node')?.value || 'all';
+    const selectMemory = memory => node === 'all' ? memory : memory?.nodes?.[node];
     const points = data.points.filter(point =>
       (el('memory-throw').value === 'all' || point.throw.name === el('memory-throw').value) &&
       (el('memory-rates').value === 'all' || point.rates.name === el('memory-rates').value));
     el('memory-rows').replaceChildren();
+    const legacy = data.trials.some(t => t.benchmark?.memory &&
+      (t.benchmark.memory.read_latency_tracking_version || 0) < 2);
+    if (el('memory-node-note')) el('memory-node-note').textContent =
+      (legacy ? 'Warning: legacy admission-inclusive latencies are unverified because retry packets could reuse timestamps. Select after-acceptance metrics for historical runs. ' : '') +
+      (node === 'all' ? 'All guest DRAM read transactions.' :
+        'Process-attributed DRAM reads, including user-space ROS/DDS work. Kernel execution is separate; merged misses count once. A dash means this breakdown was not recorded.');
     const observations = [];
     for (const point of points) {
       const trial = trialFor(point);
       const benchmark = trial?.benchmark;
-      const memory = benchmark?.memory;
+      const memory = selectMemory(benchmark?.memory);
+      const aggregate = benchmark?.memory;
       const baseline = data.points.find(candidate => comparable(candidate, point) && candidate.pressure === 0);
-      const baseMemory = baseline && trialFor(baseline)?.benchmark?.memory;
+      const baseMemory = baseline && selectMemory(trialFor(baseline)?.benchmark?.memory);
       const ratio = finite(memory?.total_p99_ns) && baseMemory?.total_p99_ns > 0 ?
         memory.total_p99_ns / baseMemory.total_p99_ns : null;
       const row = document.createElement('tr');
       const outcome = trial ? (trial.result.success ? 'CATCH' : 'MISS') : point.status.replaceAll('_', ' ');
       const values = [point.label, outcome,
         `${point.rates.camera_hz} / ${point.rates.planner_hz} / ${point.rates.control_hz}`,
-        `${Math.round(point.pressure * 100)}%`, format(memory?.aggressor_accepted_gbps, 2),
-        finite(memory?.dram_bus_peak_fraction) ? `${(100 * memory.dram_bus_peak_fraction).toFixed(1)}%` : '—',
+        `${Math.round(point.pressure * 100)}%`, format(aggregate?.aggressor_accepted_gbps, 2),
+        finite(aggregate?.dram_bus_peak_fraction) ? `${(100 * aggregate.dram_bus_peak_fraction).toFixed(1)}%` : '—',
         format(memory?.total_mean_ns), format(memory?.total_p95_ns), format(memory?.total_p99_ns),
         finite(ratio) ? `${ratio.toFixed(2)}×` : '—', format(benchmark?.commands?.delivered_control_hz),
         timing(trial?.summary?.processing?.['Perception + estimation']),
@@ -57,13 +66,14 @@
           `${benchmark.wall_seconds_lower_bound ? '≥ ' : ''}${format(benchmark.wall_seconds / 60)} min` : '—',
         trial?.summary?.timing_coverage?.status === 'partial' ?
           `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
-          trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked'];
+          trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked',
+        memory?.samples ?? '—', node === 'all' ? aggregate?.guest_retries ?? '—' : memory?.retries ?? '—'];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';
         row.append(cell);
       }
-      row.title = `Processing clock: ${trial?.summary?.processing_clock || 'not recorded'}; memory: ${benchmark?.memory_profile?.standard || 'see execution configuration'}, peak ${format(benchmark?.peak_gbps)} GB/s` +
+      row.title = `DRAM read samples: ${memory?.samples ?? 'not recorded'}; ${node === 'all' ? 'all guest reads' : node}; processing clock: ${trial?.summary?.processing_clock || 'not recorded'}; memory: ${benchmark?.memory_profile?.standard || 'see execution configuration'}, peak ${format(benchmark?.peak_gbps)} GB/s` +
         (benchmark?.wall_seconds_lower_bound ? '; wall time through last recorded exchange; cleanup/export duration unavailable' : '');
       row.tabIndex = 0;
       row.setAttribute('aria-label', `Inspect ${point.label}`);
@@ -71,8 +81,8 @@
       row.onclick = select;
       row.onkeydown = event => { if (event.key === 'Enter') select(); };
       el('memory-rows').append(row);
-      if (finite(memory?.[metric]) && finite(memory?.aggressor_accepted_gbps)) {
-        observations.push({point, trial, x: memory.aggressor_accepted_gbps, y: memory[metric]});
+      if (finite(memory?.[metric]) && finite(aggregate?.aggressor_accepted_gbps)) {
+        observations.push({point, trial, x: aggregate.aggressor_accepted_gbps, y: memory[metric]});
       }
     }
     const svg = el('memory-chart'); svg.replaceChildren();
@@ -98,7 +108,7 @@
       'Green: catch. Coral: miss. Each point is one observation; no statistical reliability claim. Memory latency stops at backend completion and excludes upstream cache/fabric waiting. Delivered control cadence measures host receipts.' :
       'Memory measurements appear after a gem5 trial completes. Native preflight results check geometry and behavior on the host; they do not measure guest performance.';
   }
-  for (const id of ['memory-throw', 'memory-rates', 'memory-metric']) el(id).onchange = render;
+  for (const id of ['memory-throw', 'memory-rates', 'memory-metric', 'memory-node']) el(id).onchange = render;
   el('memory-export').onclick = () => {
     const measurements = data.points.map(point => ({...point, benchmark: trialFor(point)?.benchmark,
       result: trialFor(point)?.result, timings: trialFor(point)?.summary}));

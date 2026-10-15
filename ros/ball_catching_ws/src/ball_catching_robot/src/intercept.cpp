@@ -48,6 +48,7 @@ public:
       });
     const double hz = declare_parameter("planner_hz", 30.);
     planInterval_ = declare_parameter("plan_interval", .06);
+    attributeMemory_ = get_parameter("dram_node_latency").as_bool();
     if (!std::isfinite(hz) || hz <= 0 || !std::isfinite(planInterval_) || planInterval_ < 0)
       throw std::invalid_argument("Invalid planner frequency or search interval");
     timer_ = timer(*this, 1. / hz, [this] { plan(); });
@@ -61,6 +62,7 @@ private:
   };
   void plan()
   {
+    if (attributeMemory_) processingClock_.now();  // Register before the first observation.
     const auto stamp = now();
     const double time = stamp.seconds();
     if (
@@ -177,6 +179,7 @@ private:
     }
     return s;
   }
+  bool attributeMemory_ = false;
   Arm arm_;
   Recorder record_;
   ProcessingClock processingClock_;

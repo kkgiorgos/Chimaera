@@ -205,6 +205,11 @@ def load_trial(directory):
         frames.append(dict(time=row['time']-launch, ball=[row['ball_'+axis] for axis in 'xyz'], joints=joints))
     benchmark_path = directory / 'benchmark.json'
     benchmark = json.loads(benchmark_path.read_text()) if benchmark_path.exists() else None
+    if benchmark and benchmark.get('memory') and benchmark['memory'].get('read_latency_tracking_version', 0) < 2:
+        benchmark['memory']['admission_latency_valid'] = False
+        benchmark['memory']['admission_latency_warning'] = (
+            'Legacy retry packet lifetime: admission-inclusive latency is unverified; '
+            'use post-admission statistics until rerun with request-stable tracking.')
     return dict(id=directory.name, path=str(directory), config=config, result=result,
                 summary=summary, frames=frames, benchmark=benchmark)
 

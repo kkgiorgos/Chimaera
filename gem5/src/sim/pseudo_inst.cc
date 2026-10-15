@@ -54,6 +54,8 @@
 
 #include "base/debug.hh"
 #include "base/output.hh"
+#include "chimaera/memory_workload.hh"
+#include "chimaera/util.hh"
 #include "cpu/base.hh"
 #include "cpu/thread_context.hh"
 #include "debug/Loader.hh"
@@ -72,7 +74,6 @@
 #include "sim/stat_control.hh"
 #include "sim/stats.hh"
 #include "sim/system.hh"
-#include "chimaera/util.hh"
 
 namespace gem5
 {
@@ -622,6 +623,10 @@ m5Hypercall(ThreadContext *tc, uint64_t hypercall_id)
 void
 chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value)
 {
+    if (channel == chimaera::DramNodeChannel) {
+        chimaera::registerMemoryWorkload(tc, value);
+        return;
+    }
     DPRINTF(PseudoInst,
             "pseudo_inst::bridgeNotify(channel=%llu, value=%llu)\n",
             channel, value);

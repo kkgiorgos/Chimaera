@@ -110,8 +110,19 @@ class Ramulator2Base : public AbstractMemory
     unsigned int nbrOutstandingReads;
     unsigned int nbrOutstandingWrites;
 
+    struct NodeReadStats : public statistics::Group
+    {
+        statistics::Scalar reads, acceptedTicks, totalTicks, retries;
+        statistics::SparseHistogram acceptedNs, totalNs;
+        NodeReadStats(statistics::Group *parent, const char *name);
+    };
+    bool attributeNodes = false;
+    std::vector<std::unique_ptr<NodeReadStats>> nodeReads;
+    void enableNodeAttribution(bool enabled);
+
     struct ContentionStats : public statistics::Group
     {
+        statistics::Scalar readLatencyTrackingVersion, nodeAttributionEnabled;
         statistics::Scalar aggressorAccepted, aggressorRejected, aggressorBytes;
         statistics::Scalar aggressorCompleted, aggressorLatencyTicks;
         statistics::Scalar cpuReads, cpuReadLatencyTicks, cpuRetries;
@@ -130,7 +141,7 @@ class Ramulator2Base : public AbstractMemory
     double aggressorGbps = 0, aggressorNextOffer = 0;
     Addr aggressorHeldAddress = 0;
     Tick measurementEpoch = 0;
-    std::unordered_map<PacketPtr, Tick> firstReadAttempt;
+
     void injectAggressor();
 
     Ramulator2Base(const AbstractMemoryParams &p,

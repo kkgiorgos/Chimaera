@@ -10,6 +10,7 @@ class Ramulator2(AbstractMemory):
     cxx_class = "gem5::memory::Ramulator2"
     cxx_header = "mem/ramulator2/ramulator2.hh"
 
+    attribute_nodes = Param.Bool(False, "Attribute Timing FS DRAM reads to registered ROS processes")
     port = ResponsePort("Memory request/response port")
     ramulator_config = Param.String("Expanded Ramulator 2.1 YAML/JSON")
     max_outstanding = Param.Unsigned(

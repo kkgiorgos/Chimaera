@@ -87,6 +87,12 @@ int main(int argc, char ** argv)
           if (current < origin || current - origin > INT64_MAX) return std::nullopt;
           return static_cast<int64_t>(current - origin);
         };
+        if (node->declare_parameter<bool>("dram_node_latency", false)) {
+          if (ops == "instruction")
+            m5_chimaera_test(0x524f534452414dULL, 4);
+          else
+            m5_chimaera_test_addr(0x524f534452414dULL, 4);
+        }
         time_ready = true;
         RCLCPP_INFO(node->get_logger(), "Authoritative simulation clock ready at %lu ns", origin);
       }

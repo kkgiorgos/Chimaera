@@ -46,11 +46,22 @@ template<class T> T recordingParameter(rclcpp::Node & node, const std::string & 
 // the guest to include modeled execution, scheduling and memory stalls.
 class ProcessingClock {
  public:
-  explicit ProcessingClock(rclcpp::Node & node)
-    : clock_([] { return std::chrono::duration_cast<std::chrono::nanoseconds>(
-          WallClock::now().time_since_epoch()).count(); },
-        recordingParameter<std::string>(node, "gem5_clock_library", ""),
-        recordingParameter<std::string>(node, "gem5_time_origin_file", "")) {}
+   explicit ProcessingClock(rclcpp::Node & node)
+   : clock_(
+       [] {
+         return std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  WallClock::now().time_since_epoch())
+           .count();
+       },
+       recordingParameter<std::string>(node, "gem5_clock_library", ""),
+       recordingParameter<std::string>(node, "gem5_time_origin_file", ""),
+       recordingParameter<bool>(node, "dram_node_latency", false)
+         ? (std::string(node.get_name()) == "ball_perception"  ? 1
+            : std::string(node.get_name()) == "ball_intercept" ? 2
+                                                               : 3)
+         : 0)
+   {
+   }
   std::optional<int64_t> now() { return clock_.now(); }
   Field elapsed(std::optional<int64_t> start) {
     const auto end = now();

@@ -17,6 +17,7 @@ Ramulator2::Ramulator2(const Params &p)
     : Ramulator2Base(p, p.ramulator_config, 1, p.max_outstanding),
       port(name() + ".port", *this, 0)
 {
+    enableNodeAttribution(p.attribute_nodes);
     aggressorPattern = p.aggressor_pattern;
     aggressorInterval = p.aggressor_interval;
     aggressorStride = p.aggressor_stride;

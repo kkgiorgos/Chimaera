@@ -170,6 +170,7 @@ structure (HTMSequencer, interface="Sequencer", external = "yes") {
 }
 
 structure(RubyRequest, desc="...", interface="Message", external="yes") {
+  int MemoryWorkload, desc="Originating ROS workload, zero if unknown";
   Addr LineAddress,       desc="Line address for this request";
   Addr PhysicalAddress,   desc="Physical address for this request";
   RubyRequestType Type,      desc="Type of request (LD, ST, etc)";

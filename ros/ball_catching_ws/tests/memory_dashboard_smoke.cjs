@@ -55,6 +55,20 @@ assert.equal(rows.children[0].children[13].textContent, '0.200 / 0.200 / 0.200')
 assert.equal(rows.children[2].children[8].textContent, '—');
 assert.equal(rows.children[3].children[8].textContent, '—');
 rows.children[1].click(); assert.equal(selected, data.points[1].id);
+const nodeSelector = elements.get('memory-node');
+data.trials[0].benchmark.memory.nodes = {planning: {
+  samples: 5, retries: 2, total_mean_ns: 111, total_p95_ns: 122, total_p99_ns: 133,
+  accepted_mean_ns: 77, accepted_p95_ns: 88, accepted_p99_ns: 99,
+}};
+nodeSelector.value = 'planning'; nodeSelector.onchange();
+assert.equal(rows.children[0].children[6].textContent, '111.0');
+assert.equal(rows.children[0].children[8].textContent, '133.0');
+assert.equal(String(rows.children[0].children[17].textContent), '5');
+assert.equal(String(rows.children[0].children[18].textContent), '2');
+assert.equal(rows.children[1].children[6].textContent, '—');
+assert.equal(elements.get('memory-chart').children.filter(node => node.tag === 'circle').length, 1);
+assert(elements.get('memory-node-note').textContent.includes('legacy'));
+nodeSelector.value = 'all'; nodeSelector.onchange();
 function validate(node) {
   for (const value of Object.values(node.attrs)) assert(!/NaN|Infinity/.test(String(value)));
   for (const child of node.children) validate(child);

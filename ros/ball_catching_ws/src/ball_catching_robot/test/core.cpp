@@ -373,3 +373,27 @@ TEST(Stereo, DistantDepthHasHigherUncertaintyAndOffsetRayCorrelation)
   EXPECT_GT(near.determinant(), 0.);
   EXPECT_THROW(stereo.observationNoise(Vec3(-2., 0., 0.)), std::invalid_argument);
 }
+
+TEST(ImageFreshness, DramRoleRegistrationWaitsForDetailedOrigin)
+{
+  const std::string path = "/tmp/chimaera-role-test-" + std::to_string(getpid());
+  std::remove(path.c_str());
+  void * library = dlopen(FAKE_GEM5_CLOCK, RTLD_NOW | RTLD_LOCAL);
+  ASSERT_NE(library, nullptr);
+  auto role = reinterpret_cast<uint64_t (*)()>(dlsym(library, "chimaera_test_dram_node"));
+  auto set_role = reinterpret_cast<void (*)(uint64_t)>(dlsym(library, "chimaera_gem5_dram_node"));
+  auto set_time = reinterpret_cast<void (*)(uint64_t)>(dlsym(library, "chimaera_test_set_time_ns"));
+  ASSERT_NE(role, nullptr);
+  ASSERT_NE(set_role, nullptr);
+  ASSERT_NE(set_time, nullptr);
+  set_role(0);
+  ImageClock clock([] { return 0; }, FAKE_GEM5_CLOCK, path, 2);
+  EXPECT_FALSE(clock.now());
+  EXPECT_EQ(role(), 0u);
+  std::ofstream(path) << 1000 << '\n';
+  set_time(2000);
+  EXPECT_EQ(clock.now(), 1000);
+  EXPECT_EQ(role(), 2u);
+  std::remove(path.c_str());
+  dlclose(library);
+}

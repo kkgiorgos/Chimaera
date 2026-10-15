@@ -596,6 +596,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Prefetch := in_msg.Prefetch;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
       }
     }
   }
@@ -613,6 +614,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Prefetch := in_msg.Prefetch;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
       }
     }
   }
@@ -630,6 +632,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Prefetch := in_msg.Prefetch;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
       }
     }
   }
@@ -647,6 +650,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
               out_msg.MessageSize := MessageSizeType:Control;
               out_msg.Prefetch := in_msg.Prefetch;
               out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
 
               DPRINTF(RubySlicc, "address: %#x, destination: %s\n",
                       address, out_msg.Destination);
@@ -668,6 +672,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Prefetch := in_msg.Prefetch;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
       }
     }
   }
@@ -688,6 +693,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
               out_msg.MessageSize := MessageSizeType:Control;
               out_msg.Prefetch := in_msg.Prefetch;
               out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
           }
       }
   }
@@ -705,6 +711,7 @@ machine(MachineType:L1Cache, "MESI Directory L1 Cache CMP")
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.Prefetch := in_msg.Prefetch;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
       }
     }
   }

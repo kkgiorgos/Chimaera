@@ -41,7 +41,8 @@ cache = MESITwoLevelCacheHierarchy(l1d_size=hardware['l1d_size'],
     l1i_assoc=hardware['l1_assoc'], l2_size=hardware['l2_size'],
     l2_assoc=hardware['l2_assoc'], num_l2_banks=1)
 aggressor = {'aggressor_' + key: value for key, value in experiment['aggressor'].items()}
-memory = Ramulator2Memory(experiment['ramulator_config'], size='3GiB', aggressor=aggressor)
+memory = Ramulator2Memory(experiment['ramulator_config'], size='3GiB', aggressor=aggressor,
+    attribute_nodes=experiment.get('fixed', {}).get('dram_node_latency', False))
 board = X86Board(clk_freq=hardware['cpu_clock'], processor=processor,
                  memory=memory, cache_hierarchy=cache)
 # The board uses a gem5 COW disk overlay. Stage into the guest at KVM boot;

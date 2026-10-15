@@ -3,3 +3,5 @@
 Import('*')
 
 Source('util.cc')
+Source('memory_workload.cc', append={'CPPDEFINES': [
+    ('CHIMAERA_X86_ATTRIBUTION', int(env['CONF']['USE_X86_ISA']))]})

@@ -35,7 +35,7 @@ def plan(data, side, package_prefix=None, simulate=False):
                                ('gazebo_world', 'physics_step_ns', 'timing_file')})
     else:
         parameters.update({key: data['bridge'][key] for key in
-                           ('m5ops', 'wait_for_application', 'startup_timeout_s', 'simulation_time_from_readfile')})
+                           ('m5ops', 'wait_for_application', 'startup_timeout_s', 'simulation_time_from_readfile', 'dram_node_latency')})
     executable = 'gazebo_host_bridge' if side == 'host' and data['bridge']['timing_backend'] == 'gazebo' else side + '_bridge'
     args = [str(package_prefix / 'lib/chimaera_ros_bridge' / executable), '--ros-args']
     for key, value in parameters.items():

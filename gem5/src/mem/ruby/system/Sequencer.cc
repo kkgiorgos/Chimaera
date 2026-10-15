@@ -40,6 +40,7 @@
  */
 
 #include "mem/ruby/system/Sequencer.hh"
+#include "chimaera/memory_workload.hh"
 
 #include "base/logging.hh"
 #include "cpu/testers/rubytest/RubyTester.hh"
@@ -1159,6 +1160,8 @@ Sequencer::issueRequest(PacketPtr pkt, RubyRequestType secondary_type)
                 printAddress(msg->getPhysicalAddress()),
                 RubyRequestType_to_string(secondary_type));
     }
+
+    msg->m_MemoryWorkload = chimaera::memoryWorkload(pkt->req);
 
     // hardware transactional memory
     // If the request originates in a transaction,

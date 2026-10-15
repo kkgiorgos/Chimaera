@@ -429,6 +429,7 @@ class AbstractController : public ClockedObject, public Consumer
     Cycles m_recycle_latency;
     const Cycles m_mandatory_queue_latency;
     bool m_waiting_mem_retry;
+    RequestPtr pendingMemoryRequest;
     bool m_mem_ctrl_waiting_retry;
 
     /**

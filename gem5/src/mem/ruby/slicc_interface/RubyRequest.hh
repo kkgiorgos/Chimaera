@@ -61,6 +61,7 @@ namespace ruby
 class RubyRequest : public Message
 {
   public:
+    int m_MemoryWorkload = 0;
     Addr m_PhysicalAddress;
     Addr m_LineAddress;
     RubyRequestType m_Type;

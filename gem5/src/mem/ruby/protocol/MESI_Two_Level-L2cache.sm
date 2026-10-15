@@ -455,6 +455,7 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
         out_msg.Destination.add(mapAddressToMachine(address, MachineType:Directory));
         out_msg.MessageSize := MessageSizeType:Control;
         out_msg.AccessMode := in_msg.AccessMode;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
         out_msg.Prefetch := in_msg.Prefetch;
       }
     }

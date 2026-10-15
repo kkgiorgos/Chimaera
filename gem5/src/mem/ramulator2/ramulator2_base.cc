@@ -2,6 +2,7 @@
 // Adapted from CMU-SAFARI/ramulator2; see LICENSE and
 // ext/ramulator2/README.md.
 #include "mem/ramulator2/ramulator2_base.hh"
+#include "chimaera/memory_workload.hh"
 
 #include <cmath>
 #include <fstream>
@@ -55,21 +56,68 @@ Ramulator2Base::Ramulator2Base(const AbstractMemoryParams &p,
 
 Ramulator2Base::ContentionStats::ContentionStats(statistics::Group *parent)
     : statistics::Group(parent),
-      ADD_STAT(aggressorAccepted, statistics::units::Count::get(), "Accepted synthetic requests"),
-      ADD_STAT(aggressorRejected, statistics::units::Count::get(), "Offers blocked by queue capacity"),
-      ADD_STAT(aggressorBytes, statistics::units::Byte::get(), "Accepted synthetic traffic bytes"),
-      ADD_STAT(aggressorCompleted, statistics::units::Count::get(), "Completed synthetic requests"),
-      ADD_STAT(aggressorLatencyTicks, statistics::units::Tick::get(), "Synthetic completion latency sum"),
-      ADD_STAT(cpuReads, statistics::units::Count::get(), "Completed CPU-side DRAM reads"),
-      ADD_STAT(cpuReadLatencyTicks, statistics::units::Tick::get(), "CPU-side DRAM read latency sum"),
-      ADD_STAT(cpuRetries, statistics::units::Count::get(), "CPU-side rejected submissions"),
-      ADD_STAT(cpuReadTotalLatencyTicks, statistics::units::Tick::get(), "Read first-attempt to backend completion sum"),
-      ADD_STAT(aggressorStallCycles, statistics::units::Count::get(), "Cycles generation or admission waits under backpressure"),
-      ADD_STAT(cpuReadLatencyNs, statistics::units::Count::get(), "Accepted guest read latency, rounded up to 1 ns"),
-      ADD_STAT(cpuReadTotalLatencyNs, statistics::units::Count::get(), "Guest read latency including admission retries, rounded up to 1 ns")
+      ADD_STAT(readLatencyTrackingVersion, statistics::units::Count::get(),
+               "2: logical request retry identity"),
+      ADD_STAT(nodeAttributionEnabled, statistics::units::Count::get(),
+               "Per-node read attribution enabled"),
+      ADD_STAT(aggressorAccepted, statistics::units::Count::get(),
+               "Accepted synthetic requests"),
+      ADD_STAT(aggressorRejected, statistics::units::Count::get(),
+               "Offers blocked by queue capacity"),
+      ADD_STAT(aggressorBytes, statistics::units::Byte::get(),
+               "Accepted synthetic traffic bytes"),
+      ADD_STAT(aggressorCompleted, statistics::units::Count::get(),
+               "Completed synthetic requests"),
+      ADD_STAT(aggressorLatencyTicks, statistics::units::Tick::get(),
+               "Synthetic completion latency sum"),
+      ADD_STAT(cpuReads, statistics::units::Count::get(),
+               "Completed CPU-side DRAM reads"),
+      ADD_STAT(cpuReadLatencyTicks, statistics::units::Tick::get(),
+               "CPU-side DRAM read latency sum"),
+      ADD_STAT(cpuRetries, statistics::units::Count::get(),
+               "CPU-side rejected submissions"),
+      ADD_STAT(cpuReadTotalLatencyTicks, statistics::units::Tick::get(),
+               "Read first-attempt to backend completion sum"),
+      ADD_STAT(aggressorStallCycles, statistics::units::Count::get(),
+               "Cycles generation or admission waits under backpressure"),
+      ADD_STAT(cpuReadLatencyNs, statistics::units::Count::get(),
+               "Accepted guest read latency, rounded up to 1 ns"),
+      ADD_STAT(
+          cpuReadTotalLatencyNs, statistics::units::Count::get(),
+          "Guest read latency including admission retries, rounded up to 1 ns")
 {
     cpuReadLatencyNs.init(0);
     cpuReadTotalLatencyNs.init(0);
+}
+
+Ramulator2Base::NodeReadStats::NodeReadStats(statistics::Group *parent,
+                                             const char *name)
+    : statistics::Group(parent, name),
+      ADD_STAT(reads, statistics::units::Count::get(), "Completed DRAM reads"),
+      ADD_STAT(acceptedTicks, statistics::units::Tick::get(),
+               "Post-admission latency sum"),
+      ADD_STAT(totalTicks, statistics::units::Tick::get(),
+               "Admission-inclusive latency sum"),
+      ADD_STAT(retries, statistics::units::Count::get(),
+               "Rejected submissions"),
+      ADD_STAT(acceptedNs, statistics::units::Count::get(),
+               "Post-admission read latency ns"),
+      ADD_STAT(totalNs, statistics::units::Count::get(),
+               "Admission-inclusive read latency ns")
+{
+    acceptedNs.init(0);
+    totalNs.init(0);
+}
+
+void
+Ramulator2Base::enableNodeAttribution(bool enabled)
+{
+    attributeNodes = enabled;
+    if (enabled) {
+        for (const auto name : chimaera::DramNodeNames) {
+            nodeReads.push_back(std::make_unique<NodeReadStats>(this, name));
+        }
+    }
 }
 
 void
@@ -218,6 +266,8 @@ void
 Ramulator2Base::preDumpStats()
 {
     AbstractMemory::preDumpStats();
+    contentionStats.readLatencyTrackingVersion = 2;
+    contentionStats.nodeAttributionEnabled = attributeNodes;
     writeRamulatorStats(simout.resolve(name() + ".ramulator_stats." +
                                        std::to_string(curTick()) + ".yaml"),
                         StatsWriteMode::Snapshot);
@@ -342,13 +392,22 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
         return false;
     }
     if (pkt->isRead()) {
-        firstReadAttempt.emplace(pkt, curTick());
+        if (!pkt->req->getExtension<chimaera::DramReadAttempt>()) {
+            pkt->req->setExtension(
+                std::make_shared<chimaera::DramReadAttempt>(curTick()));
+        }
     }
     // A write occupies a backend slot and, until acknowledged, a response
     // slot. Reserve both so downstream backpressure cannot exceed the cap.
     const unsigned int slots = pkt->isWrite() && pkt->needsResponse() ? 2 : 1;
     if (nbrOutstanding() - aggressorPending + slots > maxOutstanding) {
         ++contentionStats.cpuRetries;
+        if (attributeNodes) {
+            const int role = chimaera::memoryWorkload(pkt->req);
+            panic_if(role < 0 || role >= nodeReads.size(),
+                     "Invalid DRAM node role");
+            ++nodeReads[role]->retries;
+        }
         state.retryReq = true;
         return false;
     }
@@ -376,13 +435,16 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
         ++nbrOutstandingWrites;
     }
     const Tick submitted = curTick();
-    const Tick first = read ? firstReadAttempt.at(pkt) : submitted;
-    auto callback = [this, pkt, port_id, read, submitted, first](Ramulator::Request &req) {
+    const Tick first =
+        read ? pkt->req->getExtension<chimaera::DramReadAttempt>()->first
+             : submitted;
+    const int role = chimaera::memoryWorkload(pkt->req);
+    auto callback = [this, pkt, port_id, read, submitted, first,
+                     role](Ramulator::Request &req) {
         if (read) {
             const auto erased = outstandingReads.erase(pkt);
             panic_if(erased != 1, "Unknown Ramulator2 read completion");
             --nbrOutstandingReads;
-            firstReadAttempt.erase(pkt);
             if (first >= measurementEpoch) {
                 const Tick latency = curTick() - submitted;
                 const Tick total = curTick() - first;
@@ -392,6 +454,16 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
                 contentionStats.cpuReadTotalLatencyTicks += total;
                 contentionStats.cpuReadLatencyNs.sample((latency + ns - 1) / ns);
                 contentionStats.cpuReadTotalLatencyNs.sample((total + ns - 1) / ns);
+                if (attributeNodes) {
+                    panic_if(role < 0 || role >= nodeReads.size(),
+                             "Invalid DRAM node role");
+                    auto &stats = *nodeReads[role];
+                    ++stats.reads;
+                    stats.acceptedTicks += latency;
+                    stats.totalTicks += total;
+                    stats.acceptedNs.sample((latency + ns - 1) / ns);
+                    stats.totalNs.sample((total + ns - 1) / ns);
+                }
             }
             accessAndRespond(pkt, port_id);
         } else {
@@ -406,6 +478,12 @@ Ramulator2Base::recvTimingReq(PacketPtr pkt, PortID port_id)
         pkt->getSize());
     if (!accepted) {
         ++contentionStats.cpuRetries;
+        if (attributeNodes) {
+            const int role = chimaera::memoryWorkload(pkt->req);
+            panic_if(role < 0 || role >= nodeReads.size(),
+                     "Invalid DRAM node role");
+            ++nodeReads[role]->retries;
+        }
         if (read) {
             outstandingReads.erase(pkt);
             --nbrOutstandingReads;

@@ -315,6 +315,7 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
       enqueue(memQueue_out, MemoryMsg, to_mem_ctrl_latency) {
         out_msg.addr := address;
         out_msg.Type := MemoryRequestType:MEMORY_READ;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
         out_msg.Sender := in_msg.Requestor;
         out_msg.MessageSize := MessageSizeType:Request_Control;
         out_msg.Len := 0;
@@ -341,6 +342,7 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
       enqueue(memQueue_out, MemoryMsg, to_mem_ctrl_latency) {
         out_msg.addr := address;
         out_msg.Type := MemoryRequestType:MEMORY_READ;
+        out_msg.MemoryWorkload := in_msg.MemoryWorkload;
         out_msg.Sender := in_msg.Requestor;
         out_msg.MessageSize := MessageSizeType:Request_Control;
         out_msg.Len := 0;

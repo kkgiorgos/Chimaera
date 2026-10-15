@@ -63,6 +63,7 @@ enumeration(MemoryRequestType, desc="...") {
 // Message to and from Memory Control
 
 structure(MemoryMsg, desc="...", interface="Message") {
+  int MemoryWorkload, default="0", desc="First miss initiator workload";
   Addr addr,              desc="Physical address for this request";
   MemoryRequestType Type,       desc="Type of memory request (MEMORY_READ or MEMORY_WB)";
   MachineID Sender,             desc="What component sent the data";

@@ -64,6 +64,7 @@ enumeration(CoherenceResponseType, desc="...") {
 
 // RequestMsg
 structure(RequestMsg, desc="...", interface="Message") {
+  int MemoryWorkload, default="0", desc="First miss initiator workload";
   Addr addr,              desc="Physical address for this request";
   CoherenceRequestType Type,    desc="Type of request (GetS, GetX, PutX, etc)";
   RubyAccessMode AccessMode,    desc="user/supervisor access type";

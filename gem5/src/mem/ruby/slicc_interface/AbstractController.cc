@@ -39,6 +39,7 @@
  */
 
 #include "mem/ruby/slicc_interface/AbstractController.hh"
+#include "chimaera/memory_workload.hh"
 
 #include "debug/RubyQueue.hh"
 #include "mem/ruby/network/Network.hh"
@@ -276,8 +277,12 @@ AbstractController::serviceMemoryQueue()
         req_size = mem_msg->m_Len;
     }
 
-    RequestPtr req
-        = std::make_shared<Request>(mem_msg->m_addr, req_size, 0, m_id);
+    RequestPtr req = pendingMemoryRequest;
+    if (!req) {
+        req = std::make_shared<Request>(mem_msg->m_addr, req_size, 0, m_id);
+        req->setExtension(std::make_shared<chimaera::MemoryWorkloadTag>(
+            mem_msg->m_MemoryWorkload));
+    }
     PacketPtr pkt;
     if (mem_msg->getType() == MemoryRequestType_MEMORY_WB) {
         pkt = Packet::createWrite(req);
@@ -306,6 +311,7 @@ AbstractController::serviceMemoryQueue()
         scheduleEvent(Cycles(1));
         recvTimingResp(pkt);
     } else if (memoryPort.sendTimingReq(pkt)) {
+        pendingMemoryRequest.reset();
         mem_queue->dequeue(clockEdge());
         // Since the queue was popped the controller may be able
         // to make more progress. Make sure it wakes up
@@ -313,6 +319,7 @@ AbstractController::serviceMemoryQueue()
     } else {
         scheduleEvent(Cycles(1));
         m_waiting_mem_retry = true;
+        pendingMemoryRequest = req;
         delete pkt;
         delete s;
     }

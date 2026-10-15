@@ -166,3 +166,16 @@ instantiation at tick zero. A short native robot smoke test can verify Gazebo an
 application dependencies. These checks do not replace the deferred full guest
 benchmark. The existing [memory guide](../../docs/ball-catching-memory-contention.md)
 documents measurement boundaries and local validation history.
+
+## Per-node ROS DRAM latency
+
+For a fresh run with separate perception, planning, control, and guest-bridge
+DRAM read statistics, use the opt-in
+[`memory_contention_patterns_node_dram.json`](../../ros/ball_catching_ws/experiments/memory_contention_patterns_node_dram.json)
+preset. This preset runs seven cases: baseline plus stream, stride, and random at 80% and 90%. The exact preparation command, attribution boundaries, and legacy
+retry-timestamp correction are documented in the
+[memory guide](../../docs/ball-catching-memory-contention.md#per-node-dram-reads-and-request-stable-retry-timing-2026-10-15).
+Use new inputs/results and the `chimaera:ball-catching-node-dram-sdk` /
+`chimaera:ball-catching-node-dram` image tags. The dashboard has a **DRAM reads**
+selector and exports all per-node distributions. Completed historical records
+lack the attribution needed for this breakdown.

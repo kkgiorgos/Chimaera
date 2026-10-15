@@ -626,3 +626,83 @@ def test_comparison_controls_preserve_outcomes_and_missing_measurements(tmp_path
         points.append(point)
     report = create_dashboard(trials, tmp_path / 'dashboard.html', points)
     subprocess.run(['node', str(WORKSPACE / 'tests/memory_dashboard_smoke.cjs'), str(report)], check=True)
+
+
+def write_node_memory(tmp_path):
+    write_memory(tmp_path)
+    with (tmp_path / 'stats.txt').open('a') as f:
+        f.write('\nsystem.memory.readLatencyTrackingVersion 2\nsystem.memory.nodeAttributionEnabled 1\n')
+        for name in ('unattributed', 'perception', 'planning', 'control', 'guest_bridge', 'kernel', 'other_user'):
+            prefix = 'system.memory.' + name
+            active = name == 'planning'
+            for field, value in dict(reads=100, acceptedTicks=8800000, totalTicks=17050000, retries=20).items():
+                f.write(f'{prefix}.{field} {value if active else 0}\n')
+            if active:
+                f.write(f'{prefix}.acceptedNs::40 95\n{prefix}.acceptedNs::1000 5\n')
+                f.write(f'{prefix}.totalNs::50 94\n{prefix}.totalNs::70 5\n{prefix}.totalNs::12000 1\n')
+
+
+def test_node_dram_histograms_reconcile_and_empty_roles_are_unavailable(tmp_path):
+    write_node_memory(tmp_path)
+    result = memory_metrics(tmp_path, 51.2)
+    assert result['admission_latency_valid']
+    assert result['nodes']['planning']['total_mean_ns'] == pytest.approx(170.5)
+    assert result['nodes']['planning']['total_p99_ns'] == 70
+    assert result['nodes']['planning']['read_fraction'] == 1
+    assert result['nodes']['control']['total_mean_ns'] is None
+    assert result['nodes']['control']['total_p99_ns'] is None
+
+
+@pytest.mark.parametrize('before,after', [
+    ('planning.reads 100', 'planning.reads 99'),
+    ('planning.totalTicks 17050000', 'planning.totalTicks 17050001'),
+    ('planning.retries 20', 'planning.retries 19'),
+    ('planning.totalNs::12000 1', 'planning.totalNs::12000 2'),
+])
+def test_node_dram_inconsistent_accounting_is_rejected(tmp_path, before, after):
+    write_node_memory(tmp_path)
+    path = tmp_path / 'stats.txt'
+    path.write_text(path.read_text().replace(before, after))
+    with pytest.raises(ValueError, match='mismatch|reconcile'):
+        memory_metrics(tmp_path, 51.2)
+
+
+def test_legacy_admission_latency_is_flagged(tmp_path):
+    write_memory(tmp_path)
+    result = memory_metrics(tmp_path, 51.2)
+    assert result['admission_latency_valid'] is False
+    assert 'packet' in result['admission_latency_warning']
+    assert 'nodes' not in result
+
+
+def test_node_dram_configuration_is_opt_in_and_timing_only(tmp_path):
+    raw = configuration(tmp_path)
+    assert load(tmp_path, raw)['fixed']['dram_node_latency'] is False
+    raw['fixed']['dram_node_latency'] = True
+    assert load(tmp_path, raw)['fixed']['dram_node_latency'] is True
+    raw['hardware']['cpu_type'] = 'o3'
+    with pytest.raises(ValueError, match='requires Timing'):
+        load(tmp_path, raw)
+
+
+def test_node_dram_missing_group_is_rejected(tmp_path):
+    write_node_memory(tmp_path)
+    path = tmp_path / 'stats.txt'
+    path.write_text(path.read_text().replace('system.memory.unattributed.reads 0\n', ''))
+    with pytest.raises(ValueError, match='Missing per-node DRAM counters'):
+        memory_metrics(tmp_path, 51.2)
+
+
+def test_registered_node_with_no_dram_misses_is_valid(tmp_path):
+    from benchmark_metrics import validate_node_registration
+    write_node_memory(tmp_path)
+    metrics = memory_metrics(tmp_path, 51.2)
+    log = tmp_path / 'launch.log'
+    log.write_text(''.join('ROS_DRAM_REGISTER role=' + name + ' address_space=0x1000\n'
+                           for name in ('perception', 'planning', 'control', 'guest_bridge')))
+    validate_node_registration(metrics, log)
+    assert metrics['nodes']['control']['samples'] == 0
+    assert 'control' in metrics['registered_node_roles']
+    log.write_text('ROS_DRAM_REGISTER role=planning address_space=0x1000\n')
+    with pytest.raises(ValueError, match='Missing DRAM node registration'):
+        validate_node_registration(metrics, log)

@@ -1245,3 +1245,73 @@ Preparation/reporting and actual worker handoff are checked separately in Docker
 The final prepared suite remains entirely pending; no full benchmark is started
 by the agent. Run/monitor/report and image-transfer commands are in the container
 README. Full coupled validation remains user-run on the larger system.
+
+### Per-node DRAM reads and request-stable retry timing, 2026-10-15
+
+A separate opt-in preset, `experiments/memory_contention_patterns_node_dram.json`,
+sets `fixed.dram_node_latency` to true and runs seven cases: baseline plus stream, stride, and random at 80% and 90%. It currently requires x86 full-system
+Timing CPUs with the MESI Two Level cache protocol. Existing prepared inputs and
+completed runs keep their original images and scripts.
+
+Each long-lived guest process registers its role after the exact detailed-time
+origin becomes available: perception, planning, control, or guest bridge. Tags
+use the process's x86 page-table root, so user-space ROS/DDS threads and CPU
+migration retain the same role. Requests capture that role at CPU issue and
+carry it through Ruby to the DRAM wrapper. A merged cache miss is attributed once
+to its initiating request; this is a transaction breakdown, not a count of all
+loads served by a shared fill. Kernel execution, other user processes, and
+unattributed traffic (including untagged page-table/prefetch traffic) stay
+separate. Attribution is process-level; it does not identify individual callbacks
+or distinguish ROS middleware from application/library code within a process.
+Processes must remain alive without exec during measurement. Mid-run checkpoints
+with active attribution are not supported.
+
+`benchmark.json` adds `memory.nodes` with read sample counts, read fractions,
+rejected submission counts, and mean/p95/p99 plus sparse histograms for both
+post-admission and admission-inclusive latency. All seven buckets must reconcile
+with aggregate samples, tick sums, and retries; process registration is checked independently so a fully cached node can legitimately have zero DRAM samples. Missing exports or inconsistent
+histograms fail analysis. Retries include refused reads and writes; latencies
+remain read-only and stop at backend completion. Empty buckets have unavailable
+latencies, rather than zero. The dashboard's **DRAM reads** selector chooses a
+process/bucket for the latency table, baseline ratios, and plot. Sample and retry
+counts are visible and all distributions remain in the JSON export.
+
+Implementation exposed a legacy retry-lifetime bug: Ruby deleted refused
+`Packet` objects and reconstructed them on retry, but the wrapper retained
+first-attempt times keyed by packet address. Reuse of an address could alias a
+new request to an old timestamp. A deterministic regression reproduces that
+alias. Ruby now retains the logical `Request` across refused submissions, and its
+first-attempt time belongs to a request extension. This also avoids stale map
+entries and preserves the initiating role while a request waits. New statistics
+advertise `readLatencyTrackingVersion=2`; older admission-inclusive measurements
+are flagged as unverified. Their raw histogram consistency does not establish
+correct timestamp ownership. In particular, the original Docker stride-90 mean
+of 411.73 ns and millisecond tail must not be treated as validated admission
+costs. First-attempt window filtering may also affect which legacy reads were
+included. The recorded catch/miss and planner decisions remain separate evidence.
+Corrections are attached to the original suite's evaluation documents.
+
+Prepare new inputs with the new image tags; this runs calibration and packaging,
+without starting robot cases:
+
+```bash
+python3 containers/ball-catching/setup.py \
+  --config ros/ball_catching_ws/experiments/memory_contention_patterns_node_dram.json \
+  --sdk-image chimaera:ball-catching-node-dram-sdk \
+  --image chimaera:ball-catching-node-dram \
+  --output containers/ball-catching/artifacts/memory-patterns-node-dram-inputs-final \
+  --disk containers/ball-catching/guest-assets-drained/disk.img \
+  --kernel containers/ball-catching/guest-assets-drained/kernel \
+  --build-jobs 4 --cpus 4 --memory 12g
+```
+
+Use a new results directory, `ros/ball_catching_ws/results/memory-patterns-node-dram-docker`,
+with the Docker run wrapper when ready. Historical files cannot recover per-node
+attribution. Do not combine old and new runs as if their instrumentation and
+admission-latency tracker were identical.
+
+Validation includes a standalone logical-request identity regression, strict
+Python counter/histogram reconciliation tests, guest clock registration tests,
+and a short synthetic full-system test with four processes migrating between
+cores. The synthetic test uses the existing disk read-only with a COW overlay;
+it runs no ROS, Gazebo, robot throw, or benchmark suite.

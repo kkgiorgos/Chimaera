@@ -24,7 +24,7 @@ class Ramulator2Memory(AbstractMemorySystem):
 
     def __init__(
         self, configuration: str, size: str, max_outstanding: int = 256,
-        aggressor: dict = None
+        aggressor: dict = None, attribute_nodes: bool = False
     ) -> None:
         super().__init__()
         try:
@@ -66,6 +66,7 @@ class Ramulator2Memory(AbstractMemorySystem):
         self.mem_ctrl = Ramulator2(
             ramulator_config=json.dumps(config),
             max_outstanding=max_outstanding,
+            attribute_nodes=attribute_nodes,
             **aggressor,
         )
 
