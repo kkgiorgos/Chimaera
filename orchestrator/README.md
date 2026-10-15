@@ -39,6 +39,30 @@ There is no application login: access control belongs to your VPN/proxy.
 The controller has no published port and no webserver Docker socket mount.
 Next.js uses its [standalone Docker output](https://nextjs.org/docs/app/api-reference/config/next-config-js/output).
 
+### Tailscale worker names after a host reboot
+
+If workers use MagicDNS names such as `pop-os`, add these settings to `.env`,
+using the `MagicDNSSuffix` from `tailscale status --json` on the webserver:
+
+```dotenv
+COMPOSE_FILE=compose.yaml:compose.tailscale.yaml
+CHIMAERA_TAILNET=tail123456.ts.net
+```
+
+Run `docker compose --env-file .env up -d` from this directory to recreate the
+controller with the persistent settings. The override explicitly sets Tailscale's
+`100.100.100.100` resolver and the tailnet search domain. This avoids inheriting
+host DNS settings before Tailscale finishes starting during a reboot, and restores
+short-name lookup in Podman networks whose default search domain is `dns.podman`.
+Tailscale and MagicDNS must be enabled on the webserver; worker polling retries
+connections while the VPN starts. Container service-name lookup stays on the
+Compose network's internal DNS.
+
+Use the same `.env` for subsequent Compose commands. If passing `-f` explicitly,
+include both `-f compose.yaml -f compose.tailscale.yaml`, because `-f` overrides
+`COMPOSE_FILE`. A plain container restart cannot apply new DNS settings; recreate
+the controller once with `up -d`. This keeps the controller data volume.
+
 The named `controller-data` volume holds SQLite state, queued commands,
 notification delivery records, frozen calibration/provenance, temporary result downloads,
 and collected results. Keep that volume when updating containers. Back it up
