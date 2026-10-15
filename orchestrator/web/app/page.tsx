@@ -5,7 +5,7 @@ import { Activity, ArrowDownToLine, Bell, Check, ChevronRight, CirclePause, Cloc
   FileJson, Layers3, Moon, Play, Plus, RotateCcw, Server, Settings2, Square, Sun,
   Terminal, Trash2, X } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
-import type { Case, Machine, State } from '@/lib/types';
+import type { Attempt, Case, Machine, State } from '@/lib/types';
 
 const Editor = dynamic(() => import('@/components/experiment-editor'), { ssr: false,
   loading: () => <div className="editor-loading">Loading experiment editor…</div> });
@@ -31,6 +31,15 @@ function bytes(value: number) {
   return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GiB` : `${(value / 1024 ** 2).toFixed(1)} MiB`;
 }
 function label(value: string) { return value.replaceAll('_', ' '); }
+function SimulationSpeed({ attempt, stale = false }: { attempt?: Attempt; stale?: boolean }) {
+  const speed = attempt?.progress?.average_speed;
+  const age = attempt?.progress?.last_update_age_seconds;
+  const sampled = speed != null && Number.isFinite(speed) && speed >= 0;
+  const title = sampled
+    ? `Average simulated seconds per wall-clock second at the latest timing sample${age != null ? `; sample recorded ${Math.floor(age)} seconds ago` : ''}`
+    : 'Simulation speed becomes available after the first timing sample';
+  return <span title={title}>{sampled ? `${speed.toPrecision(3)}× real time${stale ? ' (last sample)' : ''}` : 'Awaiting sample'}</span>;
+}
 function Status({ value }: { value: string }) {
   return <span className={`status status-${value}`}><i />{label(value)}</span>;
 }
@@ -147,7 +156,7 @@ export default function Dashboard() {
                   const stats = m.snapshot?.stats.find(s => s.Name === `chimaera-${a?.id}`);
                   return <div key={index} className={`worker-slot ${c ? 'occupied' : ''}`}>
                     <div><span className="slot-mark">{c ? <Activity size={15} /> : <span />}</span><strong>{c ? c.id : 'Available'}</strong>{a && <button className="icon-button" onClick={() => showLogs(m.id, a.id, c.id)} aria-label={`Logs for ${c.id}`}><Terminal size={15} /></button>}</div>
-                    {c && a ? <><p>{a.progress?.phase || label(c.status)}</p><div className="slot-data"><span title={c.eta_basis}><Clock3 size={12} />{stale ? 'Progress stale' : time(c.eta_seconds)}</span><span>{stats ? `${stats.CPUPerc} CPU` : 'CPU awaiting sample'}</span></div><small>{stats?.MemUsage || 'RAM awaiting sample'}</small>
+                    {c && a ? <><p>{a.progress?.phase || label(c.status)}</p><div className="slot-data"><span title={c.eta_basis}><Clock3 size={12} />{stale ? 'Progress stale' : time(c.eta_seconds)}</span><span>{stats ? `${stats.CPUPerc} CPU` : 'CPU awaiting sample'}</span></div><div className="slot-data"><span>Simulation speed</span><SimulationSpeed attempt={a} stale={stale || (a.progress?.last_update_age_seconds ?? 0) > 30} /></div><small>{stats?.MemUsage || 'RAM awaiting sample'}</small>
                       <div className="progress-track"><div style={{ width: `${a.progress?.throw_percent || 0}%` }} /></div></> : <p>Next case assigned automatically</p>}
                   </div>;
                 })}</div>
@@ -175,9 +184,11 @@ export default function Dashboard() {
             {experiment.status === 'needs_attention' && <div className="banner warning"><span>The queue is waiting for your decision. Retry failures, accept partial results, or delete this experiment.</span><div className="actions"><button className="button compact" disabled={!failed} onClick={() => command('retry', { id: experiment.id })}><RotateCcw size={14} />Retry failed cases</button><button className="button compact" onClick={() => command('accept_partial', { id: experiment.id })}>Accept partial results</button></div></div>}
             {collectionErrors.length > 0 && !experiment.results_deleted && <div className="banner warning collection-errors" role="alert"><div><strong>Result collection failed</strong><p>Worker execution is tracked separately. Retry downloading output, or delete the experiment without waiting for collection.</p><details><summary>Show {collectionErrors.length} collection errors</summary>{collectionErrors.map((message, i) => <p key={i}>{message}</p>)}</details></div><button className="button compact" onClick={() => command('retry_collection', { id: experiment.id })}><RotateCcw size={14} />Retry collection</button></div>}
             {experiment.status === 'stopping' && <div className="banner warning">Stop pending on {experiment.stop_pending?.map(id => machines.find(m => m.id === id)?.name || id).join(', ') || 'active machines'}.</div>}
-            <div className="case-table-wrap"><table className="case-table"><thead><tr><th>Case</th><th>Traffic pattern</th><th>Pressure</th><th>Machine</th><th>Status</th><th>Estimated remaining</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{cases.map(c => {
+            <div className="case-table-wrap"><table className="case-table"><thead><tr><th>Case</th><th>Traffic pattern</th><th>Pressure</th><th>Machine</th><th>Status</th><th>Simulation speed</th><th>Estimated remaining</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>{cases.map(c => {
               const a = c.attempts.at(-1);
-              return <tr key={c.id}><td><strong>{c.id}</strong>{a?.progress?.outcome && <small>{a.progress.outcome.toLowerCase()}</small>}</td><td>{c.point.pattern || 'Baseline'}</td><td>{Math.round((c.point.pressure || 0) * 100)}%</td><td>{machines.find(m => m.id === a?.machine)?.name || 'Unassigned'}</td><td><Status value={c.status} />{a?.oom && <small className="danger-text">Memory limit exceeded</small>}</td><td title={c.eta_basis}>{busyStatuses.includes(c.status) ? time(c.eta_seconds) : '—'}</td><td><div className="actions">{a && <button className="icon-button" onClick={() => showLogs(a.machine, a.id, c.id)} aria-label={`Logs for ${c.id}`}><Terminal size={16} /></button>}{c.status === 'failed' && ['running', 'needs_attention'].includes(experiment.status) && <button className="icon-button" onClick={() => command('retry', { id: experiment.id, case: c.id })} aria-label={`Retry ${c.id}`}><RotateCcw size={16} /></button>}</div></td></tr>;
+              const machine = machines.find(m => m.id === a?.machine);
+              const speedStale = occupiedStatuses.includes(c.status) && (!machine?.online || Boolean(connectionError) || !machine.seen || Date.now() / 1000 - machine.seen > 30 || (a?.progress?.last_update_age_seconds ?? 0) > 30);
+              return <tr key={c.id}><td><strong>{c.id}</strong>{a?.progress?.outcome && <small>{a.progress.outcome.toLowerCase()}</small>}</td><td>{c.point.pattern || 'Baseline'}</td><td>{Math.round((c.point.pressure || 0) * 100)}%</td><td>{machines.find(m => m.id === a?.machine)?.name || 'Unassigned'}</td><td><Status value={c.status} />{a?.oom && <small className="danger-text">Memory limit exceeded</small>}</td><td><SimulationSpeed attempt={a} stale={speedStale} /></td><td title={c.eta_basis}>{busyStatuses.includes(c.status) ? time(c.eta_seconds) : '—'}</td><td><div className="actions">{a && <button className="icon-button" onClick={() => showLogs(a.machine, a.id, c.id)} aria-label={`Logs for ${c.id}`}><Terminal size={16} /></button>}{c.status === 'failed' && ['running', 'needs_attention'].includes(experiment.status) && <button className="icon-button" onClick={() => command('retry', { id: experiment.id, case: c.id })} aria-label={`Retry ${c.id}`}><RotateCcw size={16} /></button>}</div></td></tr>;
             })}</tbody></table></div>
             <div className="result-actions"><div className="actions"><a className="button compact" href={`/api/download/${experiment.id}`} aria-disabled={experiment.results_deleted} onClick={e => { if (experiment.results_deleted) e.preventDefault(); }}><ArrowDownToLine size={15} />Download collected results</a><a className="button compact" href={`/api/report/${experiment.id}`} target="_blank" rel="noreferrer">Open comparison report</a></div>
               <div className="actions">{!activeStatuses.includes(experiment.status) && experiment.status !== 'queued' && <button className="text-button" onClick={() => setConfirmation({ title: 'Clean remote copies?', description: 'Remove this experiment’s remote files and stopped containers. Any uncollected output will be permanently discarded; downloaded results stay on the webserver.', action: () => { void command('cleanup', { id: experiment.id, discard_uncollected: true }); } })}>Clean remote copies</button>}<button className="icon-button danger-text" disabled={!canDelete} title={canDelete ? 'Delete experiment' : 'Stop active workers before deleting'} aria-label="Delete experiment" onClick={() => setConfirmation({ title: 'Delete experiment?', description: 'Cancel result collection and delete this experiment’s files from the webserver. History remains marked deleted. Remote output can be cleaned separately, including after a failed collection.', action: () => { void command('delete', { id: experiment.id }); } })}><Trash2 size={16} /></button></div>

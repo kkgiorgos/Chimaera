@@ -125,6 +125,12 @@ operations. No image archive is retained by the controller, but the network carr
 each compressed image once per worker that lacks it. Old experiments without an explicit
 calibration-machine choice retain their original first-machine default.
 
+Worker slots and the case table always show simulation speed as a real-time
+multiplier (simulated seconds per wall-clock second), averaged through the latest
+timing sample. Before timing data arrives they show **Awaiting sample**. Stale
+active samples are labeled **last sample**, and finished cases retain their last
+recorded speed.
+
 SDK image cache keys depend on the content of simulator, transport, bridge, stack
 profile and build inputs. Application image keys additionally depend on the robot
 application sources and the exact SDK image ID. Host editor caches (`.cache`, `.vscode`), simulation output
