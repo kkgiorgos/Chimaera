@@ -21,7 +21,16 @@ def prepare(directory):
     identity = source_identity(root)
     revision = identity['revision']
     if identity != request['source_identity']:
-        raise ValueError('Repository revision or source contents differ from the queued experiment')
+        expected = request['source_identity']
+        differences = '; '.join(
+            f'{key}: queued={expected.get(key)}, local={identity.get(key)}'
+            for key in sorted(expected.keys() | identity.keys())
+            if expected.get(key) != identity.get(key))
+        raise ValueError('Repository revision or source contents differ from the queued experiment: '
+            + differences + '. This check uses the worker checkout, not the transferred Docker images. '
+            'Restore the queued revision and source contents before retrying preparation, or stop this '
+            'experiment, align the controller and worker checkouts, redeploy, and queue a new experiment. '
+            'Retrying or redeploying alone does not update the frozen source identity.')
     atomic_json(directory / 'stage.json', dict(phase='Building SDK and application'))
     builds = build_identities(root)
     if calibration:

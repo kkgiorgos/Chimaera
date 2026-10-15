@@ -101,6 +101,17 @@ A previously loaded transfer tag is reverified before reuse, avoiding another
 download after a successful load. After updating the controller for this fix,
 use **Retry preparation** on a worker that reported an image identity mismatch.
 
+If preparation reports **Repository revision or source contents differ from the
+queued experiment**, the worker checkout differs from the source identity frozen
+when the experiment was queued. Transferred images do not replace that checkout.
+The error lists queued and local revisions/fingerprints. Restore the queued
+revision and matching source contents before choosing **Retry preparation**.
+If adopting newer code, stop the old experiment, align the controller and all
+worker checkouts (including relevant uncommitted/untracked sources), rebuild the
+controller, redeploy supervisors, and queue a new experiment. Redeployment and
+retry do not refresh an existing experiment's frozen identity. Keep cached images;
+matching build inputs can reuse them in the new experiment.
+
 CPU settings use Docker quotas, not exclusive core pinning. You choose worker
 counts and resource limits; there is no tuning or automatic overcommit policy.
 Changes to worker count/size apply to future assignments. Existing cases retain

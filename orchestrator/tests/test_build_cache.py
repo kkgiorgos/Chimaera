@@ -83,6 +83,27 @@ def test_preparation_reuses_images_and_builds_guest_locally_with_shared_calibrat
     assert not (directory / 'export-assets').exists()
 
 
+@pytest.mark.parametrize('field', ['revision', 'fingerprint'])
+def test_source_mismatch_reports_queued_and_local_values_before_using_images(tmp_path, monkeypatch, field):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    local = dict(identity, **{field: 'different-local-value'})
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('pipeline.source_identity', return_value=local), \
+         patch('pipeline.build_identities') as builds, \
+         patch('pipeline.subprocess.run') as commands, \
+         patch('guest.ensure_assets') as assets:
+        with pytest.raises(ValueError) as error:
+            prepare(directory)
+        message = str(error.value)
+        assert f'{field}: queued={identity[field]}, local=different-local-value' in message
+        assert 'worker checkout, not the transferred Docker images' in message
+        assert 'queue a new experiment' in message
+        builds.assert_not_called()
+        commands.assert_not_called()
+        assets.assert_not_called()
+    assert not (directory / 'ready.json').exists()
+
+
 def test_preparation_still_rejects_different_shared_kernel(tmp_path, monkeypatch):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     request = json.loads((directory / 'request.json').read_text())
