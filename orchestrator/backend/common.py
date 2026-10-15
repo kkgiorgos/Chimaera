@@ -49,6 +49,46 @@ def source_identity(root):
     return dict(revision=revision, fingerprint=result.hexdigest())
 
 
+def content_identity(root, paths):
+    """Hash build sources, including ignored external packages copied by Docker."""
+    root = Path(root)
+    names = set()
+    excluded = {'.git', '__pycache__', '.pytest_cache', 'build', 'install', 'log'}
+    excluded_paths = {'gem5/resources', 'gem5/ext/ramulator2/ramulator2'}
+    for relative in paths:
+        source = root / relative
+        if source.is_file():
+            names.add(str(source.relative_to(root)))
+        elif source.is_dir():
+            for directory, children, files in os.walk(source):
+                children[:] = sorted(name for name in children if name not in excluded
+                    and str((Path(directory) / name).relative_to(root)) not in excluded_paths)
+                names.update(str((Path(directory) / name).relative_to(root)) for name in children
+                             if (Path(directory) / name).is_symlink())
+                for name in files:
+                    if name not in excluded and not name.endswith(('.pyc', '.pyo')):
+                        names.add(str((Path(directory) / name).relative_to(root)))
+    result = hashlib.sha256()
+    for name in sorted(names):
+        path = root / name
+        if path.is_symlink():
+            result.update(name.encode() + b'\0link\0' + os.readlink(path).encode() + b'\0')
+        elif path.is_file():
+            result.update(name.encode() + b'\0' + digest(path).encode() + b'\0'
+                          + str(path.stat().st_mode & 0o111).encode() + b'\0')
+    return result.hexdigest()
+
+
+def build_identities(root):
+    sdk = content_identity(root, ['containers/Dockerfile', 'containers/Dockerfile.dockerignore',
+        'containers/build.py', 'containers/profiles', 'containers/scripts', 'gem5',
+        'gem5-transport', 'ros/chimaera_ros_ws/src'])
+    app = content_identity(root, ['containers/ball-catching/Dockerfile',
+        'containers/ball-catching/Dockerfile.dockerignore', 'ros/ball_catching_ws/src',
+        'ros/franka_ws/src/franka_description'])
+    return dict(sdk=sdk, application=hashlib.sha256((sdk + app).encode()).hexdigest())
+
+
 def atomic_json(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

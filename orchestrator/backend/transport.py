@@ -2,6 +2,8 @@
 import json
 import shlex
 import subprocess
+import tempfile
+import time
 
 from common import run
 
@@ -30,21 +32,30 @@ class SSH:
             raise RuntimeError(result['error'])
         return result['result']
 
-    def fetch(self, machine, path, destination):
+    def fetch(self, machine, path, destination, cancel=None):
         # tar streams over SSH; extraction and path/link checks happen locally.
         command = shlex.join(['docker', 'exec', 'chimaera-supervisor', 'tar',
-                              '-C', path, '-chSzf', '-', '.'])
-        with destination.open('wb') as stream:
-            result = subprocess.run(self.base(machine) + [command], stdout=stream,
-                                    stderr=subprocess.PIPE, timeout=1800)
-        if result.returncode:
-            raise RuntimeError(result.stderr.decode(errors='replace')[-2000:])
-
-    def push(self, machine, source, destination):
-        command = shlex.join(['docker', 'exec', '-i', 'chimaera-supervisor',
-                              'tar', '-xzf', '-', '-C', destination])
-        with source.open('rb') as stream:
-            result = subprocess.run(self.base(machine) + [command], stdin=stream,
-                                    stderr=subprocess.PIPE, stdout=subprocess.DEVNULL, timeout=1800)
-        if result.returncode:
-            raise RuntimeError(result.stderr.decode(errors='replace')[-2000:])
+                              '-C', path, '--exclude=./suite/guest.tar.gz',
+                              '-chSzf', '-', '.'])
+        if cancel is not None and cancel.is_set():
+            raise RuntimeError('Result collection cancelled')
+        with destination.open('wb') as stream, tempfile.TemporaryFile() as errors:
+            process = subprocess.Popen(self.base(machine) + [command], stdout=stream, stderr=errors)
+            deadline = time.monotonic() + 1800
+            try:
+                while process.poll() is None:
+                    if cancel is not None and cancel.is_set():
+                        raise RuntimeError('Result collection cancelled')
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Result collection exceeded 30 minutes')
+                    try:
+                        process.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if process.returncode:
+                    errors.seek(0)
+                    raise RuntimeError(errors.read().decode(errors='replace')[-2000:])
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                process.wait()

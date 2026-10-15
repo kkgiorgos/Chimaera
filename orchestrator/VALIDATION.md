@@ -61,3 +61,27 @@ ETAs are estimates from live throw speed and observed case durations. They have 
 yet been calibrated against real distributed runs and remain unknown when the
 necessary measurements are absent. Controller and UI scaffolding checks do not
 substitute for that simulation validation.
+
+## Collection recovery and local build regression checks
+
+The updated combined pytest suite passed **74 tests**. Added coverage includes
+failed downloads without automatic retry loops, explicit collection retry without
+rerunning a case, cancellation during deletion, prevention of late file
+resurrection, startup recovery of older failed/collecting cases, supervisor
+handling of missing output directories, and HTTP-safe server-issued machine IDs.
+Build tests verify separate SDK/application cache identities, inclusion of ignored
+robot sources, exclusion of generated build output, local guest preparation on
+every host, and strict calibration/kernel validation across independent disks.
+
+`npm run typecheck`, `npm run build`, and `git diff --check` passed. A Chromium
+regression against the production web build added a third machine with
+`crypto.randomUUID` unavailable, displayed a collection error, retried collection,
+and deleted the experiment during a blocked download. The download was cancelled,
+deleted files stayed deleted, and there were no browser page errors.
+
+The updated supervisor image built successfully and passed the real Docker
+synthetic lifecycle check, including detached completion, supervisor reopen,
+duplicate prevention, stdout/stderr capture, immediate stop, stop barrier, and
+cleanup. These checks did not run simulations or deploy to the destination SSH
+cluster; the simulation validation boundary above still applies. Guest disks and
+Docker images are now built locally on each machine rather than transferred.

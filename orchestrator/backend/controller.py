@@ -149,9 +149,16 @@ class Controller:
         self.stop_pool = ThreadPoolExecutor(max_workers=3)
         self.jobs = {}
         self.last_poll = {}
-        self.asset_lock = threading.Lock()
+        self.collection_cancellations = {}
+        self.collection_lock = threading.RLock()
         if not self.store.get('settings', 'main'):
             self.store.put('settings', 'main', dict(progress_enabled=True, progress_interval=3600, last_progress=0))
+        # Older databases coupled failed execution to its unfinished log transfer.
+        for experiment in self.store.all('experiments'):
+            for case in experiment['cases']:
+                if case['status'] == 'collecting' and case['attempts'][-1]['status'] in {'failed', 'stopped'}:
+                    case['status'] = 'failed'
+            self.save(experiment)
 
     def submit(self, key, kind, context, operation):
         if key not in self.jobs:
@@ -166,6 +173,8 @@ class Controller:
         """HTTP validates and appends commands; only scheduler mutates scheduling state."""
         body = copy.deepcopy(body)
         if kind == 'machine':
+            if not body.get('id'):
+                body['id'] = uuid.uuid4().hex
             body = validate_machine(body)
         elif kind == 'experiment':
             body['config'], body['points'] = validate_config(self.root, body['config'])
@@ -177,7 +186,7 @@ class Controller:
         elif kind == 'settings':
             if type(body.get('progress_enabled')) is not bool or type(body.get('progress_interval')) is not int or body['progress_interval'] < 60:
                 raise ValueError('Progress interval must be at least 60 seconds')
-        elif kind not in {'deploy', 'stop', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare'}:
+        elif kind not in {'deploy', 'stop', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare', 'retry_collection'}:
             raise ValueError('Unknown action')
         key = uuid.uuid4().hex
         self.store.put('commands', key, dict(id=key, kind=kind, body=body, status='pending'))
@@ -245,6 +254,18 @@ class Controller:
                     if case['status'] == 'failed' and (not body.get('case') or case['id'] == body['case']):
                         case['status'] = 'queued'
                 experiment['status'] = 'running'
+            elif kind == 'retry_collection':
+                if experiment.get('results_deleted'):
+                    raise ValueError('Collected results have been deleted')
+                for case in experiment['cases']:
+                    for attempt in case['attempts']:
+                        if attempt.get('collection_status') == 'failed':
+                            attempt['collection_status'] = 'pending'
+                            attempt.pop('collection_error', None)
+                for preparation in experiment['preparations'].values():
+                    if preparation.get('collection_status') == 'failed':
+                        preparation['collection_status'] = 'pending'
+                        preparation.pop('collection_error', None)
             elif kind == 'retry_prepare':
                 machine = self.machine(body['machine'])
                 preparation = experiment['preparations'].get(machine['id'])
@@ -261,20 +282,30 @@ class Controller:
                 experiment.update(status='partial', finished=time.time())
                 event(self.store, f"{experiment['name']}: partial results accepted", notify=True)
             elif kind in {'delete', 'cleanup'}:
-                if experiment['status'] in ACTIVE or experiment['status'] == 'queued':
-                    raise ValueError('Stop the experiment before deleting or cleaning results')
                 if kind == 'delete':
-                    if any(kind in {'collect', 'prepare_collect'} and context[0] == experiment['id']
-                           for kind, context, _ in self.jobs.values()):
-                        raise ValueError('Wait for result collection to finish before deleting')
-                    shutil.rmtree(self.data / 'results' / experiment['id'], ignore_errors=True)
-                    shutil.rmtree(self.data / 'assets' / experiment['id'], ignore_errors=True)
-                    experiment['results_deleted'] = True
+                    executing = any(c['status'] in OCCUPIED for c in experiment['cases'])
+                    preparing = experiment['status'] != 'stopped' and any(p['status'] in {'preparing', 'running', 'accepted'}
+                                    for p in experiment['preparations'].values())
+                    if executing or preparing or experiment['status'] == 'stopping':
+                        raise ValueError('Stop active workers before deleting the experiment')
+                    with self.collection_lock:
+                        self.cancel_collection(experiment['id']).set()
+                        experiment.update(results_deleted=True, status='deleted')
+                        for case in experiment['cases']:
+                            for attempt in case['attempts']:
+                                if not attempt.get('collected'):
+                                    attempt['collection_status'] = 'cancelled'
+                        self.save(experiment)
+                        shutil.rmtree(self.data / 'results' / experiment['id'], ignore_errors=True)
+                        shutil.rmtree(self.data / 'assets' / experiment['id'], ignore_errors=True)
+                        shutil.rmtree(self.data / 'collections' / experiment['id'], ignore_errors=True)
                 else:
+                    if experiment['status'] in ACTIVE or experiment['status'] == 'queued':
+                        raise ValueError('Stop the experiment before cleaning remote results')
                     # No remote deletion until every accepted attempt has a verified local copy.
                     attempts = [a for c in experiment['cases'] for a in c['attempts']]
                     preparations = experiment['preparations'].values()
-                    if experiment.get('results_deleted') or any(not a.get('collected') for a in attempts) or any(not p.get('collected') for p in preparations):
+                    if not body.get('discard_uncollected') and (experiment.get('results_deleted') or any(not a.get('collected') for a in attempts) or any(not p.get('collected') for p in preparations)):
                         raise ValueError('Collect every attempt before remote cleanup')
                     for machine_id in experiment['preparations']:
                         machine = self.machine(machine_id)
@@ -296,6 +327,9 @@ class Controller:
 
     def save(self, experiment):
         self.store.put('experiments', experiment['id'], experiment)
+
+    def cancel_collection(self, experiment_id):
+        return self.collection_cancellations.setdefault(experiment_id, threading.Event())
 
     def tick(self):
         for command in self.store.all('commands'):
@@ -348,9 +382,11 @@ class Controller:
             if recovered:
                 event(self.store, f"{machine['name']} connected")
             self.ingest(machine, result)
-        elif kind in {'transfer', 'reset', 'cleanup'}:
+        elif kind in {'reset', 'cleanup'}:
             experiment_id, machine_id = context
             experiment = self.experiment(experiment_id)
+            if kind == 'reset' and experiment.get('results_deleted'):
+                return
             if kind == 'reset':
                 experiment['preparations'].pop(machine_id, None)
             else:
@@ -369,9 +405,14 @@ class Controller:
         elif kind == 'collect':
             experiment_id, case_id, attempt_id = context
             experiment = self.experiment(experiment_id)
+            if experiment.get('results_deleted'):
+                shutil.rmtree(self.data / 'collections' / experiment_id, ignore_errors=True)
+                return
             case = next(c for c in experiment['cases'] if c['id'] == case_id)
             attempt = next(a for a in case['attempts'] if a['id'] == attempt_id)
             attempt['collected'] = True
+            attempt['collection_status'] = 'completed'
+            attempt.pop('collection_error', None)
             if case['attempts'][-1]['id'] == attempt_id and case['status'] != 'queued':
                 case['status'] = 'completed' if attempt['status'] == 'completed' else 'failed'
                 if case.pop('resume_after_collection', False) and case['status'] != 'completed':
@@ -381,7 +422,12 @@ class Controller:
                   'error' if case['status'] == 'failed' else 'info', notify=True)
         elif kind == 'prepare_collect':
             experiment = self.experiment(context[0])
+            if experiment.get('results_deleted'):
+                shutil.rmtree(self.data / 'collections' / context[0], ignore_errors=True)
+                return
             experiment['preparations'][context[1]]['collected'] = True
+            experiment['preparations'][context[1]]['collection_status'] = 'completed'
+            experiment['preparations'][context[1]].pop('collection_error', None)
             self.save(experiment)
         # start/prepare/stop are reconciled from the next authoritative snapshot.
 
@@ -396,14 +442,26 @@ class Controller:
             if was_online or kind == 'deploy':
                 event(self.store, f"{machine['name']}: {error}", 'error', notify=True)
         else:
+            if kind in {'collect', 'prepare_collect'}:
+                experiment = self.experiment(context[0])
+                if experiment.get('results_deleted'):
+                    shutil.rmtree(self.data / 'collections' / context[0], ignore_errors=True)
+                    return
+                if kind == 'collect':
+                    case = next(c for c in experiment['cases'] if c['id'] == context[1])
+                    attempt = next(a for a in case['attempts'] if a['id'] == context[2])
+                    attempt.update(collection_status='failed', collection_error=error)
+                    if case['attempts'][-1]['id'] == attempt['id'] and case['status'] not in {'queued', 'running', 'dispatching'}:
+                        case['status'] = 'collection_failed' if attempt['status'] == 'completed' else 'failed'
+                        if case.pop('resume_after_collection', False) and attempt['status'] != 'completed':
+                            case['status'] = 'queued'
+                else:
+                    experiment['preparations'][context[1]].update(collection_status='failed', collection_error=error)
+                self.save(experiment)
             marker = f'{kind}-{context}-{error}'
             if not self.store.get('errors', marker):
                 event(self.store, f'{kind}: {error}', 'error', notify=True)
                 self.store.put('errors', marker, True)
-            if kind == 'transfer':
-                experiment = self.experiment(context[0])
-                experiment['preparations'][context[1]] = dict(status='failed', error=error)
-                self.save(experiment)
 
     def ingest(self, machine, snapshot):
         for experiment in self.store.all('experiments'):
@@ -416,16 +474,15 @@ class Controller:
                     if task.get('started') is not None and experiment.get('preparation_ignored', {}).get(machine['id']) == task['started']:
                         continue
                     prior = experiment['preparations'].get(machine['id'], {})
-                    experiment['preparations'][machine['id']] = dict(status=task['status'], collected=prior.get('collected', False),
+                    experiment['preparations'][machine['id']] = dict(prior, status=task['status'], collected=prior.get('collected', False),
                         task=task['id'], started=task.get('started'), phase=task.get('phase'), error=task.get('error'))
                     if task['status'] == 'completed' and task.get('ready'):
                         experiment['preparations'][machine['id']]['status'] = 'ready'
                         if not experiment['calibration']:
                             experiment['calibration'] = task['ready']
                             experiment['calibration_machine'] = machine['id']
-                            experiment['asset_path'] = task['output'] + '/export-assets'
                             atomic_json(self.data / 'results' / experiment['id'] / 'calibration.json', task['ready'])
-                    if task['status'] in ('completed', 'failed', 'stopped') and not prior.get('collected'):
+                    if task['status'] in ('completed', 'failed', 'stopped') and not prior.get('collected') and prior.get('collection_status') != 'failed':
                         self.submit('prepare-collect-' + machine['id'], 'prepare_collect', (experiment['id'], machine['id']),
                             lambda m=machine, e=experiment['id'], p=task['output']: self.collect_preparation(m, e, p))
                     if task['status'] == 'failed' and not experiment['preparations'][machine['id']].get('notified'):
@@ -447,9 +504,9 @@ class Controller:
                                 attempt['failure_notified'] = True
                                 event(self.store, f"{experiment['name']} / {case['id']}: failed on {machine['name']}" +
                                     (' (memory limit exceeded)' if task.get('oom') else ''), 'error', notify=True)
-                            if not attempt.get('collected'):
+                            if not attempt.get('collected') and attempt.get('collection_status') != 'failed':
                                 if case['attempts'][-1]['id'] == attempt['id'] and case['status'] != 'queued':
-                                    case['status'] = 'collecting'
+                                    case['status'] = 'collecting' if task['status'] == 'completed' else 'failed'
                                 self.submit('collect-' + attempt['id'], 'collect', (experiment['id'], case['id'], attempt['id']),
                                     lambda m=machine, e=copy.deepcopy(experiment), c=case['id'], a=copy.deepcopy(attempt): self.collect(m, e, c, a))
                         elif case['attempts'][-1]['id'] == attempt['id']:
@@ -462,10 +519,16 @@ class Controller:
 
     def collect(self, machine, experiment, case_id, attempt):
         directory = self.data / 'results' / experiment['id']
-        archive = directory / (attempt['id'] + '.tar.gz.part')
-        self.remote.fetch(machine, attempt['remote_output'], archive)
+        cancelled = self.cancel_collection(experiment['id'])
+        with self.collection_lock:
+            if cancelled.is_set():
+                return False
+            stage = self.data / 'collections' / experiment['id'] / attempt['id']
+            stage.mkdir(parents=True, exist_ok=True)
+        archive = stage / 'result.tar.gz.part'
+        self.remote.fetch(machine, attempt['remote_output'], archive, cancel=cancelled)
         destination = directory / 'attempts' / attempt['id']
-        incoming = directory / '.incoming' / attempt['id']
+        incoming = stage / 'incoming'
         if incoming.exists():
             shutil.rmtree(incoming)
         safe_extract(archive, incoming)
@@ -476,26 +539,40 @@ class Controller:
                 raise ValueError('Container exited successfully without a completed benchmark result')
         atomic_json(incoming / 'collection.json', dict(machine=machine['id'], attempt=attempt,
             archive_sha256=digest(archive), collected=time.time()))
-        destination.parent.mkdir(exist_ok=True)
-        if destination.exists():
-            shutil.rmtree(destination)
-        incoming.rename(destination)
+        with self.collection_lock:
+            if cancelled.is_set():
+                shutil.rmtree(incoming, ignore_errors=True)
+                return False
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                shutil.rmtree(destination)
+            incoming.rename(destination)
         archive.unlink()
         return True
 
     def collect_preparation(self, machine, experiment_id, output):
         base = self.data / 'results' / experiment_id / 'preparations'
-        base.mkdir(parents=True, exist_ok=True)
-        archive = base / (machine['id'] + '.part')
-        self.remote.fetch(machine, output + '/preparation-report', archive)
-        incoming = base.parent / '.incoming' / ('preparation-' + machine['id'])
+        cancelled = self.cancel_collection(experiment_id)
+        with self.collection_lock:
+            if cancelled.is_set():
+                return False
+            stage = self.data / 'collections' / experiment_id / ('preparation-' + machine['id'])
+            stage.mkdir(parents=True, exist_ok=True)
+        archive = stage / 'result.tar.gz.part'
+        self.remote.fetch(machine, output + '/preparation-report', archive, cancel=cancelled)
+        incoming = stage / 'incoming'
         if incoming.exists():
             shutil.rmtree(incoming)
         safe_extract(archive, incoming)
         destination = base / machine['id']
-        if destination.exists():
-            shutil.rmtree(destination)
-        incoming.rename(destination)
+        with self.collection_lock:
+            if cancelled.is_set():
+                shutil.rmtree(incoming, ignore_errors=True)
+                return False
+            base.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                shutil.rmtree(destination)
+            incoming.rename(destination)
         archive.unlink()
         return True
 
@@ -530,21 +607,13 @@ class Controller:
                 ready.append(machine)
                 continue
             if preparation and preparation['status'] == 'transferring':
-                producer = self.machine(experiment['calibration_machine'])
-                self.submit('transfer-' + machine['id'], 'transfer', (experiment['id'], machine['id']),
-                    lambda m=machine, p=producer, e=copy.deepcopy(experiment): self.transfer(p, m, e))
-                continue
+                # Upgrade old persisted runs: assets are now built locally.
+                preparation = None
             if preparation and preparation['status'] not in ('pending', 'preparing'):
                 continue
             if not machine.get('online'):
                 continue
             if not experiment['calibration'] and machine['id'] != machines[0]['id']:
-                continue
-            if experiment['calibration'] and machine['id'] != experiment['calibration_machine'] and not preparation:
-                experiment['preparations'][machine['id']] = dict(status='transferring')
-                producer = self.machine(experiment['calibration_machine'])
-                self.submit('transfer-' + machine['id'], 'transfer', (experiment['id'], machine['id']),
-                    lambda m=machine, p=producer, e=copy.deepcopy(experiment): self.transfer(p, m, e))
                 continue
             experiment['preparations'][machine['id']] = dict(status='preparing')
             self.submit('prepare-' + machine['id'], 'prepare', (experiment['id'], machine['id']),
@@ -581,23 +650,9 @@ class Controller:
             experiment.update(status='completed', finished=time.time())
             event(self.store, f"{experiment['name']}: completed", notify=True)
         elif not any(c['status'] in BUSY for c in remaining) and (
-                all(c['status'] == 'failed' for c in remaining) or (failed_preparation and not ready)):
+                all(c['status'] in {'failed', 'collection_failed'} for c in remaining) or (failed_preparation and not ready)):
             experiment['status'] = 'needs_attention'
         self.save(experiment)
-
-    def transfer(self, producer, machine, experiment):
-        directory = self.data / 'assets' / experiment['id']
-        directory.mkdir(parents=True, exist_ok=True)
-        archive = directory / 'guest.tar.gz'
-        # Only one producer transfer at a time for a given experiment.
-        with self.asset_lock:
-            if not archive.exists():
-                temporary = archive.with_suffix('.part')
-                self.remote.fetch(producer, experiment['asset_path'], temporary)
-                temporary.replace(archive)
-        destination = self.remote.call(machine, 'asset_destination', experiment=experiment['id'])
-        self.remote.push(machine, archive, destination)
-        return True
 
     def state(self):
         machines = self.store.all('machines')

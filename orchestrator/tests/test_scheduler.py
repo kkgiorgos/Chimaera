@@ -306,12 +306,10 @@ class SimulatedCluster(FakeSSH):
             return dict(tasks=list(host.values()), stats=[])
         return True
 
-    def fetch(self, machine, path, destination):
+    def fetch(self, machine, path, destination, cancel=None):
         with tarfile.open(destination, 'w:gz') as archive:
             if path.endswith('/preparation-report'):
                 files = {'worker.log': 'prepared'}
-            elif path.endswith('/export-assets'):
-                files = {'disk.img': 'guest', 'kernel': 'kernel'}
             else:
                 task = next(t for t in self.hosts[machine['id']].values() if t['output'] == path)
                 point = dict(id=task['case'], status='complete', trials=[task['case'] + '-attempt-001'])
@@ -324,7 +322,7 @@ class SimulatedCluster(FakeSSH):
                 archive.addfile(member, io.BytesIO(body))
 
     def push(self, machine, source, destination):
-        assert source.is_file()
+        raise AssertionError('Guest assets must never be transferred between machines')
 
 
 def test_complete_distributed_workflow_with_one_frozen_calibration(controller):
@@ -395,3 +393,150 @@ def test_stop_is_not_queued_behind_transfers_or_dispatch_calls(controller):
         for _, _, future in controller.jobs.values():
             future.result(timeout=2)
         controller.jobs.clear()
+
+
+class BrokenCollection(FakeSSH):
+    def fetch(self, machine, path, destination, cancel=None):
+        raise RuntimeError('Remote output directory is missing')
+
+
+def terminal_case(controller, outcome='failed'):
+    value = experiment(controller, count=1)
+    value['cases'][0].update(status='running', attempts=[dict(id='attempt', machine='m0',
+        started=1, status='running', cpus=1, memory='2g')])
+    controller.save(value)
+    snapshot = dict(tasks=[dict(id='attempt', kind='case', experiment='e1', status=outcome,
+                               output='/missing', finished=2)])
+    return snapshot
+
+
+def test_failed_case_collection_failure_is_terminal_and_never_loops(controller):
+    controller.remote = BrokenCollection()
+    snapshot = terminal_case(controller)
+    controller.ingest(controller.machine('m0'), snapshot)
+    assert controller.experiment('e1')['cases'][0]['status'] == 'failed'
+    finish_jobs(controller)
+    value = controller.experiment('e1')
+    assert value['cases'][0]['attempts'][0]['collection_status'] == 'failed'
+    controller.ingest(controller.machine('m0'), snapshot)
+    assert not controller.jobs
+    controller.schedule(controller.experiment('e1'))
+    assert controller.experiment('e1')['status'] == 'needs_attention'
+    controller.apply(dict(kind='retry', body=dict(id='e1')))
+    assert controller.experiment('e1')['cases'][0]['status'] == 'queued'
+
+
+def test_successful_execution_with_failed_collection_can_be_deleted(controller):
+    controller.remote = BrokenCollection()
+    snapshot = terminal_case(controller, 'completed')
+    controller.ingest(controller.machine('m0'), snapshot)
+    finish_jobs(controller)
+    value = controller.experiment('e1')
+    assert value['cases'][0]['status'] == 'collection_failed'
+    controller.ingest(controller.machine('m0'), snapshot)
+    assert not controller.jobs
+    controller.apply(dict(kind='delete', body=dict(id='e1')))
+    controller.ingest(controller.machine('m0'), snapshot)
+    assert controller.experiment('e1')['status'] == 'deleted'
+    assert not (controller.data / 'results/e1').exists()
+    assert not controller.jobs
+
+
+def test_preparation_log_collection_failure_does_not_repeat(controller):
+    controller.remote = BrokenCollection()
+    experiment(controller, count=1)
+    snapshot = dict(tasks=[dict(id='e1-prepare', kind='prepare', experiment='e1',
+                               status='failed', output='/missing', started=1)])
+    controller.ingest(controller.machine('m0'), snapshot)
+    finish_jobs(controller)
+    controller.ingest(controller.machine('m0'), snapshot)
+    assert controller.experiment('e1')['preparations']['m0']['collection_status'] == 'failed'
+    assert not controller.jobs
+
+
+def test_delete_cancels_inflight_collection_and_late_worker_cannot_resurrect_files(controller):
+    import threading
+    started, finish = threading.Event(), threading.Event()
+
+    class SlowCollection(FakeSSH):
+        def fetch(self, machine, path, destination, cancel=None):
+            started.set()
+            finish.wait(3)
+            # Emulate a transport completing just as deletion cancels it.
+            with tarfile.open(destination, 'w:gz'):
+                pass
+
+    controller.remote = SlowCollection()
+    controller.ingest(controller.machine('m0'), terminal_case(controller))
+    assert started.wait(1)
+    try:
+        before = time.monotonic()
+        controller.apply(dict(kind='delete', body=dict(id='e1')))
+        assert time.monotonic() - before < 1
+        assert controller.cancel_collection('e1').is_set()
+    finally:
+        finish.set()
+        finish_jobs(controller)
+    assert not (controller.data / 'results/e1').exists()
+    assert not (controller.data / 'collections/e1').exists()
+    assert controller.experiment('e1')['status'] == 'deleted'
+
+
+def test_explicit_collection_retry_preserves_case_attempt(controller):
+    controller.remote = SimulatedCluster()
+    snapshot = terminal_case(controller, 'completed')
+    value = controller.experiment('e1')
+    value['cases'][0]['status'] = 'collection_failed'
+    value['cases'][0]['attempts'][0].update(status='completed', collection_status='failed', collection_error='lost reply')
+    controller.save(value)
+    controller.remote.hosts['m0'] = {'attempt': dict(snapshot['tasks'][0], case='case-000')}
+    controller.apply(dict(kind='retry_collection', body=dict(id='e1')))
+    controller.ingest(controller.machine('m0'), snapshot)
+    finish_jobs(controller)
+    value = controller.experiment('e1')
+    assert value['cases'][0]['status'] == 'completed'
+    assert len(value['cases'][0]['attempts']) == 1
+    assert value['cases'][0]['attempts'][0]['collected']
+    assert not any(call[1] == 'start' for call in controller.remote.calls)
+
+
+def test_upgrade_recovers_failed_collecting_case_without_remote_machine(controller):
+    value = experiment(controller, count=1)
+    value['cases'][0].update(status='collecting', attempts=[dict(id='a', status='failed')])
+    controller.save(value)
+    reopened = Controller(ROOT, controller.data, FakeSSH())
+    try:
+        assert reopened.experiment('e1')['cases'][0]['status'] == 'failed'
+        reopened.apply(dict(kind='delete', body=dict(id='e1')))
+        assert reopened.experiment('e1')['results_deleted']
+    finally:
+        reopened.close()
+
+
+def test_remote_cleanup_can_explicitly_discard_uncollected_failure_output(controller):
+    value = experiment(controller, count=1)
+    value.update(status='deleted', results_deleted=True)
+    value['cases'][0]['attempts'] = [dict(id='a', collected=False)]
+    controller.save(value)
+    controller.apply(dict(kind='cleanup', body=dict(id='e1', discard_uncollected=True)))
+    finish_jobs(controller)
+    assert controller.experiment('e1')['remote_cleaned']
+
+
+def test_existing_transferring_preparation_switches_to_local_build(controller):
+    value = experiment(controller, count=1)
+    value['preparations']['m1'] = dict(status='transferring')
+    controller.schedule(value)
+    finish_jobs(controller)
+    calls = [call for call in controller.remote.calls if call[1] == 'prepare']
+    assert calls[0][0] == 'm1'
+    assert not any(call[1] == 'asset_destination' for call in controller.remote.calls)
+    assert not any(kind == 'transfer' for kind, _, _ in controller.jobs.values())
+
+
+def test_server_assigns_id_for_third_machine_without_browser_uuid(controller):
+    key = controller.command('machine', dict(id='', name='New machine', target='user@new', repo='/repo'))
+    command = controller.store.get('commands', key)
+    controller.apply(command)
+    assert len(controller.store.all('machines')) == 4
+    assert command['body']['id']

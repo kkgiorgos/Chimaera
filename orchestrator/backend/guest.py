@@ -16,7 +16,7 @@ import tempfile
 import urllib.request
 import uuid
 
-from common import atomic_json, digest, run
+from common import atomic_json, content_identity, digest, run
 
 
 def assemble(work):
@@ -86,8 +86,14 @@ def ensure_assets(root, directory, image, disk=None, kernel=None):
         if not disk.is_file():
             raise ValueError('Configured guest disk does not exist')
         return disk, kernel
-    # Reuse the disk produced on this host; cluster peers receive this frozen asset.
-    disk = assets / 'ball-catching.img'
+    # Reuse only a guest constructed from this local image and guest recipe.
+    image_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image], text=True).strip()
+    recipe = content_identity(root, ['orchestrator/backend/guest.py',
+        'containers/wall-follow/scripts/guest-init.sh',
+        'containers/wall-follow/profiles/jammy-humble-fortress.guest.json'])
+    import hashlib
+    key = hashlib.sha256((image_id + recipe).encode()).hexdigest()[:20]
+    disk = assets / ('ball-catching-' + key + '.img')
     if disk.exists():
         return disk, kernel
     work = assets / ('build-' + uuid.uuid4().hex[:12])
@@ -107,7 +113,8 @@ def ensure_assets(root, directory, image, disk=None, kernel=None):
             '-v', f'{work}:/work', 'chimaera-supervisor:local',
             'python3', '/app/guest.py', '--assemble'], check=True)
         (work / 'disk.img').replace(disk)
-        atomic_json(assets / 'disk-provenance.json', dict(image=image, sha256=digest(disk)))
+        atomic_json(assets / ('disk-provenance-' + key + '.json'),
+                    dict(image=image, image_id=image_id, recipe=recipe, sha256=digest(disk)))
     finally:
         subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
         # Root helper must remove its own root-owned intermediate tree on failure.

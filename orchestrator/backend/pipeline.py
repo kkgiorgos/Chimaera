@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from common import atomic_json, digest, run, source_identity
+from common import atomic_json, build_identities, digest, run, source_identity
 
 
 def prepare(directory):
@@ -21,23 +21,20 @@ def prepare(directory):
     if identity != request['source_identity']:
         raise ValueError('Repository revision or source contents differ from the queued experiment')
     atomic_json(directory / 'stage.json', dict(phase='Building SDK and application'))
-    suffix = identity['fingerprint'][:16]
-    sdk, image = 'chimaera:sdk-' + suffix, 'chimaera:ball-' + suffix
+    builds = build_identities(root)
+    sdk, image = 'chimaera:sdk-' + builds['sdk'][:16], 'chimaera:ball-' + builds['application'][:16]
     present = subprocess.run(['docker', 'image', 'inspect', sdk], capture_output=True)
     if present.returncode:
         subprocess.run([sys.executable, str(root / 'containers/build.py'), '--tag', sdk, '--jobs', str(request['build_jobs'])], check=True)
-    subprocess.run(['docker', 'buildx', 'build', '--load', '--progress', 'plain', '--provenance=false',
-        '--platform', 'linux/amd64', '-f', str(root / 'containers/ball-catching/Dockerfile'),
-        '--build-arg', 'SDK_IMAGE=' + sdk, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
-        '-t', image, str(root)], check=True)
+    present = subprocess.run(['docker', 'image', 'inspect', image], capture_output=True)
+    if present.returncode:
+        subprocess.run(['docker', 'buildx', 'build', '--load', '--progress', 'plain', '--provenance=false',
+            '--platform', 'linux/amd64', '-f', str(root / 'containers/ball-catching/Dockerfile'),
+            '--build-arg', 'SDK_IMAGE=' + sdk, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
+            '-t', image, str(root)], check=True)
     atomic_json(directory / 'stage.json', dict(phase='Preparing guest disk and kernel'))
     calibration = request.get('calibration')
-    if calibration:
-        disk, kernel = directory / 'shared-assets/disk.img', directory / 'shared-assets/kernel'
-        if not disk.is_file() or not kernel.is_file():
-            raise ValueError('Shared guest assets have not arrived')
-    else:
-        disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
+    disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
     args = []
     if calibration:
         for pattern, record in calibration['records'].items():
@@ -56,14 +53,17 @@ def prepare(directory):
     # The source copy contains this host's resolved memory path. The exported
     # experiment and memory.json are portable and remain strictly hashed.
     hashes.pop('source-experiment.json', None)
-    provenance = dict(source_identity=identity, revision=revision, disk_sha256=digest(disk), kernel_sha256=digest(kernel),
+    provenance = dict(source_identity=identity, revision=revision, build_inputs=builds, disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
-    if calibration and provenance != calibration['provenance']:
-        raise ValueError('Prepared inputs, revision or guest assets differ from the calibration machine')
-    exported = directory / 'export-assets'
-    exported.mkdir()
-    (exported / 'disk.img').symlink_to(disk)
-    (exported / 'kernel').symlink_to(kernel)
+    if calibration:
+        # Local ext4 images contain host-local filesystem timestamps/UUIDs.
+        # Keep each disk's digest in its provenance without requiring identical bytes.
+        expected = calibration['provenance']
+        for key in ('source_identity', 'revision', 'kernel_sha256', 'input_hashes'):
+            if provenance[key] != expected[key]:
+                raise ValueError('Prepared inputs, revision or kernel differ from the calibration machine')
+        if expected.get('build_inputs') is not None and builds != expected['build_inputs']:
+            raise ValueError('Simulator/application build sources differ from the calibration machine')
     atomic_json(directory / 'ready.json', dict(records=records, provenance=provenance,
         plan=json.loads((inputs / 'plan.json').read_text()), image=image))
     atomic_json(directory / 'stage.json', dict(phase='Ready'))

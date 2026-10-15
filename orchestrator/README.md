@@ -37,7 +37,7 @@ The controller has no published port and no webserver Docker socket mount.
 Next.js uses its [standalone Docker output](https://nextjs.org/docs/app/api-reference/config/next-config-js/output).
 
 The named `controller-data` volume holds SQLite state, queued commands,
-notification delivery records, frozen calibration/provenance, transfer caches,
+notification delivery records, frozen calibration/provenance, temporary result downloads,
 and collected results. Keep that volume when updating containers. Back it up
 with the service stopped or use SQLite's backup API; do not copy only the database
 file while its WAL is active. `docker compose down` retains the volume;
@@ -53,8 +53,9 @@ file while its WAL is active. `docker compose down` retains the volume;
 
 Supply an existing guest disk/kernel under **Build and guest assets** if desired.
 Leave these fields empty to prepare them automatically. The first selected machine
-is the calibration/guest preparation machine; the others use its frozen guest
-assets. Existing asset paths on other machines are not used for that experiment.
+produces the frozen calibration reference. Every machine uses its own configured
+asset paths or constructs its own guest disk and downloads the pinned kernel.
+Guest disks and container images are never distributed through the webserver.
 
 CPU settings use Docker quotas, not exclusive core pinning. You choose worker
 counts and resource limits; there is no tuning or automatic overcommit policy.
@@ -88,15 +89,26 @@ arrives, preparation runs automatically:
 
 1. Validate the machine checkout against the queued revision and source fingerprint.
 2. Build missing source-keyed SDK/application images on that machine.
-3. On the first machine, reuse or construct a ball-catching Ubuntu/ROS guest disk,
+3. On every machine, reuse or construct a local ball-catching Ubuntu/ROS guest disk,
    and reuse a supplied kernel or download and verify the pinned gem5 kernel.
 4. Run memory-only calibration and fractional-rate checks, then prepare the guest
    bundle. These preparation steps do not run robot benchmark cases.
-5. Freeze one calibration set and the guest disk/kernel. Transfer them through the
-   webserver to the other machines, which build their own images and validate the
-   shared calibration before becoming eligible for case assignments.
+5. Freeze one calibration set and send only those small JSON records to the other
+   machines. They validate the shared calibration against their local simulator,
+   configuration and kernel before becoming eligible for case assignments. Local
+   disk hashes are recorded separately; independent ext4 images need not be
+   byte-for-byte identical.
 6. Dispatch cases dynamically as worker slots become available. A ready machine
    can start cases while other machines are still preparing.
+
+SDK image cache keys depend on the content of simulator, transport, bridge, stack
+profile and build inputs. Application image keys additionally depend on the robot
+application sources. Repository commits, dashboard changes, experiment parameters,
+worker sizes and build parallelism do not invalidate the SDK image. If its image
+is already present, preparation skips gem5 compilation entirely. A missing image
+uses Docker layers and the existing SCons build cache; a simulator or dependency
+change can require recompilation. Generated guest disks are also cached locally
+by image identity and guest-construction recipe.
 
 Calibration measures the **simulated** memory system's sustainable bandwidth for
 each pattern. A 50% pressure case requests half that pattern's calibrated rate;
@@ -140,6 +152,13 @@ count as successful benchmark results. At the end, failures hold the experiment
 queue until you **Retry failed cases** or **Accept partial results**. Preparation
 failures have separate log and manual retry controls.
 
+Case execution and collection are separate states. A failed SSH download or missing
+output directory is marked **Result collection failed**, with the error visible in
+the dashboard. It is not retried on every poll. **Retry collection** downloads the
+existing attempt again without rerunning its simulation. You may delete an idle
+experiment even when collection is still in progress or has failed. Deletion
+cancels its SSH download and prevents late callbacks from restoring deleted files.
+
 **Stop** kills reachable workers immediately. Stop is pending for unreachable
 machines, and the queue remains held until they acknowledge it. An assignment
 arriving late is rejected using a persisted stop generation. **Resume** preserves
@@ -162,17 +181,42 @@ at least once: a crash after Discord accepts a message can produce a duplicate.
 calibration/provenance, preparation diagnostics, run/attempt records, full collected
 case outputs/logs, per-case reports, and an aggregate comparison report when any
 case completed. In-progress transfers are excluded. Large base disks, container
-images, and the repository itself are not included in the result archive.
+images, per-case guest input bundles, and the repository itself are not included
+in result transfers or the result archive.
 
 **Open comparison report** combines the workers' already embedded robot models and
 trials into an offline HTML report; the webserver does not require ROS.
 
 **Clean remote copies** removes this experiment's remote inputs, attempt files,
-and stopped containers only after every attempt and preparation diagnostic has
-been collected. Shared image/guest caches stay available for later experiments.
-**Delete collected results** removes webserver result files and that experiment's
-transfer cache, retaining run history. Clean remote copies first if you want both
-removed. A cleaned/deleted run must be cloned for a new execution rather than resumed.
+and stopped containers. The confirmation explicitly allows discarding uncollected
+remote output when a download failed. Shared image/guest caches stay available
+for later experiments.
+**Delete experiment** cancels collection and removes webserver result files,
+retaining history marked deleted. Active workers must be stopped first; collection
+completion is not required. Remote copies can be cleaned before or after deletion.
+A cleaned/deleted run must be cloned for a new execution rather than resumed.
+
+## Updating an existing deployment
+
+Update the checkout on the webserver and workers, then run this from
+`orchestrator/` on the webserver:
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+Use **Redeploy supervisor** on each machine so it also receives the recovery and
+local-build changes. Running sibling worker containers keep their frozen inputs.
+Do not delete the controller volume or remote `.chimaera-orchestrator` directories
+as an upgrade step.
+
+Old failed cases stuck in `collecting` are recovered to a failed execution state
+when the controller starts. Use **Retry collection** for download failures, or
+**Delete experiment** to cancel collection and abandon the run. If workers are
+still active, choose **Stop** first. **Clean remote copies** remains available
+after deletion and can explicitly discard uncollected output. New experiments
+use the local image/guest cache policy; legacy generated guest caches are left
+untouched, while new guests use recipe-specific cache names.
 
 ## Development and checks
 

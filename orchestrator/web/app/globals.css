@@ -242,3 +242,8 @@ summary { cursor: pointer; color: rgb(var(--ctp-subtext)); font-size: 12px; marg
   .activity-row time { font-size: 9px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+.collection-errors { align-items: flex-start; }
+.collection-errors > div { min-width: 0; }
+.collection-errors p { overflow-wrap: anywhere; margin-top: 5px; }
+.status-collection_failed { color: rgb(var(--ctp-red)); }

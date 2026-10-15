@@ -69,7 +69,11 @@ class Agent:
         if task and task['status'] in ('accepted', 'running'):
             raise ValueError('Preparation is still running')
         if task:
-            run(['docker', 'rm', task['container']], timeout=15)
+            try:
+                run(['docker', 'rm', task['container']], timeout=15)
+            except RuntimeError as error:
+                if 'no such' not in str(error).lower():
+                    raise
             self.store.delete('tasks', key)
         directory = self.directory(experiment)
         if directory.exists():
@@ -151,30 +155,50 @@ class Agent:
                 continue
             output = Path(task['output'])
             log = output / 'worker.log'
-            with log.open('wb') as stream:
-                subprocess.run(['docker', 'logs', task['container']], stdout=stream,
-                               stderr=subprocess.STDOUT, timeout=30, check=True)
             task.update(status='completed' if state['ExitCode'] == 0 else 'failed',
                         exit_code=state['ExitCode'], oom=state.get('OOMKilled', False), finished=time.time())
+            try:
+                output.mkdir(parents=True, exist_ok=True)
+                with log.open('wb') as stream:
+                    subprocess.run(['docker', 'logs', task['container']], stdout=stream,
+                                   stderr=subprocess.STDOUT, timeout=30, check=True)
+            except (OSError, subprocess.SubprocessError) as error:
+                task['log_error'] = str(error)
             if task['kind'] == 'case' and task['status'] == 'completed':
                 try:
                     manifest = json.loads((output / 'suite/experiment_manifest.json').read_text())
                     point = next(p for p in manifest['points'] if p['id'] == task['case'])
                     if point['status'] != 'complete' or not point['trials']:
                         raise ValueError('No completed trial')
-                except (OSError, ValueError, KeyError, StopIteration) as error:
+                except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:
                     task.update(status='failed', error='Case exited without a completed result: ' + str(error))
             if task['kind'] == 'prepare':
-                report = output / 'preparation-report'
-                report.mkdir(exist_ok=True)
-                for name in ('worker.log', 'request.json', 'ready.json', 'stage.json', 'experiment.json',
-                             'inputs/inputs.json', 'inputs/runner.json', 'inputs/plan.json'):
-                    path = output / name
-                    if path.is_file():
-                        destination = report / name
-                        destination.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(path, destination)
+                if task['status'] == 'completed':
+                    try:
+                        ready = json.loads((output / 'ready.json').read_text())
+                        if not ready.get('records') or not ready.get('provenance'):
+                            raise ValueError('Missing calibration or provenance')
+                    except (OSError, ValueError, AttributeError) as error:
+                        task.update(status='failed', error='Preparation exited without valid ready.json: ' + str(error))
+                self.preparation_report(task)
             self.store.put('tasks', task['id'], task)
+
+    def preparation_report(self, task):
+        output = Path(task['output'])
+        try:
+            report = output / 'preparation-report'
+            report.mkdir(parents=True, exist_ok=True)
+            for name in ('worker.log', 'request.json', 'ready.json', 'stage.json', 'experiment.json',
+                         'inputs/inputs.json', 'inputs/runner.json', 'inputs/plan.json'):
+                source = output / name
+                if source.is_file():
+                    destination = report / name
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+            if task['status'] in ('failed', 'stopped'):
+                atomic_json(report / 'failure.json', task)
+        except OSError as error:
+            task['log_error'] = str(error)
 
     def snapshot(self):
         self.reconcile()
@@ -187,24 +211,28 @@ class Agent:
             if task['kind'] == 'case':
                 try:
                     task['progress'] = snapshot(Path(task['output']) / 'suite')
-                except (OSError, ValueError, KeyError):
+                except (OSError, ValueError, KeyError, TypeError):
                     task['progress'] = dict(phase='Waiting for progress records')
             elif task['status'] == 'completed':
                 path = Path(task['output']) / 'ready.json'
-                task['ready'] = json.loads(path.read_text()) if path.exists() else None
+                try:
+                    task['ready'] = json.loads(path.read_text()) if path.exists() else None
+                except (OSError, ValueError, AttributeError, TypeError) as error:
+                    task.update(status='failed', error='Cannot read preparation result: ' + str(error))
             if task['kind'] == 'prepare':
                 path = Path(task['output']) / 'stage.json'
-                task['phase'] = json.loads(path.read_text()).get('phase') if path.exists() else 'Starting preparation'
+                try:
+                    task['phase'] = json.loads(path.read_text()).get('phase') if path.exists() else 'Starting preparation'
+                except (OSError, ValueError) as error:
+                    task['phase'] = 'Cannot read preparation progress: ' + str(error)
                 report = Path(task['output']) / 'preparation-report'
                 if task['status'] in ('failed', 'stopped') and not report.exists():
-                    report.mkdir()
-                    for name in ('worker.log', 'request.json', 'stage.json'):
-                        source = Path(task['output']) / name
-                        if source.is_file():
-                            shutil.copy2(source, report / name)
-                    atomic_json(report / 'failure.json', task)
+                    self.preparation_report(task)
         containers = [t['container'] for t in tasks if t['status'] == 'running']
-        stats = run(['docker', 'stats', '--no-stream', '--format', '{{json .}}', *containers], text=True, timeout=15) if containers else ''
+        try:
+            stats = run(['docker', 'stats', '--no-stream', '--format', '{{json .}}', *containers], text=True, timeout=15) if containers else ''
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            stats = ''
         return dict(tasks=tasks, stats=[json.loads(line) for line in stats.splitlines()],
             host=dict(cpus=os.cpu_count(), load=os.getloadavg(), memory=Path('/proc/meminfo').read_text()), time=time.time())
 
@@ -220,9 +248,12 @@ class Agent:
         for task in self.store.all('tasks'):
             if task['experiment'] == experiment and task['status'] in ('accepted', 'running'):
                 task.update(status='stopped', finished=time.time())
-                with (Path(task['output']) / 'worker.log').open('wb') as stream:
-                    subprocess.run(['docker', 'logs', task['container']], stdout=stream,
-                                   stderr=subprocess.STDOUT, timeout=30)
+                try:
+                    with (Path(task['output']) / 'worker.log').open('wb') as stream:
+                        subprocess.run(['docker', 'logs', task['container']], stdout=stream,
+                                       stderr=subprocess.STDOUT, timeout=30)
+                except (OSError, subprocess.SubprocessError) as error:
+                    task['log_error'] = str(error)
                 self.store.put('tasks', task['id'], task)
         return self.snapshot()
 

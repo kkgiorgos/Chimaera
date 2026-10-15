@@ -8,6 +8,7 @@ export interface Machine {
 export interface Attempt {
   id: string; machine: string; started: number; finished?: number; status: string;
   cpus: number; memory: string; collected?: boolean; oom?: boolean; exit_code?: number;
+  collection_status?: string; collection_error?: string;
   progress?: { phase?: string; average_speed?: number; simulated_seconds?: number;
     throw_percent?: number; outcome?: string; last_update_age_seconds?: number };
 }
@@ -19,7 +20,7 @@ export interface Experiment {
   id: string; name: string; status: string; machines: string[]; cases: Case[]; created: number;
   config: Record<string, unknown>; eta_seconds?: number | null; eta_basis?: string;
   results_deleted?: boolean; stop_pending?: string[];
-  preparations: Record<string, { status: string; task?: string; phase?: string; error?: string }>;
+  preparations: Record<string, { status: string; task?: string; phase?: string; error?: string; collection_status?: string; collection_error?: string }>;
   calibration?: { records: Record<string, { sustainable_gbps: number }> };
 }
 export interface State {
