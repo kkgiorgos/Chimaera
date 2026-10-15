@@ -430,8 +430,8 @@ class Controller:
                 return
             preparation = experiment['preparations'].get(context[1], {})
             if preparation.get('status') == 'copying_sdk' and experiment['status'] not in {'stopped', 'stopping', 'deleted'}:
-                preparation.update(status='pending', sdk_image_id=result, phase='Images copied')
-                experiment['calibration']['provenance']['sdk_image_id'] = result
+                images = result if isinstance(result, dict) else dict(sdk_image_id=result)
+                preparation.update(images, status='pending', phase='Images copied')
                 self.save(experiment)
         elif kind == 'stop':
             if isinstance(result, dict) and 'tasks' in result:
@@ -654,11 +654,15 @@ class Controller:
         count = 2 if application else 1
         sdk_id = self.remote.copy_image(source, destination, image, cancel=cancelled,
                                        progress=progress('SDK', 1, count))
+        images = dict(sdk_image_id=sdk_id)
+        self.remote.call(destination, 'remember_image', image=sdk_id)
         if application:
             self.remote.call(destination, 'remember_image', image=application)
-            self.remote.copy_image(source, destination, application, cancel=cancelled,
-                                   progress=progress('Application', 2, count))
-        return sdk_id
+            images['application_image_id'] = self.remote.copy_image(
+                source, destination, application, cancel=cancelled,
+                progress=progress('Application', 2, count))
+            self.remote.call(destination, 'remember_image', image=images['application_image_id'])
+        return images
 
     def schedule(self, experiment):
         machines = [self.machine(key) for key in experiment['machines']]
@@ -709,13 +713,18 @@ class Controller:
                     lambda m=machine, e=copy.deepcopy(experiment), c=cancelled: self.copy_sdk(e, m, c))
                 continue
             experiment['preparations'][machine['id']] = dict(preparation or {}, status='preparing')
+            calibration = copy.deepcopy(experiment['calibration']) if machine['id'] != producer else None
+            if calibration:
+                for field in ('sdk_image_id', 'application_image_id'):
+                    if (preparation or {}).get(field):
+                        calibration['provenance'][field] = preparation[field]
             self.submit('prepare-' + machine['id'], 'prepare', (experiment['id'], machine['id']),
-                lambda m=machine, e=copy.deepcopy(experiment): self.remote.call(m, 'prepare', experiment=e['id'],
+                lambda m=machine, e=copy.deepcopy(experiment), c=calibration: self.remote.call(m, 'prepare', experiment=e['id'],
                     config=e['config'], cpus=m['cpus'], memory=m['memory'], build_jobs=m['build_jobs'],
                     source_identity=e['source_identity'],
                     generation=e.get('generation', 0),
                     disk=m['disk'], kernel=m['kernel'],
-                    calibration=e['calibration'] if m['id'] != e.get('calibration_machine', machines[0]['id']) else None))
+                    calibration=c))
         if ready:
             experiment['status'] = 'running'
         for machine in ready:

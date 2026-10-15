@@ -92,6 +92,15 @@ to its host SSH user; the controller does not copy credentials or forward an age
 Every machine uses its own configured asset paths or constructs its own guest disk
 and downloads the pinned kernel. Guest disks remain local.
 
+Docker image stores can assign different image IDs after a save/load transfer.
+When IDs differ, transfer verification compares the producer and destination's
+runtime configuration, uncompressed filesystem layer digests, and platform.
+Different or missing content fails preparation. Each consumer uses its verified
+local image IDs; the producer's frozen calibration identities remain intact.
+A previously loaded transfer tag is reverified before reuse, avoiding another
+download after a successful load. After updating the controller for this fix,
+use **Retry preparation** on a worker that reported an image identity mismatch.
+
 CPU settings use Docker quotas, not exclusive core pinning. You choose worker
 counts and resource limits; there is no tuning or automatic overcommit policy.
 Changes to worker count/size apply to future assignments. Existing cases retain

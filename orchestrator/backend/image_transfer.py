@@ -32,6 +32,46 @@ class ProducerSSH:
             raise ValueError('Invalid Docker image ID')
         return value
 
+    def image_content(self, machine, image):
+        """Describe runnable content independently of the daemon's image store."""
+        command = shlex.join(['docker', 'image', 'inspect', '--format', '{{json .}}', image])
+        result = subprocess.run(self.base(machine) + [command], capture_output=True, text=True, timeout=30)
+        if result.returncode:
+            raise RuntimeError(result.stderr[-2000:])
+        try:
+            value = json.loads(result.stdout)
+            # Layer diff IDs cover the uncompressed filesystem; Config covers
+            # execution settings. Do not compare store-local metadata or Size.
+            content = {key: value[key] for key in ('Config', 'RootFS', 'Architecture', 'Os')}
+            if not isinstance(content['Config'], dict) or not isinstance(content['RootFS'], dict):
+                raise ValueError('Missing image configuration or filesystem')
+            layers = content['RootFS'].get('Layers', [])
+            if (content['RootFS'].get('Type') != 'layers' or not isinstance(layers, list)
+                    or any(not isinstance(layer, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', layer)
+                           for layer in layers)
+                    or not content['Architecture'] or not content['Os']):
+                raise ValueError('Invalid image filesystem or platform')
+            for key in ('Variant', 'OsVersion'):
+                content[key] = value.get(key) or ''
+            return content
+        except (ValueError, KeyError, TypeError) as error:
+            raise ValueError('Cannot verify transferred image content: ' + str(error)) from error
+
+    def verify_image(self, source, destination, image, reference):
+        imported = self.image_id(destination, reference)
+        if imported != image:
+            try:
+                matches = self.image_content(source, image) == self.image_content(destination, imported)
+            except (RuntimeError, ValueError) as error:
+                raise ValueError('Transferred Docker image identity differs: expected ' + image +
+                                 ', got ' + imported + '; ' + str(error)) from error
+            if not matches:
+                raise ValueError('Transferred Docker image identity differs: expected ' + image +
+                                 ', got ' + imported + '; runnable image content differs')
+        if self.image_id(destination, imported) != imported:
+            raise ValueError('Transferred Docker image identity differs')
+        return imported
+
     def copy_image(self, source, destination, image, cancel=None, timeout=3600, progress=None):
         """Stream a frozen image from the producer to the destination over SSH."""
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
@@ -41,7 +81,7 @@ class ProducerSSH:
                 raise RuntimeError('Image transfer cancelled')
         total_bytes = exported_bytes = received_bytes = 0
         streaming_started = None
-        def report(phase, sent=0):
+        def report(phase, sent=0, image_id=None):
             if progress:
                 elapsed = time.monotonic() - started
                 eta = None
@@ -53,7 +93,7 @@ class ProducerSSH:
                     forwarded = exported_bytes * min(1, sent / max(received_bytes, 1))
                     if stream_elapsed >= 1 and forwarded > 0 and total_bytes > forwarded:
                         eta = (total_bytes - forwarded) * stream_elapsed / forwarded
-                progress(dict(phase=phase, bytes_sent=sent, elapsed_seconds=elapsed,
+                progress(dict(phase=phase, image_id=image_id, bytes_sent=sent, elapsed_seconds=elapsed,
                               bytes_per_second=sent / max(elapsed, 0.001), eta_seconds=eta,
                               eta_basis='Estimated image size and observed export/network throughput; excludes loading and verification',
                               updated=time.time()))
@@ -69,6 +109,15 @@ class ProducerSSH:
         # imported image even when loading into a different image-store backend.
         # Never replace the worker's source-keyed build tags.
         reference = 'chimaera:transfer-' + image.removeprefix('sha256:')
+        # A previous load may have succeeded under a different store-local ID.
+        # Revalidate its content against the frozen producer before reusing it.
+        try:
+            imported = self.verify_image(source, destination, image, reference)
+        except (RuntimeError, ValueError):
+            pass
+        else:
+            report('Already cached', image_id=imported)
+            return imported
         # Meter uncompressed export bytes before gzip; the final compressed size
         # is not known until EOF. Metadata stays on stderr, outside the archive.
         meter = ('import os,sys,time; last=0; count=0\n'
@@ -164,17 +213,13 @@ class ProducerSSH:
             check_cancelled()
             report('Verifying image', sent)
             try:
-                imported = self.image_id(destination, reference)
-                if imported != image:
-                    raise ValueError('Transferred Docker image identity differs: expected ' + image + ', got ' + imported)
-                if self.image_id(destination, image) != image:
-                    raise ValueError('Transferred Docker image identity differs')
+                imported = self.verify_image(source, destination, image, reference)
             except (RuntimeError, ValueError) as error:
                 output.seek(0)
                 raise RuntimeError('Destination image verification failed for ' + image + ': ' + str(error) +
                                    '; docker load output: ' + output.read().decode(errors='replace')[-2000:]) from error
-            report('Complete', sent)
-        return image
+            report('Complete', sent, image_id=imported)
+        return imported
 
 
 class ControllerConnection:

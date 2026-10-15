@@ -596,6 +596,42 @@ def test_sdk_transfer_failure_is_retryable_preparation_failure(controller):
     assert 'm1' not in controller.experiment('e1')['preparations']
 
 
+def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
+    value = experiment(controller, count=1)
+    app_id = 'sha256:' + 'b' * 64
+    value['calibration']['provenance']['application_image_id'] = app_id
+    original = dict(value['calibration']['provenance'])
+    local = {
+        'm1': dict(sdk_image_id='sha256:' + 'c' * 64, application_image_id='sha256:' + 'd' * 64),
+        'm2': dict(sdk_image_id='sha256:' + 'e' * 64, application_image_id='sha256:' + 'f' * 64),
+    }
+    transfers = []
+
+    def transfer(source, destination, image, **kwargs):
+        transfers.append((source['id'], destination['id'], image))
+        field = 'sdk_image_id' if image == SDK_ID else 'application_image_id'
+        return local[destination['id']][field]
+
+    controller.remote.copy_image = transfer
+    for machine in local:
+        value['preparations'][machine] = dict(status='pending')
+    controller.schedule(value)
+    finish_jobs(controller)
+    saved = controller.experiment('e1')
+    assert saved['calibration']['provenance'] == original
+    assert set(transfers) == {('m0', machine, image) for machine in local for image in (SDK_ID, app_id)}
+    for machine, images in local.items():
+        assert all(saved['preparations'][machine][key] == image for key, image in images.items())
+    controller.schedule(saved)
+    finish_jobs(controller)
+    for machine, images in local.items():
+        request = next(c[2] for c in controller.remote.calls if c[:2] == (machine, 'prepare'))
+        assert request['calibration']['provenance'] == dict(original, **images)
+        remembered = [c[2]['image'] for c in controller.remote.calls if c[:2] == (machine, 'remember_image')]
+        assert set(images.values()) <= set(remembered)
+    assert controller.experiment('e1')['calibration']['provenance'] == original
+
+
 def test_stop_cancels_sdk_transfer_and_late_completion_cannot_prepare(controller):
     import threading
     value = experiment(controller, count=1)

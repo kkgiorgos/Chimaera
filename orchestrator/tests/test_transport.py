@@ -42,14 +42,28 @@ def sdk_stream(tmp_path, monkeypatch):
     import os
     script = tmp_path / 'peer.py'
     marker = tmp_path / 'loaded'
-    script.write_text('''import gzip,pathlib,random,sys
+    script.write_text('''import gzip,json,pathlib,random,sys
 marker, mode, command = sys.argv[1:]
 marker = pathlib.Path(marker)
 image = 'sha256:' + 'a' * 64
 if 'inspect' in command:
     if not marker.exists():
         sys.exit(1)
-    print(marker.read_text())
+    if '{{json .}}' in command:
+        content = dict(Config={'Env': ['SDK=1'], 'Cmd': ['/bin/bash']},
+                       RootFS={'Type': 'layers', 'Layers': ['sha256:' + 'c' * 64]},
+                       Architecture='amd64', Os='linux', Size=999)
+        if mode == 'different_config':
+            content['Config']['Env'] = ['SDK=2']
+        elif mode == 'different_layers':
+            content['RootFS']['Layers'] = ['sha256:' + 'd' * 64]
+        elif mode == 'different_platform':
+            content['Architecture'] = 'arm64'
+        elif mode == 'missing_content':
+            del content['RootFS']
+        print(json.dumps(content))
+    else:
+        print(marker.read_text())
 else:
     data = gzip.decompress(sys.stdin.buffer.read())
     if mode == 'receiver_failure':
@@ -60,18 +74,26 @@ else:
     print('Loaded image: chimaera:transfer-' + 'a' * 64, flush=True)
     if mode == 'missing_after_load':
         sys.exit(0)
-    marker.write_text('sha256:' + 'b' * 64 if mode == 'wrong_identity' else image)
+    marker.write_text('sha256:' + 'b' * 64 if mode in {
+        'wrong_identity', 'cross_store', 'different_config', 'different_layers',
+        'different_platform', 'missing_content'} else image)
 ''')
     docker = tmp_path / 'docker'
     docker.write_text('''#!/usr/bin/env python3
-import os,random,sys,time
+import json,os,random,sys,time
 args=sys.argv[1:]
 mode=os.environ['TRANSFER_TEST_MODE']
 if args[:2] == ['image', 'tag']:
     assert args[2] == 'sha256:' + 'a' * 64
     assert args[3] == 'chimaera:transfer-' + 'a' * 64
 elif args[:2] == ['image', 'inspect']:
-    if mode != 'no_metadata':
+    if '{{json .}}' in args:
+        if mode == 'wrong_identity':
+            sys.exit(1)
+        print(json.dumps(dict(Config={'Env': ['SDK=1'], 'Cmd': ['/bin/bash']},
+                              RootFS={'Type': 'layers', 'Layers': ['sha256:' + 'c' * 64]},
+                              Architecture='amd64', Os='linux', Size=123)))
+    elif mode != 'no_metadata':
         print('CHIMAERA_TRANSFER_SIZE', 4000000)
 elif args[:2] == ['image', 'save']:
     assert args[2] == 'chimaera:transfer-' + 'a' * 64
@@ -157,6 +179,30 @@ def test_sdk_stream_verifies_identity_and_skips_existing_image(sdk_stream):
          patch('transport.subprocess.Popen') as stream:
         assert ssh.copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID) == SDK_ID
         stream.assert_not_called()
+
+
+def test_cross_store_transfer_returns_verified_local_id_and_reuses_loaded_tag(sdk_stream):
+    configure, marker = sdk_stream
+    ssh = configure('cross_store')
+    local_id = 'sha256:' + 'b' * 64
+    updates = []
+    assert ssh.copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                          progress=updates.append) == local_id
+    assert marker.read_text() == local_id
+    assert updates[-1]['image_id'] == local_id
+    assert updates[-1]['phase'] == 'Complete'
+    updates.clear()
+    assert ssh.copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                          progress=updates.append) == local_id
+    assert updates[-1]['phase'] == 'Already cached'
+    assert not any(u['phase'] == 'Streaming' for u in updates)
+
+
+@pytest.mark.parametrize('mode', ['different_config', 'different_layers', 'different_platform', 'missing_content'])
+def test_cross_store_transfer_rejects_incompatible_or_unverifiable_content(sdk_stream, mode):
+    configure, _ = sdk_stream
+    with pytest.raises(RuntimeError, match='identity differs'):
+        configure(mode).copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID)
 
 
 @pytest.mark.parametrize('mode,message', [('sender_failure', 'export failed'),

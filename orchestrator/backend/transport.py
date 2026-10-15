@@ -104,15 +104,20 @@ class SSH:
             deadline = time.monotonic() + timeout
             offset = 0
             pending = b''
+            imported = None
 
             def read_progress():
-                nonlocal offset, pending
+                nonlocal offset, pending, imported
                 data = os.pread(output.fileno(), 65536, offset)
                 offset += len(data)
                 pending += data
                 while b'\n' in pending:
                     line, pending = pending.split(b'\n', 1)
                     value = json.loads(line)
+                    if value.get('phase') in {'Complete', 'Already cached'}:
+                        imported = value.get('image_id') or image
+                        if not re.fullmatch(r'sha256:[0-9a-f]{64}', imported):
+                            raise ValueError('Invalid transferred Docker image ID')
                     if progress:
                         progress(value)
                 return bool(data)
@@ -143,4 +148,6 @@ class SSH:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait()
-        return image
+        if imported is None:
+            raise RuntimeError('Image transfer completed without destination verification')
+        return imported
