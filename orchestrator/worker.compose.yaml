@@ -1,0 +1,20 @@
+name: chimaera-worker
+services:
+  supervisor:
+    image: chimaera-supervisor:local
+    container_name: chimaera-supervisor
+    build:
+      context: ..
+      dockerfile: orchestrator/backend/Dockerfile
+    restart: unless-stopped
+    user: "${CHIMAERA_UID:?Set host UID}:${CHIMAERA_GID:?Set host GID}"
+    group_add:
+      - "${CHIMAERA_DOCKER_GID:?Set Docker socket GID}"
+    environment:
+      CHIMAERA_REPO: ${CHIMAERA_REPO:?Set absolute repository path}
+    volumes:
+      - ${CHIMAERA_REPO}:${CHIMAERA_REPO}
+      - /var/run/docker.sock:/var/run/docker.sock
+    devices:
+      - /dev/kvm:/dev/kvm
+    command: ["python3", "/app/agent.py", "serve"]

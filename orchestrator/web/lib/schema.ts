@@ -1,0 +1,27 @@
+const positive = { type: 'number', exclusiveMinimum: 0 };
+const natural = { type: 'integer', minimum: 0 };
+const vector = { type: 'array', items: { type: 'number' }, minItems: 3, maxItems: 3 };
+const object = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, properties, required: Object.keys(properties) });
+export const experimentSchema = object({
+  version: { const: 1 },
+  fixed: object({ duration: positive, warmup: { type: 'number', minimum: 0 }, physics_step: positive,
+    joint_hz: positive, camera_position: vector, camera_width: { type: 'integer', minimum: 64 },
+    camera_height: { type: 'integer', minimum: 64 }, image_age_periods: positive,
+    guest_dds_shm_bytes: { type: 'integer', minimum: 0, maximum: 67108864 }, cup_radius: positive,
+    cup_depth: positive, interval_us: positive, poll_us: positive, startup_timeout_s: positive,
+    wall_timeout_s: positive, image_diagnostics: { type: 'boolean' } }),
+  hardware: object({ cpu_type: { enum: ['timing', 'o3'] }, num_cores: { type: 'integer', minimum: 1 },
+    cpu_clock: { type: 'string' }, l1d_size: { type: 'string' }, l1i_size: { type: 'string' },
+    l1_assoc: { type: 'integer', minimum: 1 }, l2_size: { type: 'string' }, l2_assoc: { type: 'integer', minimum: 1 } }),
+  ramulator_config: { type: 'string', description: 'Path relative to the repository root; frozen at preparation.' },
+  throws: { type: 'array', minItems: 1, items: object({ name: { type: 'string' }, launch_position: vector,
+    launch_direction: vector, launch_speed: positive }) },
+  rates: { type: 'array', minItems: 1, items: object({ name: { type: 'string' }, camera_hz: positive,
+    planner_hz: positive, plan_interval: { type: 'number', minimum: 0 }, control_hz: positive }) },
+  patterns: { type: 'array', minItems: 1, uniqueItems: true, items: { enum: ['stream', 'stride', 'random'] } },
+  pressure: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'number', minimum: 0, maximum: 1 } },
+  aggressor: object({ read_percent: { type: 'integer', minimum: 0, maximum: 100 }, stride: natural,
+    max_pending: { type: 'integer', minimum: 1 }, window: { type: 'integer', minimum: 1 }, seed: natural,
+    backpressure: { type: 'boolean' }, duty_percent: { type: 'number', minimum: 0, maximum: 100 }, period: positive }),
+  calibration: object({ warmup_ns: { type: 'integer', minimum: 1 }, duration_ns: { type: 'integer', minimum: 1 } }),
+});

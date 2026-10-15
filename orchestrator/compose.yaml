@@ -1,0 +1,27 @@
+name: chimaera-orchestrator
+services:
+  dashboard:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "${CHIMAERA_BIND:-127.0.0.1}:${CHIMAERA_PORT:-3000}:3000"
+    environment:
+      CONTROLLER_URL: http://controller:8080
+    depends_on:
+      - controller
+  controller:
+    build:
+      context: ..
+      dockerfile: orchestrator/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      CHIMAERA_REPO: /repo
+      CHIMAERA_DATA: /data
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - ..:/repo:ro
+      - controller-data:/data
+      - ${CHIMAERA_SSH_DIR:?Set CHIMAERA_SSH_DIR to a dedicated SSH directory}:/root/.ssh:ro
+    # No host port and no Docker socket on the webserver controller.
+volumes:
+  controller-data:

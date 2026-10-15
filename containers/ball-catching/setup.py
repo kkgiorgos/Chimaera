@@ -26,6 +26,8 @@ def main():
     cli.add_argument('--kernel', type=Path, default=ROOT / 'gem5/resources/x86-linux-kernel-5.15.180')
     cli.add_argument('--cpus', type=float, default=4)
     cli.add_argument('--memory', default='12g')
+    cli.add_argument('--calibration-from', type=Path,
+                     help='Reuse a frozen calibration directory; simulator/config hashes must match')
     args = cli.parse_args()
     try:
         if args.build_jobs < 1 or args.output.exists():
@@ -61,8 +63,15 @@ def main():
         calibration = dict(config, devices=[])
         calibration['command'] = ['python3', '/app/containers/ball-catching/worker.py',
                                   '--prepare', '--output', '/output']
+        if args.calibration_from:
+            calibration['mounts'] = [*config['mounts'], dict(
+                source=str(args.calibration_from.resolve(strict=True)), target='/assets/shared-calibration')]
+            calibration['command'] += ['--calibration-from', '/assets/shared-calibration']
         job = dict(name='prepare', args=[], env={})
-        command = runner.command(calibration, job, prepared, image, 'chimaera-ball-prepare-' + str(os.getpid()))
+        import uuid
+        command = runner.command(calibration, job, prepared, image, 'chimaera-ball-prepare-' + uuid.uuid4().hex[:12])
+        if os.environ.get('CHIMAERA_OPERATION'):
+            command[2:2] = ['--label', 'chimaera.experiment=' + os.environ['CHIMAERA_OPERATION']]
         print(shlex.join(command), flush=True)
         subprocess.run(command, check=True)
         print(f'Ready: {inputs / "runner.json"}; no robot benchmark cases were run', flush=True)

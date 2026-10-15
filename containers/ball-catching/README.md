@@ -37,6 +37,12 @@ simulation still waits for arm/fresh-camera readiness and has a twelve-hour wall
 budget. CPU/RAM limits below affect host execution speed; they do not change the
 simulated architecture. Results remain coarse binary observations.
 
+## Distributed dashboard
+
+For SSH deployment, a shared case queue, live logs/progress, Discord notifications,
+and central result collection, see the [orchestrator guide](../../orchestrator/README.md).
+The local workflow below remains available independently.
+
 ## Prepare only
 
 Use Linux x86-64, Docker Buildx, a local Docker daemon, Python 3.10+, and the

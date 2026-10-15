@@ -13,6 +13,7 @@ Run all commands from the repository root.
 | Develop wall-follow with Gazebo | [Local application development](wall-follow/README.md#local-application-development) |
 | Prepare, run, and report a wall-follow suite | [Automated benchmark suites](wall-follow/README.md#automated-benchmark-suites) |
 | Prepare ball-catching memory interference experiments | [Ball-catching Docker suite](ball-catching/README.md) |
+| Control distributed ball-catching workers over SSH | [Orchestration dashboard](../orchestrator/README.md) |
 | Run jobs for any benchmark | [Configure jobs](#configure-jobs) below |
 
 ## Requirements

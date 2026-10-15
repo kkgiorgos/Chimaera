@@ -23,10 +23,11 @@ def common(inputs, output):
             '--source-revision', record['source_revision']]
 
 
-def prepare(inputs, output):
+def prepare(inputs, output, calibration_from=None):
     """Only short memory calibration and guest packaging; no robot simulation."""
     command = common(inputs, output)
-    subprocess.run(command + ['--calibrate-only'], check=True)
+    shared = ['--calibration-from', str(calibration_from)] if calibration_from else []
+    subprocess.run(command + ['--calibrate-only', *shared], check=True)
     data = json.loads((inputs / 'experiment.json').read_text())
     if 'stream' in data['patterns']:
         subprocess.run([sys.executable, str(SCRIPTS / 'check_aggressor_rates.py'),
@@ -61,12 +62,13 @@ def main():
     cli.add_argument('--output', type=Path, default=Path('/output/suite'))
     cli.add_argument('--prepare', action='store_true')
     cli.add_argument('--case')
+    cli.add_argument('--calibration-from', type=Path)
     args = cli.parse_args()
     try:
         if args.prepare:
             if args.case:
                 raise ValueError('Preparation does not select a case')
-            prepare(args.inputs, args.output)
+            prepare(args.inputs, args.output, args.calibration_from)
             return 0
         if not args.case:
             raise ValueError('--case is required for execution')

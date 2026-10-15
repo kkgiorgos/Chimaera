@@ -3,7 +3,7 @@ set -eo pipefail
 jobs=$1
 sdk_key=$(sha256sum /opt/chimaera/packages.tsv)
 sdk_key=${sdk_key%% *}
-cache="/var/cache/chimaera/${sdk_key}"
+cache="/var/cache/chimaera/${sdk_key}-${SOURCE_DATE_EPOCH:-wall-clock}"
 mkdir -p "$cache/m5" "$cache/gem5"
 # Keep the pinned runtime library at its final RPATH location in every stage.
 CXX=g++-12 CC=gcc-12 bash /src/gem5/ext/ramulator2/setup.sh "$jobs"

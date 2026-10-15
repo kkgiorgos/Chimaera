@@ -14,6 +14,9 @@ RUN apt-get update \
 
 FROM dependencies AS gem5-build
 ARG BUILD_JOBS=3
+# GCC uses this fixed epoch for __DATE__/__TIME__. Independent cluster builds
+# must preserve the simulator digest required by frozen memory calibration.
+ENV SOURCE_DATE_EPOCH=1704067200
 COPY gem5/ /src/gem5/
 COPY containers/scripts/compile-gem5.sh /opt/chimaera/scripts/compile-gem5.sh
 RUN --mount=type=cache,id=chimaera-${STACK_PROFILE}-compile,target=/var/cache/chimaera,sharing=locked \

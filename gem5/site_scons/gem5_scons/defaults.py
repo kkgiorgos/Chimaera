@@ -67,6 +67,7 @@ def EnvDefaults(env):
         "LINKFLAGS_EXTRA",  # gem5 specific build env
         "LANG",  # for work with non-ascii directory path
         "LC_CTYPE",  # for work with non-ascii directory path
+        "SOURCE_DATE_EPOCH",  # reproducible compiler dates in independent worker builds
         "DISPLAY",  # for gui program, ex kconfig guiconfig
     }
 

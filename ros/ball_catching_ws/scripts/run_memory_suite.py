@@ -355,7 +355,7 @@ def prepare_bundle(output, data, points):
     return bundle
 
 
-def calibrate(output, data, gem5):
+def calibrate(output, data, gem5, calibration_from=None):
     result = {}
     for pattern in data['patterns']:
         directory = output / 'calibration' / pattern
@@ -363,6 +363,11 @@ def calibrate(output, data, gem5):
         record = directory / 'calibration.json'
         signature = hashlib.sha256(json.dumps({key: data[key] for key in
             ('ramulator_sha256', 'aggressor', 'calibration')}, sort_keys=True).encode()).hexdigest()
+        if calibration_from:
+            shared = json.loads((Path(calibration_from) / pattern / 'calibration.json').read_text())
+            if shared['signature'] != signature or shared['gem5_sha256'] != digest(gem5) or shared['pattern'] != pattern:
+                raise ValueError('Shared calibration simulator/configuration provenance differs')
+            write_json(record, shared)
         if record.exists():
             cached = json.loads(record.read_text())
             if cached['signature'] != signature or cached['gem5_sha256'] != digest(gem5):
@@ -554,6 +559,8 @@ def main():
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--native-preflight', action='store_true', help='Native baseline throws only; no memory measurements')
     parser.add_argument('--calibrate-only', action='store_true')
+    parser.add_argument('--calibration-from', type=Path,
+                        help='Reuse a frozen calibration set after validating simulator and configuration hashes')
     parser.add_argument('--prepare-only', action='store_true',
                         help='Check artifacts and stage the guest; do not run calibration, gem5 or Gazebo')
     parser.add_argument('--source-revision', help='Source revision for a frozen export without a Git checkout')
@@ -614,7 +621,7 @@ def main():
         for path in (args.image, args.kernel, gem5):
             if not path.is_file():
                 raise ValueError('Missing artifact: ' + str(path))
-        calibration = manifest.get('calibration', {}) if args.prepare_only else calibrate(output, data, gem5)
+        calibration = manifest.get('calibration', {}) if args.prepare_only else calibrate(output, data, gem5, args.calibration_from)
         if not args.calibrate_only:
             bundle = output / 'guest.tar.gz'
             if not bundle.exists():

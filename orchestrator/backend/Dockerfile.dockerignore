@@ -1,0 +1,5 @@
+**
+!orchestrator/
+!orchestrator/backend/
+!orchestrator/backend/*.py
+!orchestrator/backend/Dockerfile

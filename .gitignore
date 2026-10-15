@@ -1,2 +1,8 @@
 m5out-controller/*
 results/*
+.chimaera-orchestrator/
+orchestrator/.env
+orchestrator/web/node_modules/
+orchestrator/web/.next/
+orchestrator/web/tsconfig.tsbuildinfo
+**/__pycache__/
