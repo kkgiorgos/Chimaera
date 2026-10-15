@@ -53,7 +53,8 @@ def content_identity(root, paths):
     """Hash build sources, including ignored external packages copied by Docker."""
     root = Path(root)
     names = set()
-    excluded = {'.git', '__pycache__', '.pytest_cache', 'build', 'install', 'log'}
+    excluded = {'.git', '.cache', '.vscode', '__pycache__', '.pytest_cache',
+                'build', 'install', 'log', 'm5out', 'm5_outputs', 'parser.out', 'parsetab.py'}
     excluded_paths = {'gem5/resources', 'gem5/ext/ramulator2/ramulator2'}
     for relative in paths:
         source = root / relative

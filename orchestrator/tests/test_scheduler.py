@@ -10,6 +10,7 @@ import pytest
 from common import atomic_json
 from controller import Controller, estimates, safe_extract, validate_config, validate_machine
 
+SDK_ID = 'sha256:' + 'a' * 64
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -37,6 +38,11 @@ class FakeSSH:
         return True
 
 
+    def copy_image(self, source, destination, image, cancel=None):
+        self.calls.append((destination['id'], 'copy_image', dict(source=source['id'], image=image)))
+        return image
+
+
 @pytest.fixture
 def controller(tmp_path):
     instance = Controller(ROOT, tmp_path, FakeSSH())
@@ -49,7 +55,7 @@ def controller(tmp_path):
 
 def experiment(controller, key='e1', count=8):
     value = dict(id=key, name=key, status='running', created=time.time(), generation=0,
-        config={}, source_identity={}, machines=['m0', 'm1', 'm2'], calibration={'records': {}},
+        config={}, source_identity={}, machines=['m0', 'm1', 'm2'], calibration={'records': {}, 'provenance': {'sdk_image_id': SDK_ID}},
         calibration_machine='m0', preparations={f'm{i}': dict(status='ready') for i in range(3)},
         cases=[dict(id=f'case-{i:03d}', point={}, status='queued', attempts=[]) for i in range(count)])
     controller.save(value)
@@ -293,7 +299,7 @@ class SimulatedCluster(FakeSSH):
             key = params['experiment'] + '-prepare'
             host.setdefault(key, dict(id=key, kind='prepare', experiment=params['experiment'],
                 status='completed', output='/remote/' + key, started=1,
-                ready=dict(records={'stream': dict(sustainable_gbps=40)}, provenance={})))
+                ready=dict(records={'stream': dict(sustainable_gbps=40)}, provenance=dict(sdk_image_id=SDK_ID))))
             return host[key]
         if method == 'start':
             key = params['attempt']
@@ -523,10 +529,13 @@ def test_remote_cleanup_can_explicitly_discard_uncollected_failure_output(contro
     assert controller.experiment('e1')['remote_cleaned']
 
 
-def test_existing_transferring_preparation_switches_to_local_build(controller):
+def test_existing_transferring_preparation_copies_sdk_before_local_build(controller):
     value = experiment(controller, count=1)
     value['preparations']['m1'] = dict(status='transferring')
     controller.schedule(value)
+    finish_jobs(controller)
+    assert any(call[0] == 'm1' and call[1] == 'copy_image' for call in controller.remote.calls)
+    controller.schedule(controller.experiment('e1'))
     finish_jobs(controller)
     calls = [call for call in controller.remote.calls if call[1] == 'prepare']
     assert calls[0][0] == 'm1'
@@ -540,3 +549,87 @@ def test_server_assigns_id_for_third_machine_without_browser_uuid(controller):
     controller.apply(command)
     assert len(controller.store.all('machines')) == 4
     assert command['body']['id']
+
+
+def test_selected_calibration_machine_prepares_first_and_supplies_sdk(controller):
+    value = experiment(controller, count=1)
+    value.update(status='preparing', calibration=None, calibration_machine='m2', preparations={})
+    controller.save(value)
+    controller.schedule(value)
+    finish_jobs(controller)
+    preparations = [c for c in controller.remote.calls if c[1] == 'prepare']
+    assert [c[0] for c in preparations] == ['m2']
+    assert preparations[0][2]['calibration'] is None
+    ready = dict(records={'stream': dict(sustainable_gbps=40)}, provenance=dict(sdk_image_id=SDK_ID))
+    controller.ingest(controller.machine('m2'), dict(tasks=[dict(id='e1-prepare', experiment='e1',
+        kind='prepare', status='completed', ready=ready, output='/remote', collected=True)]))
+    value = controller.experiment('e1')
+    controller.schedule(value)
+    # Consumers cannot prepare until the controller has reconciled transfer completion.
+    assert len([c for c in controller.remote.calls if c[1] == 'prepare']) == 1
+    finish_jobs(controller)
+    transfers = [c for c in controller.remote.calls if c[1] == 'copy_image']
+    assert {c[0] for c in transfers} == {'m0', 'm1'}
+    assert all(c[2] == dict(source='m2', image=SDK_ID) for c in transfers)
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    preparations = [c for c in controller.remote.calls if c[1] == 'prepare']
+    assert {c[0] for c in preparations if c[2]['calibration']} == {'m0', 'm1'}
+    assert all(c[2]['calibration']['provenance']['sdk_image_id'] == SDK_ID
+               for c in preparations if c[2]['calibration'])
+
+
+def test_sdk_transfer_failure_is_retryable_preparation_failure(controller):
+    value = experiment(controller, count=1)
+    value['preparations']['m1'] = dict(status='pending')
+    def fail(*args, **kwargs):
+        raise RuntimeError('SSH transfer interrupted')
+    controller.remote.copy_image = fail
+    controller.schedule(value)
+    finish_jobs(controller)
+    preparation = controller.experiment('e1')['preparations']['m1']
+    assert preparation['status'] == 'failed'
+    assert 'SSH transfer interrupted' in preparation['error']
+    assert not any(c[0] == 'm1' and c[1] == 'prepare' for c in controller.remote.calls)
+    controller.apply(dict(kind='retry_prepare', body=dict(id='e1', machine='m1')))
+    finish_jobs(controller)
+    assert 'm1' not in controller.experiment('e1')['preparations']
+
+
+def test_stop_cancels_sdk_transfer_and_late_completion_cannot_prepare(controller):
+    import threading
+    value = experiment(controller, count=1)
+    value['preparations']['m1'] = dict(status='copying_sdk')
+    controller.save(value)
+    cancelled = controller.sdk_cancellations.setdefault('e1', threading.Event())
+    controller.apply(dict(kind='stop', body=dict(id='e1')))
+    assert cancelled.is_set()
+    controller.finished('sdk_transfer', ('e1', 'm1', 0), SDK_ID)
+    assert controller.experiment('e1')['preparations']['m1']['status'] == 'stopped'
+
+
+def test_queue_persists_calibration_choice_and_rejects_unselected_machine(controller, monkeypatch):
+    import controller as module
+    monkeypatch.setattr(module, 'validate_config', lambda *args: ({}, []))
+    monkeypatch.setattr(module, 'source_identity', lambda *args: {})
+    body = dict(name='Run', config={}, machines=['m0', 'm2'], calibration_machine='m2')
+    key = controller.command('experiment', body)
+    controller.apply(controller.store.get('commands', key))
+    assert controller.experiment(key)['calibration_machine'] == 'm2'
+    body['calibration_machine'] = 'm1'
+    with pytest.raises(ValueError, match='Calibration machine'):
+        controller.command('experiment', body)
+    body.pop('calibration_machine')
+    key = controller.command('experiment', body)
+    controller.apply(controller.store.get('commands', key))
+    assert controller.experiment(key)['calibration_machine'] == 'm0'
+
+
+def test_resumed_experiment_ignores_old_sdk_transfer_results(controller):
+    value = experiment(controller, count=1)
+    value.update(generation=1)
+    value['preparations']['m1'] = dict(status='copying_sdk')
+    controller.save(value)
+    controller.finished('sdk_transfer', ('e1', 'm1', 0), SDK_ID)
+    controller.failed('sdk_transfer', ('e1', 'm1', 0), 'old transfer cancelled')
+    assert controller.experiment('e1')['preparations']['m1']['status'] == 'copying_sdk'

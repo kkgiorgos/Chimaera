@@ -150,6 +150,7 @@ class Controller:
         self.jobs = {}
         self.last_poll = {}
         self.collection_cancellations = {}
+        self.sdk_cancellations = {}
         self.collection_lock = threading.RLock()
         if not self.store.get('settings', 'main'):
             self.store.put('settings', 'main', dict(progress_enabled=True, progress_interval=3600, last_progress=0))
@@ -162,10 +163,12 @@ class Controller:
 
     def submit(self, key, kind, context, operation):
         if key not in self.jobs:
-            pool = self.io_pool if kind in {'collect', 'prepare_collect', 'transfer'} else self.stop_pool if kind == 'stop' else self.pool
+            pool = self.io_pool if kind in {'collect', 'prepare_collect', 'transfer', 'sdk_transfer'} else self.stop_pool if kind == 'stop' else self.pool
             self.jobs[key] = (kind, context, pool.submit(operation))
 
     def close(self):
+        for cancellation in self.sdk_cancellations.values():
+            cancellation.set()
         for pool in (self.pool, self.io_pool, self.stop_pool):
             pool.shutdown(wait=True)
 
@@ -183,6 +186,9 @@ class Controller:
             machines = {m['id'] for m in self.store.all('machines')}
             if not body.get('machines') or not set(body['machines']).issubset(machines):
                 raise ValueError('Choose at least one configured machine')
+            body.setdefault('calibration_machine', body['machines'][0])
+            if body['calibration_machine'] not in body['machines']:
+                raise ValueError('Calibration machine must be one of the selected machines')
         elif kind == 'settings':
             if type(body.get('progress_enabled')) is not bool or type(body.get('progress_interval')) is not int or body['progress_interval'] < 60:
                 raise ValueError('Progress interval must be at least 60 seconds')
@@ -215,6 +221,7 @@ class Controller:
                 return
             experiment = dict(id=key, name=body['name'], config=body['config'], machines=body['machines'],
                 created=time.time(), status='queued', preparations={}, calibration=None, generation=0,
+                calibration_machine=body.get('calibration_machine', body['machines'][0]),
                 source_identity=source_identity(self.root),
                 cases=[dict(id=p['id'], point=p, status='queued', attempts=[]) for p in body['points']])
             self.store.put('experiments', key, experiment)
@@ -223,6 +230,10 @@ class Controller:
         else:
             experiment = self.experiment(body['id'])
             if kind == 'stop':
+                self.sdk_cancellations.setdefault(experiment['id'], threading.Event()).set()
+                for preparation in experiment['preparations'].values():
+                    if preparation['status'] == 'copying_sdk':
+                        preparation['status'] = 'stopped'
                 if experiment['status'] == 'queued':
                     experiment['status'] = 'stopped'
                 elif experiment['status'] in ACTIVE:
@@ -241,6 +252,7 @@ class Controller:
                     elif case['status'] != 'completed':
                         case['status'] = 'queued'
                 experiment['status'] = 'queued'
+                self.sdk_cancellations[experiment['id']] = threading.Event()
                 experiment['generation'] = experiment.get('generation', 0) + 1
                 for machine_id, preparation in experiment['preparations'].items():
                     if preparation['status'] in ('failed', 'stopped'):
@@ -284,7 +296,7 @@ class Controller:
             elif kind in {'delete', 'cleanup'}:
                 if kind == 'delete':
                     executing = any(c['status'] in OCCUPIED for c in experiment['cases'])
-                    preparing = experiment['status'] != 'stopped' and any(p['status'] in {'preparing', 'running', 'accepted'}
+                    preparing = experiment['status'] != 'stopped' and any(p['status'] in {'preparing', 'running', 'accepted', 'copying_sdk'}
                                     for p in experiment['preparations'].values())
                     if executing or preparing or experiment['status'] == 'stopping':
                         raise ValueError('Stop active workers before deleting the experiment')
@@ -394,6 +406,15 @@ class Controller:
                 if kind == 'cleanup' and all(p['status'] == 'cleaned' for p in experiment['preparations'].values()):
                     experiment['remote_cleaned'] = True
             self.save(experiment)
+        elif kind == 'sdk_transfer':
+            experiment = self.experiment(context[0])
+            if context[2] != experiment.get('generation', 0):
+                return
+            preparation = experiment['preparations'].get(context[1], {})
+            if preparation.get('status') == 'copying_sdk' and experiment['status'] not in {'stopped', 'stopping', 'deleted'}:
+                preparation.update(status='pending', sdk_image_id=result, phase='SDK copied')
+                experiment['calibration']['provenance']['sdk_image_id'] = result
+                self.save(experiment)
         elif kind == 'stop':
             if isinstance(result, dict) and 'tasks' in result:
                 self.ingest(self.machine(context[1]), result)
@@ -442,6 +463,14 @@ class Controller:
             if was_online or kind == 'deploy':
                 event(self.store, f"{machine['name']}: {error}", 'error', notify=True)
         else:
+            if kind == 'sdk_transfer':
+                experiment = self.experiment(context[0])
+                if context[2] != experiment.get('generation', 0) or experiment['status'] in {'stopping', 'stopped', 'deleted'}:
+                    return
+                preparation = experiment['preparations'].get(context[1], {})
+                if preparation.get('status') == 'copying_sdk':
+                    preparation.update(status='failed', error=error, phase='SDK transfer failed')
+                    self.save(experiment)
             if kind in {'collect', 'prepare_collect'}:
                 experiment = self.experiment(context[0])
                 if experiment.get('results_deleted'):
@@ -576,6 +605,17 @@ class Controller:
         archive.unlink()
         return True
 
+    def copy_sdk(self, experiment, destination, cancelled):
+        source = self.machine(experiment.get('calibration_machine', experiment['machines'][0]))
+        provenance = experiment['calibration']['provenance']
+        image = provenance.get('sdk_image_id')
+        if not image:
+            key = provenance.get('build_inputs', {}).get('sdk')
+            if not key:
+                raise ValueError('Calibration SDK identity is missing; prepare the calibration machine again')
+            image = self.remote.image_id(source, 'chimaera:sdk-' + key[:16])
+        return self.remote.copy_image(source, destination, image, cancel=cancelled)
+
     def schedule(self, experiment):
         machines = [self.machine(key) for key in experiment['machines']]
         if experiment['status'] == 'stopping':
@@ -596,6 +636,7 @@ class Controller:
                 event(self.store, f"{experiment['name']}: stopped", notify=True)
             self.save(experiment)
             return
+        producer = experiment.get('calibration_machine', machines[0]['id'])
         ready = []
         for machine in machines:
             preparation = experiment['preparations'].get(machine['id'])
@@ -609,13 +650,19 @@ class Controller:
             if preparation and preparation['status'] == 'transferring':
                 # Upgrade old persisted runs: assets are now built locally.
                 preparation = None
-            if preparation and preparation['status'] not in ('pending', 'preparing'):
+            if preparation and preparation['status'] not in ('pending', 'preparing', 'copying_sdk'):
                 continue
             if not machine.get('online'):
                 continue
-            if not experiment['calibration'] and machine['id'] != machines[0]['id']:
+            if not experiment['calibration'] and machine['id'] != producer:
                 continue
-            experiment['preparations'][machine['id']] = dict(status='preparing')
+            if experiment['calibration'] and machine['id'] != producer and not (preparation or {}).get('sdk_image_id'):
+                experiment['preparations'][machine['id']] = dict(status='copying_sdk', phase='Copying calibration SDK')
+                cancelled = self.sdk_cancellations.setdefault(experiment['id'], threading.Event())
+                self.submit('sdk-' + machine['id'], 'sdk_transfer', (experiment['id'], machine['id'], experiment.get('generation', 0)),
+                    lambda m=machine, e=copy.deepcopy(experiment), c=cancelled: self.copy_sdk(e, m, c))
+                continue
+            experiment['preparations'][machine['id']] = dict(preparation or {}, status='preparing')
             self.submit('prepare-' + machine['id'], 'prepare', (experiment['id'], machine['id']),
                 lambda m=machine, e=copy.deepcopy(experiment): self.remote.call(m, 'prepare', experiment=e['id'],
                     config=e['config'], cpus=m['cpus'], memory=m['memory'], build_jobs=m['build_jobs'],
@@ -645,7 +692,7 @@ class Controller:
                             experiment=experiment['id'], case=c, attempt=a['id'], cpus=a['cpus'], memory=a['memory'], generation=experiment.get('generation', 0)))
         remaining = [c for c in experiment['cases'] if c['status'] != 'completed']
         failed_preparation = any(p['status'] in ('failed', 'stopped') for p in experiment['preparations'].values())
-        preparing = any(p['status'] in ('preparing', 'running', 'accepted', 'transferring', 'pending') for p in experiment['preparations'].values())
+        preparing = any(p['status'] in ('preparing', 'running', 'accepted', 'transferring', 'pending', 'copying_sdk') for p in experiment['preparations'].values())
         if not remaining and not failed_preparation and not preparing:
             experiment.update(status='completed', finished=time.time())
             event(self.store, f"{experiment['name']}: completed", notify=True)

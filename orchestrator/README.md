@@ -12,6 +12,7 @@ Requirements:
 - Docker Engine with Compose, and an up-to-date checkout of this repository.
 - Linux x86-64 workers with Docker Engine/Compose, writable repositories, KVM,
   and permission for the SSH user to use Docker and the guest assets.
+- Bash and gzip on workers for compressed SDK image streams.
 - SSH key access from the webserver to each worker. No inbound worker HTTP ports
   are required. The SSH user does not need a host Python installation.
 - Internet access on workers for initial image builds and the pinned kernel.
@@ -52,10 +53,13 @@ file while its WAL is active. `docker compose down` retains the volume;
 3. Wait for the machine to appear online. Repeat for the other machines.
 
 Supply an existing guest disk/kernel under **Build and guest assets** if desired.
-Leave these fields empty to prepare them automatically. The first selected machine
-produces the frozen calibration reference. Every machine uses its own configured
-asset paths or constructs its own guest disk and downloads the pinned kernel.
-Guest disks and container images are never distributed through the webserver.
+Leave these fields empty to prepare them automatically. Choose the **Calibration
+machine** when creating an experiment; it must be one of the selected machines.
+That machine produces the frozen calibration reference and SDK image. The controller
+streams that exact SDK to the other workers over authenticated SSH, without storing
+an image archive on the webserver. Workers do not need SSH access to each other.
+Every machine uses its own configured asset paths or constructs its own guest disk
+and downloads the pinned kernel. Guest disks remain local.
 
 CPU settings use Docker quotas, not exclusive core pinning. You choose worker
 counts and resource limits; there is no tuning or automatic overcommit policy.
@@ -79,7 +83,7 @@ does not remove running sibling workers.
 
 Choose **New experiment**. Monaco opens the current
 `memory_contention_patterns.json` template with the matching Catppuccin theme.
-Import/export JSON, edit it, select machines, then **Validate** to preview the
+Import/export JSON, edit it, select workers and a calibration machine, then **Validate** to preview the
 expanded cases. The server uses the benchmark's real validator; the editor also
 provides JSON schema diagnostics. `ramulator_config` is relative to the repository
 root and must resolve to a file inside that repository.
@@ -87,23 +91,33 @@ root and must resolve to a file inside that repository.
 **Queue experiment** freezes the configuration and source identity. When its turn
 arrives, preparation runs automatically:
 
-1. Validate the machine checkout against the queued revision and source fingerprint.
-2. Build missing source-keyed SDK/application images on that machine.
-3. On every machine, reuse or construct a local ball-catching Ubuntu/ROS guest disk,
-   and reuse a supplied kernel or download and verify the pinned gem5 kernel.
-4. Run memory-only calibration and fractional-rate checks, then prepare the guest
-   bundle. These preparation steps do not run robot benchmark cases.
-5. Freeze one calibration set and send only those small JSON records to the other
-   machines. They validate the shared calibration against their local simulator,
-   configuration and kernel before becoming eligible for case assignments. Local
-   disk hashes are recorded separately; independent ext4 images need not be
-   byte-for-byte identical.
-6. Dispatch cases dynamically as worker slots become available. A ready machine
-   can start cases while other machines are still preparing.
+1. On the chosen calibration machine, validate the queued source identity and build
+   or reuse its source-keyed SDK and application images.
+2. Prepare its local guest assets, run memory-only calibration and fractional-rate
+   checks, and freeze the guest bundle. These steps do not run robot benchmark cases.
+3. Record the SDK's immutable Docker image ID with the calibration. Stream that image
+   with `docker image save`, gzip and `docker image load` over the controller's SSH
+   connections to each remaining worker. Skip transfer when that exact image already
+   exists there. Imported images do not replace source-keyed local SDK tags.
+4. Verify the image ID after loading. Consumers validate their source keys, build
+   their application against that SDK, prepare their own guest assets, and validate
+   the shared calibration's simulator/configuration hashes and kernel.
+5. Dispatch cases dynamically as workers become ready. The calibration machine can
+   run cases while SDK copies and other workers' preparation continue.
+
+The dashboard shows **Copying calibration SDK** during transfer. Transfer failures
+are preparation failures with **Retry preparation**. Stop cancels active transfers;
+controller restarts recheck the destination cache and repeat incomplete transfers.
+Transfers have a one-hour limit and use the same verified SSH hosts as other remote
+operations. No image archive is retained by the controller, but the network carries
+the compressed SDK once per worker that lacks it. Old experiments without an explicit
+calibration-machine choice retain their original first-machine default.
 
 SDK image cache keys depend on the content of simulator, transport, bridge, stack
 profile and build inputs. Application image keys additionally depend on the robot
-application sources. Repository commits, dashboard changes, experiment parameters,
+application sources and the exact SDK image ID. Host editor caches (`.cache`, `.vscode`), simulation output
+(`m5out`, `m5_outputs`), and generated parser tables are excluded from both cache
+keys and Docker build contexts. Repository commits, dashboard changes, experiment parameters,
 worker sizes and build parallelism do not invalidate the SDK image. If its image
 is already present, preparation skips gem5 compilation entirely. A missing image
 uses Docker layers and the existing SCons build cache; a simulator or dependency
@@ -115,7 +129,25 @@ each pattern. A 50% pressure case requests half that pattern's calibrated rate;
 it is unrelated to the physical worker's RAM bandwidth. Reuse requires matching
 simulator/configuration hashes. Independent simulator builds use a fixed compiler
 date via `SOURCE_DATE_EPOCH`; genuinely different binaries/dependencies still fail
-closed and expose the preparation error. No worker silently recalibrates.
+closed and expose the preparation error. The fixed date does not pin packages
+installed from live APT repositories: separately built SDKs can have different
+dependencies and simulator binaries even when their source keys match. To reuse a
+calibration reliably, the orchestrator copies the calibration SDK automatically
+and builds consumers against its immutable image identity. A missing copied SDK
+fails preparation instead of triggering an independent SDK build. No worker
+silently recalibrates.
+
+If preparation reports a shared calibration provenance mismatch, compare the
+reported calibration and local values. A `gem5_sha256` difference means the actual
+simulator binaries differ; matching Git revisions alone is insufficient. A build
+source mismatch is rejected before Docker builds or guest preparation. These keys
+also include ignored external source trees and executable permissions. Align those
+inputs across machines. If build keys match but binaries differ, compare build
+options and dependency versions, and reuse the same compatible SDK image on all
+workers. Rebuilding only a consumer does not change the producer's frozen reference.
+If you intentionally change simulator inputs, start a new experiment and produce a
+new calibration using the build that all workers will use. Keep the existing
+calibration records intact; editing their hashes would hide incompatible builds.
 
 The generated guest uses the application image's Ubuntu/ROS filesystem, a generic
 root init/readfile boot path, a partition-2 ext4 root, and this repository's m5 tool.
@@ -217,6 +249,15 @@ still active, choose **Stop** first. **Clean remote copies** remains available
 after deletion and can explicitly discard uncollected output. New experiments
 use the local image/guest cache policy; legacy generated guest caches are left
 untouched, while new guests use recipe-specific cache names.
+
+For automatic SDK sharing and calibration-machine selection, update all checkouts,
+rebuild the webserver stack, and redeploy supervisors before queueing a new
+experiment. Choose the intended producer in **Calibration machine**. Existing
+frozen experiments retain their original source identities and build keys; queue a
+new experiment when adopting the generated-file exclusions, rather than editing
+saved hashes. SDKs and application images remain cached; the application cache now
+includes the SDK image identity so an application built against a different SDK
+is rebuilt.
 
 For the guest-init symlink fix, stop the affected experiment, update all checkouts,
 rebuild the webserver stack and redeploy supervisors, then queue a new experiment.

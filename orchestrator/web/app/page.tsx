@@ -91,7 +91,7 @@ export default function Dashboard() {
   ];
   const canDelete = experiment && !experiment.results_deleted && experiment.status !== 'stopping'
     && !cases.some(c => occupiedStatuses.includes(c.status))
-    && (experiment.status === 'stopped' || !Object.values(experiment.preparations).some(p => ['preparing', 'running', 'accepted'].includes(p.status)));
+    && (experiment.status === 'stopped' || !Object.values(experiment.preparations).some(p => ['preparing', 'running', 'accepted', 'copying_sdk'].includes(p.status)));
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -150,6 +150,7 @@ export default function Dashboard() {
                 })}</div>
                 {m.workers > 32 && <p className="muted small">Showing 32 of {m.workers} worker slots.</p>}
                 {preparation && preparation.status !== 'ready' && <div className="preparation"><span>{preparation.phase || label(preparation.status)}</span>{preparation.task && <button className="text-button" onClick={() => showLogs(m.id, preparation.task!, `${m.name} preparation`)}>Logs</button>}{['failed', 'stopped'].includes(preparation.status) && <button className="text-button" onClick={() => command('retry_prepare', { id: experiment!.id, machine: m.id })}>Retry preparation</button>}</div>}
+                {preparation?.error && <p className="machine-error" role="alert">{preparation.error}</p>}
                 {m.error && <p className="machine-error">{m.error}</p>}
                 <footer className="machine-footer"><span>{stale ? m.seen ? `Last seen ${new Date(m.seen * 1000).toLocaleTimeString()}` : 'Awaiting connection' : 'Ready for dispatch'}</span><button className="text-button" onClick={() => command('deploy', { id: m.id })}>{m.deployed ? 'Redeploy supervisor' : 'Deploy supervisor'}</button></footer>
               </article>;
@@ -157,7 +158,7 @@ export default function Dashboard() {
           </section>
 
           {experiment ? <section className="run-panel">
-            <div className="run-heading"><div><div className="heading-line"><h2>{experiment.name}</h2><Status value={experiment.status} /></div><p>Memory contention · {experiment.machines.length} machines · Frozen calibration</p></div>
+            <div className="run-heading"><div><div className="heading-line"><h2>{experiment.name}</h2><Status value={experiment.status} /></div><p>Memory contention · {experiment.machines.length} machines · Calibration: {machines.find(m => m.id === (experiment.calibration_machine || experiment.machines[0]))?.name || 'Unknown machine'}</p></div>
               <div className="actions"><button className="button compact" onClick={() => openEditor(experiment.config)}><FileJson size={15} />Clone config</button>
                 {activeStatuses.includes(experiment.status) && experiment.status !== 'stopping' && <button className="button compact danger-button" onClick={() => setConfirmation({ title: 'Stop this experiment?', description: 'Terminate active cases immediately on reachable machines. Completed results are preserved. Unreachable machines show Stop pending.', action: () => { void command('stop', { id: experiment.id }); } })}><Square size={14} />Stop</button>}
                 {experiment.status === 'queued' && <button className="button compact" onClick={() => command('stop', { id: experiment.id })}><CirclePause size={14} />Remove from queue</button>}
@@ -201,7 +202,7 @@ function MachineDialog({ machine, close, save }: { machine: Machine; close: () =
       <div className="form-grid">{field('name', 'Machine name')}{field('target', 'SSH user@hostname')}{field('port', 'SSH port', 'number')}{field('repo', 'Repository path')}</div>
       <h3>Worker allocation</h3><p className="muted small">Changes apply to new cases. Active cases keep their existing limits.</p>
       <div className="form-grid thirds">{field('workers', 'Worker count', 'number')}{field('cpus', 'CPUs per worker', 'number')}{field('memory', 'RAM per worker')}</div>
-      <details><summary>Build and guest assets</summary><div className="form-grid">{field('build_jobs', 'Build parallelism', 'number')}{field('disk', 'Existing guest disk (optional)', 'text', false)}{field('kernel', 'Existing kernel (optional)', 'text', false)}</div><p className="muted small">Each machine builds and caches its own images and guest disk. Leave paths empty to build a guest locally and download the pinned kernel. Only calibration records are shared.</p></details>
+      <details><summary>Build and guest assets</summary><div className="form-grid">{field('build_jobs', 'Build parallelism', 'number')}{field('disk', 'Existing guest disk (optional)', 'text', false)}{field('kernel', 'Existing kernel (optional)', 'text', false)}</div><p className="muted small">The calibration machine builds the shared SDK. Other machines receive that SDK and build their applications and guest disks locally. Leave paths empty to build a guest and download the pinned kernel.</p></details>
       <div className="dialog-actions"><button type="button" className="button" onClick={close}>Cancel</button><button disabled={saving} className="button primary">{saving ? 'Saving…' : 'Save machine'}</button></div>
     </form>
   </Dialog>;
@@ -211,6 +212,8 @@ function ExperimentDialog({ initial, machines, close, save }: { initial?: Record
   const [config, setConfig] = useState(initial ? JSON.stringify(initial, null, 2) : '');
   const [name, setName] = useState('Memory contention');
   const [selected, setSelected] = useState(machines.map(m => m.id));
+  const [calibration, setCalibration] = useState(machines[0]?.id || '');
+  const calibrationMachine = selected.includes(calibration) ? calibration : selected[0] || '';
   const [points, setPoints] = useState<Case['point'][] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -224,12 +227,16 @@ function ExperimentDialog({ initial, machines, close, save }: { initial?: Record
   return <Dialog title="Configure experiment" close={close} wide>
     <div className="editor-toolbar"><label>Experiment name<input value={name} onChange={e => setName(e.target.value)} /></label><div className="actions"><label className="button compact file-button">Import JSON<input type="file" accept=".json,application/json" onChange={async e => { const file = e.target.files?.[0]; if (file) { setConfig(await file.text()); setPoints(null); } }} /></label><button className="button compact" onClick={() => { const url = URL.createObjectURL(new Blob([config], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = 'experiment.json'; link.click(); URL.revokeObjectURL(url); }}>Export JSON</button></div></div>
     <div className="editor-layout"><div className="editor-pane"><div className="editor-tab"><FileJson size={15} />experiment.json</div><div className="editor-area"><Editor value={config} onChange={value => { setConfig(value); setPoints(null); }} /></div></div>
-      <aside className="experiment-options"><h3>Run on these machines</h3><p className="muted small">Cases are assigned dynamically. The first selected machine freezes calibration. Every machine builds its own cached images and guest assets locally.</p>
+      <aside className="experiment-options"><h3>Run on these machines</h3><p className="muted small">Cases are assigned dynamically. Choose a machine to calibrate memory. Its SDK is copied to the other machines before they build their applications and guest assets.</p>
         {!machines.length && <p>Add a machine before queueing.</p>}{machines.map(m => <label className="machine-choice" key={m.id}><input type="checkbox" checked={selected.includes(m.id)} onChange={e => setSelected(e.target.checked ? [...selected, m.id] : selected.filter(id => id !== m.id))} /><span>{m.name}<small>{m.workers} workers · {m.cpus} CPU · {m.memory}</small></span></label>)}
+        <div className="calibration-field"><label htmlFor="calibration-machine">Calibration machine</label><select id="calibration-machine" value={calibrationMachine} disabled={!selected.length} onChange={e => setCalibration(e.target.value)}>
+          {!selected.length && <option value="">Select a machine above</option>}
+          {machines.filter(m => selected.includes(m.id)).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select></div>
         <div className="preview"><h3>Expanded cases</h3>{points ? <><p className="preview-count">{points.length}<span>cases</span></p><div className="preview-list">{points.map((p, i) => <div key={i}><span>{String(p.id)}</span><span>{String(p.pattern || 'baseline')} / {Math.round(Number(p.pressure || 0) * 100)}%</span></div>)}</div></> : <p className="muted small">Validate the configuration to preview the case queue.</p>}</div>
       </aside></div>
     {error && <p className="editor-error" role="alert">{error}</p>}
-    <div className="dialog-actions"><span className="muted small">One experiment runs at a time. Failures wait for your decision.</span><button className="button" disabled={busy} onClick={validate}><Check size={16} />Validate</button><button className="button primary" disabled={busy || !name.trim() || !selected.length} onClick={async () => { const validated = await validate(); if (validated) { setBusy(true); await save({ name, config: validated, machines: selected }); setBusy(false); } }}><Play size={15} />Queue experiment</button></div>
+    <div className="dialog-actions"><span className="muted small">One experiment runs at a time. Failures wait for your decision.</span><button className="button" disabled={busy} onClick={validate}><Check size={16} />Validate</button><button className="button primary" disabled={busy || !name.trim() || !selected.length} onClick={async () => { const validated = await validate(); if (validated) { setBusy(true); await save({ name, config: validated, machines: selected, calibration_machine: calibrationMachine }); setBusy(false); } }}><Play size={15} />Queue experiment</button></div>
   </Dialog>;
 }
 

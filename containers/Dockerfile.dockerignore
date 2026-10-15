@@ -22,3 +22,12 @@
 gem5/resources
 
 gem5/ext/ramulator2/ramulator2
+
+# Host editor caches, simulation output, and generated parser tables are not build sources.
+**/.cache
+**/.vscode
+**/.pytest_cache
+**/m5out
+**/m5_outputs
+**/parser.out
+**/parsetab.py

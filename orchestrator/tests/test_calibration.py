@@ -35,6 +35,18 @@ def test_different_simulator_rejects_shared_calibration_without_recalibrating(tm
     simulator, data, record, source = fixture(tmp_path)
     simulator.write_bytes(b'other simulator')
     with patch('run_memory_suite.subprocess.run') as execute:
-        with pytest.raises(ValueError, match='provenance differs'):
+        with pytest.raises(ValueError, match='gem5_sha256: calibration=' + record['gem5_sha256']):
             calibrate(tmp_path / 'output', data, simulator, source)
         execute.assert_not_called()
+
+
+@pytest.mark.parametrize('field,value', [('signature', 'other-config'), ('pattern', 'random')])
+def test_shared_calibration_reports_configuration_or_pattern_mismatch(tmp_path, field, value):
+    simulator, data, record, source = fixture(tmp_path)
+    record[field] = value
+    (source / 'stream/calibration.json').write_text(json.dumps(record))
+    with patch('run_memory_suite.subprocess.run') as execute:
+        with pytest.raises(ValueError, match=field + ': calibration=' + value):
+            calibrate(tmp_path / 'output', data, simulator, source)
+        execute.assert_not_called()
+    assert not (tmp_path / 'output/calibration/stream/calibration.json').exists()

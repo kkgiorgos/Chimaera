@@ -182,6 +182,7 @@ summary { cursor: pointer; color: rgb(var(--ctp-subtext)); font-size: 12px; marg
 .experiment-options > p { margin: 8px 0 15px; }
 .machine-choice { display: flex; flex-direction: row; gap: 9px; align-items: flex-start; padding: 10px 0; }
 .machine-choice small { display: block; font-size: 10px; color: rgb(var(--ctp-subtext)); margin-top: 2px; }
+.calibration-field { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
 .preview { border-top: 1px solid rgb(var(--ctp-surface0)); padding-top: 18px; margin-top: 20px; }
 .preview-count { font-size: 34px; font-weight: 400; margin: 10px 0; }
 .preview-count span { font-size: 12px; margin-left: 8px; color: rgb(var(--ctp-subtext)); }

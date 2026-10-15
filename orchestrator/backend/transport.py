@@ -1,5 +1,6 @@
 """No remote listener: authenticated RPC travels through SSH and docker exec."""
 import json
+import re
 import shlex
 import subprocess
 import tempfile
@@ -59,3 +60,68 @@ class SSH:
                 if process.poll() is None:
                     process.kill()
                 process.wait()
+
+    def image_id(self, machine, image):
+        command = shlex.join(['docker', 'image', 'inspect', '--format', '{{.Id}}', image])
+        value = run(self.base(machine) + [command], text=True, timeout=30).strip()
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
+            raise ValueError('Invalid SDK image ID')
+        return value
+
+    def copy_image(self, source, destination, image, cancel=None, timeout=3600):
+        """Stream a frozen image between Docker stores over two authenticated SSH links."""
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
+            raise ValueError('Invalid SDK image ID')
+        def check_cancelled():
+            if cancel is not None and cancel.is_set():
+                raise RuntimeError('SDK transfer cancelled')
+        check_cancelled()
+        inspect = shlex.join(['docker', 'image', 'inspect', '--format', '{{.Id}}', image])
+        present = subprocess.run(self.base(destination) + [inspect], capture_output=True, text=True, timeout=30)
+        if present.returncode == 0 and present.stdout.strip() == image:
+            return image
+        # Save by immutable ID, without importing or replacing any mutable tags.
+        export = shlex.join(['bash', '-o', 'pipefail', '-c',
+                             shlex.join(['docker', 'image', 'save', image]) + ' | gzip -1'])
+        load = shlex.join(['bash', '-o', 'pipefail', '-c', 'gzip -d | docker image load'])
+        processes = []
+        with tempfile.TemporaryFile() as errors, tempfile.TemporaryFile() as output:
+            try:
+                sender = subprocess.Popen(self.base(source) + [export], stdout=subprocess.PIPE, stderr=errors)
+                processes.append(sender)
+                try:
+                    receiver = subprocess.Popen(self.base(destination) + [load], stdin=sender.stdout,
+                                                stdout=output, stderr=errors)
+                    processes.append(receiver)
+                finally:
+                    sender.stdout.close()
+                deadline = time.monotonic() + timeout
+                while any(process.poll() is None for process in processes):
+                    check_cancelled()
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('SDK transfer exceeded its time limit')
+                    if any(process.poll() not in (None, 0) for process in processes):
+                        break
+                    try:
+                        receiver.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    if receiver.poll() == 0 and sender.poll() is None:
+                        try:
+                            sender.wait(timeout=0.2)
+                        except subprocess.TimeoutExpired:
+                            pass
+                check_cancelled()
+                if any(process.poll() != 0 for process in processes):
+                    errors.seek(0)
+                    raise RuntimeError('SDK transfer failed: ' + errors.read().decode(errors='replace')[-2000:])
+            finally:
+                for process in processes:
+                    if process.poll() is None:
+                        process.kill()
+                for process in processes:
+                    process.wait()
+        check_cancelled()
+        if self.image_id(destination, image) != image:
+            raise ValueError('Transferred SDK image identity differs')
+        return image

@@ -365,8 +365,14 @@ def calibrate(output, data, gem5, calibration_from=None):
             ('ramulator_sha256', 'aggressor', 'calibration')}, sort_keys=True).encode()).hexdigest()
         if calibration_from:
             shared = json.loads((Path(calibration_from) / pattern / 'calibration.json').read_text())
-            if shared['signature'] != signature or shared['gem5_sha256'] != digest(gem5) or shared['pattern'] != pattern:
-                raise ValueError('Shared calibration simulator/configuration provenance differs')
+            expected = dict(signature=signature, gem5_sha256=digest(gem5), pattern=pattern)
+            differences = [f'{key}: calibration={shared.get(key)}, local={value}'
+                           for key, value in expected.items() if shared.get(key) != value]
+            if differences:
+                raise ValueError('Shared calibration simulator/configuration provenance differs for '
+                    + pattern + ': ' + '; '.join(differences)
+                    + '. Reuse the calibration simulator build and matching configuration, '
+                    'or produce a new calibration with the build used by every worker.')
             write_json(record, shared)
         if record.exists():
             cached = json.loads(record.read_text())

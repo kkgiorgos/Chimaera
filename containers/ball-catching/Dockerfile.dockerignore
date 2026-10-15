@@ -10,3 +10,7 @@
 **/.git
 **/__pycache__
 **/*.pyc
+
+**/.cache
+**/.vscode
+**/.pytest_cache

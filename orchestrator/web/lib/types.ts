@@ -21,6 +21,7 @@ export interface Experiment {
   config: Record<string, unknown>; eta_seconds?: number | null; eta_basis?: string;
   results_deleted?: boolean; stop_pending?: string[];
   preparations: Record<string, { status: string; task?: string; phase?: string; error?: string; collection_status?: string; collection_error?: string }>;
+  calibration_machine?: string;
   calibration?: { records: Record<string, { sustainable_gbps: number }> };
 }
 export interface State {

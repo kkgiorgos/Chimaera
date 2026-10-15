@@ -1,4 +1,5 @@
 """One detached preparation operation: build locally, freeze inputs, validate provenance."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ def prepare(directory):
     from guest import ensure_assets
     root = Path(os.environ['CHIMAERA_REPO'])
     request = json.loads((directory / 'request.json').read_text())
+    calibration = request.get('calibration')
     config = request['config']
     # The stored JSON remains portable; resolve its repository-relative memory config here.
     config['ramulator_config'] = str(root / config['ramulator_config'])
@@ -22,18 +24,40 @@ def prepare(directory):
         raise ValueError('Repository revision or source contents differ from the queued experiment')
     atomic_json(directory / 'stage.json', dict(phase='Building SDK and application'))
     builds = build_identities(root)
-    sdk, image = 'chimaera:sdk-' + builds['sdk'][:16], 'chimaera:ball-' + builds['application'][:16]
+    if calibration:
+        expected_builds = calibration['provenance'].get('build_inputs')
+        if expected_builds is not None and builds != expected_builds:
+            differences = '; '.join(
+                f'{key}: calibration={expected_builds.get(key)}, local={builds[key]}'
+                for key in builds if builds[key] != expected_builds.get(key))
+            raise ValueError('Simulator/application build sources differ from the calibration machine: '
+                + differences + '. Check ignored external sources and executable permissions as well as Git revision. '
+                'Use matching build inputs on every machine before retrying preparation.')
+    sdk = 'chimaera:sdk-' + builds['sdk'][:16]
+    if calibration:
+        sdk = calibration['provenance'].get('sdk_image_id')
+        if not sdk:
+            raise ValueError('Shared calibration lacks its SDK image identity; prepare the calibration machine again')
     present = subprocess.run(['docker', 'image', 'inspect', sdk], capture_output=True)
     if present.returncode:
+        if calibration:
+            raise ValueError('Calibration SDK image is missing; complete SDK transfer before preparation')
         subprocess.run([sys.executable, str(root / 'containers/build.py'), '--tag', sdk, '--jobs', str(request['build_jobs'])], check=True)
+    sdk_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', sdk], text=True).strip()
+    if calibration and sdk_id != sdk:
+        raise ValueError('Local SDK image differs from the calibration SDK')
+    sdk_reference = 'chimaera:sdk-image-' + sdk_id.removeprefix('sha256:')
+    subprocess.run(['docker', 'image', 'tag', sdk_id, sdk_reference], check=True)
+    # A source key alone can reuse an application built against another SDK's live APT packages.
+    application_key = hashlib.sha256((builds['application'] + sdk_id).encode()).hexdigest()
+    image = 'chimaera:ball-' + application_key[:16]
     present = subprocess.run(['docker', 'image', 'inspect', image], capture_output=True)
     if present.returncode:
         subprocess.run(['docker', 'buildx', 'build', '--load', '--progress', 'plain', '--provenance=false',
             '--platform', 'linux/amd64', '-f', str(root / 'containers/ball-catching/Dockerfile'),
-            '--build-arg', 'SDK_IMAGE=' + sdk, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
+            '--build-arg', 'SDK_IMAGE=' + sdk_reference, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
             '-t', image, str(root)], check=True)
     atomic_json(directory / 'stage.json', dict(phase='Preparing guest disk and kernel'))
-    calibration = request.get('calibration')
     disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
     args = []
     if calibration:
@@ -53,7 +77,7 @@ def prepare(directory):
     # The source copy contains this host's resolved memory path. The exported
     # experiment and memory.json are portable and remain strictly hashed.
     hashes.pop('source-experiment.json', None)
-    provenance = dict(source_identity=identity, revision=revision, build_inputs=builds, disk_sha256=digest(disk), kernel_sha256=digest(kernel),
+    provenance = dict(source_identity=identity, revision=revision, build_inputs=builds, sdk_image_id=sdk_id, disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
     if calibration:
         # Local ext4 images contain host-local filesystem timestamps/UUIDs.
