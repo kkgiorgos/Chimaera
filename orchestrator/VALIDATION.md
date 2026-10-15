@@ -85,3 +85,24 @@ duplicate prevention, stdout/stderr capture, immediate stop, stop barrier, and
 cleanup. These checks did not run simulations or deploy to the destination SSH
 cluster; the simulation validation boundary above still applies. Guest disks and
 Docker images are now built locally on each machine rather than transferred.
+
+## Guest-init symlink repair
+
+Local run inspection found four cases exiting with startup timeouts after the
+guest booted systemd to a login prompt. The exported Ubuntu image's init is an
+absolute symlink; the assembler now removes that symlink before installing the
+executable Chimaera init script. It previously followed the link into the helper
+filesystem, leaving the guest's systemd startup in place.
+
+The combined pytest suite passed **77 tests**, including existing/dangling init
+symlink targets and guest recipe cache invalidation without deleting older disks.
+The updated supervisor image built successfully. A disposable fixture assembled
+inside that image passed real tar, mke2fs, e2fsck, and dd operations. Inspection
+with debugfs verified the ext4 image contains a regular, mode-0755 init with the
+expected script, and the symlink's former target was unchanged. Host-native
+assembly was not used because its older mke2fs lacks the production feature flags.
+
+This repair has not yet been validated with a full guest boot or benchmark run.
+Running workers and existing experiment data were left untouched. Existing
+prepared experiments retain their original disks; a new experiment after updating
+and redeploying supervisors uses the corrected recipe cache entry.

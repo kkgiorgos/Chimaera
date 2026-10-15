@@ -30,8 +30,13 @@ def assemble(work):
             (root / directory).mkdir(exist_ok=True)
         (root / 'tmp').chmod(0o1777)
         init = (work / 'init.sh').read_text()
-        (root / 'usr/sbin/init').write_text(init)
-        (root / 'usr/sbin/init').chmod(0o755)
+        init_path = root / 'usr/sbin/init'
+        # Ubuntu exports init as an absolute symlink to systemd. Writing through
+        # it changes the helper's filesystem, leaving systemd in the guest.
+        # Replace the link itself so /sbin/init boots our readfile handler.
+        init_path.unlink(missing_ok=True)
+        init_path.write_text(init)
+        init_path.chmod(0o755)
         shutil.copy2(root / 'opt/chimaera/gem5/util/m5/build/x86/out/m5', root / 'usr/local/bin/m5')
         (root / 'etc/fstab').write_text('')
         (root / 'etc/hostname').write_text('chimaera-guest\n')

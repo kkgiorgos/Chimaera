@@ -218,6 +218,14 @@ after deletion and can explicitly discard uncollected output. New experiments
 use the local image/guest cache policy; legacy generated guest caches are left
 untouched, while new guests use recipe-specific cache names.
 
+For the guest-init symlink fix, stop the affected experiment, update all checkouts,
+rebuild the webserver stack and redeploy supervisors, then queue a new experiment.
+Preparation automatically builds a fresh guest disk under the changed recipe key;
+the SDK/application images remain cached. Existing prepared experiments still
+reference their original disk, so retrying only their failed cases reuses that
+disk. If a machine has an explicitly configured guest disk path, clear it to use
+the corrected generated guest, or supply a separately corrected disk.
+
 ## Development and checks
 
 The Python service uses only the standard library. Local dashboard development
