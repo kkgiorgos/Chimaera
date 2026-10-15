@@ -10,6 +10,7 @@ from common import atomic_json, build_identities, digest
 from pipeline import prepare
 
 SDK_ID = 'sha256:' + 'a' * 64
+APP_ID = 'sha256:' + 'b' * 64
 APP_KEY = hashlib.sha256(('app-key' + SDK_ID).encode()).hexdigest()[:16]
 
 
@@ -60,7 +61,8 @@ def pipeline_fixture(tmp_path):
                 'source-experiment.json': 'local-path', 'experiment.json': 'portable'}))
             atomic_json(directory / 'inputs/plan.json', dict(points=[]))
             atomic_json(directory / 'inputs/prepared/calibration/stream/calibration.json', records['stream'])
-        return subprocess.CompletedProcess(argv, 0, stdout=SDK_ID if '--format' in argv else '')
+        image_id = APP_ID if argv[-1] == APP_ID or str(argv[-1]).startswith('chimaera:ball-') else SDK_ID
+        return subprocess.CompletedProcess(argv, 0, stdout=image_id if '--format' in argv else '')
 
     return directory, identity, disk, kernel, execute
 
@@ -163,7 +165,7 @@ def test_application_cache_and_build_use_calibration_sdk_identity(tmp_path, monk
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
     def build_application(argv, **kwargs):
-        if argv[:3] == ['docker', 'image', 'inspect'] and 'chimaera:ball-' in argv[-1]:
+        if argv[:3] == ['docker', 'image', 'inspect'] and '--format' not in argv and 'chimaera:ball-' in argv[-1]:
             return subprocess.CompletedProcess(argv, 1)
         return execute(argv, **kwargs)
     with patch('pipeline.source_identity', return_value=identity), \
@@ -178,3 +180,49 @@ def test_application_cache_and_build_use_calibration_sdk_identity(tmp_path, monk
                    for c in commands.call_args_list)
     ready = json.loads((directory / 'ready.json').read_text())
     assert ready['provenance']['sdk_image_id'] == SDK_ID
+    assert ready['provenance']['application_image_id'] == APP_ID
+
+
+@pytest.mark.parametrize('present', [True, False])
+def test_consumer_uses_shared_application_without_building(tmp_path, monkeypatch, present):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    request = json.loads((directory / 'request.json').read_text())
+    request['calibration']['provenance']['application_image_id'] = APP_ID
+    atomic_json(directory / 'request.json', request)
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    def inspect(argv, **kwargs):
+        if not present and argv == ['docker', 'image', 'inspect', APP_ID]:
+            return subprocess.CompletedProcess(argv, 1)
+        return execute(argv, **kwargs)
+    with patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=inspect) as commands, \
+         patch('guest.ensure_assets', return_value=(disk, kernel)) as assets:
+        if present:
+            prepare(directory)
+            assert assets.call_args.args[2] == APP_ID
+            ready = json.loads((directory / 'ready.json').read_text())
+            assert ready['image'] == APP_ID
+            assert ready['provenance']['application_image_id'] == APP_ID
+        else:
+            with pytest.raises(ValueError, match='complete image transfer'):
+                prepare(directory)
+            assets.assert_not_called()
+        assert not any('buildx' in c.args[0] for c in commands.call_args_list)
+
+
+def test_producer_records_both_images_for_distribution(tmp_path, monkeypatch):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    request = json.loads((directory / 'request.json').read_text())
+    request['calibration'] = None
+    atomic_json(directory / 'request.json', request)
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=execute), \
+         patch('guest.ensure_assets', return_value=(disk, kernel)):
+        prepare(directory)
+    ready = json.loads((directory / 'ready.json').read_text())
+    assert ready['provenance']['sdk_image_id'] == SDK_ID
+    assert ready['provenance']['application_image_id'] == APP_ID
+    assert len(list((tmp_path / '.chimaera-orchestrator/assets').glob('image-*.json'))) == 2

@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,7 @@ class Agent:
         self.lock = threading.RLock()
 
     def rpc(self, method, **params):
-        if method not in {'snapshot', 'prepare', 'start', 'stop', 'logs', 'cleanup', 'asset_destination', 'reset_prepare'}:
+        if method not in {'snapshot', 'prepare', 'start', 'stop', 'logs', 'cleanup', 'clean_assets', 'remember_image', 'asset_destination', 'reset_prepare'}:
             raise ValueError('Unknown supervisor operation')
         with self.lock:
             return getattr(self, method)(**params)
@@ -286,6 +287,19 @@ class Agent:
             shutil.rmtree(directory)
         return True
 
+    def clean_assets(self, keep_paths=()):
+        from assets import clean_unused
+        if any(t['status'] in ('accepted', 'running') for t in self.store.all('tasks')):
+            raise ValueError('Wait for machine tasks to stop before cleaning unused assets')
+        return clean_unused(self.data, keep_paths)
+
+    def remember_image(self, image):
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
+            raise ValueError('Invalid Docker image ID')
+        atomic_json(self.data / 'assets' / ('image-' + image.removeprefix('sha256:') + '.json'),
+                    dict(image_id=image))
+        return True
+
 
 def main():
     cli = argparse.ArgumentParser()
@@ -294,7 +308,7 @@ def main():
     if args.mode == 'rpc':
         request = urllib.request.Request('http://127.0.0.1:9091', data=sys.stdin.buffer.read(),
                                          headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=35) as response:
+        with urllib.request.urlopen(request, timeout=600) as response:
             sys.stdout.buffer.write(response.read())
         return
     agent = Agent()

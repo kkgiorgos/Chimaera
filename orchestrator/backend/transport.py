@@ -27,7 +27,8 @@ class SSH:
     def call(self, machine, method, **params):
         command = shlex.join(['docker', 'exec', '-i', 'chimaera-supervisor',
                               'python3', '/app/agent.py', 'rpc'])
-        output = run(self.base(machine) + [command], input=json.dumps(dict(method=method, **params)).encode(), timeout=40)
+        output = run(self.base(machine) + [command], input=json.dumps(dict(method=method, **params)).encode(),
+                     timeout=610 if method == 'clean_assets' else 40)
         result = json.loads(output)
         if 'error' in result:
             raise RuntimeError(result['error'])
@@ -65,16 +66,16 @@ class SSH:
         command = shlex.join(['docker', 'image', 'inspect', '--format', '{{.Id}}', image])
         value = run(self.base(machine) + [command], text=True, timeout=30).strip()
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
-            raise ValueError('Invalid SDK image ID')
+            raise ValueError('Invalid Docker image ID')
         return value
 
     def copy_image(self, source, destination, image, cancel=None, timeout=3600):
         """Stream a frozen image between Docker stores over two authenticated SSH links."""
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
-            raise ValueError('Invalid SDK image ID')
+            raise ValueError('Invalid Docker image ID')
         def check_cancelled():
             if cancel is not None and cancel.is_set():
-                raise RuntimeError('SDK transfer cancelled')
+                raise RuntimeError('Image transfer cancelled')
         check_cancelled()
         inspect = shlex.join(['docker', 'image', 'inspect', '--format', '{{.Id}}', image])
         present = subprocess.run(self.base(destination) + [inspect], capture_output=True, text=True, timeout=30)
@@ -99,7 +100,7 @@ class SSH:
                 while any(process.poll() is None for process in processes):
                     check_cancelled()
                     if time.monotonic() >= deadline:
-                        raise TimeoutError('SDK transfer exceeded its time limit')
+                        raise TimeoutError('Image transfer exceeded its time limit')
                     if any(process.poll() not in (None, 0) for process in processes):
                         break
                     try:
@@ -114,7 +115,7 @@ class SSH:
                 check_cancelled()
                 if any(process.poll() != 0 for process in processes):
                     errors.seek(0)
-                    raise RuntimeError('SDK transfer failed: ' + errors.read().decode(errors='replace')[-2000:])
+                    raise RuntimeError('Image transfer failed: ' + errors.read().decode(errors='replace')[-2000:])
             finally:
                 for process in processes:
                     if process.poll() is None:
@@ -123,5 +124,5 @@ class SSH:
                     process.wait()
         check_cancelled()
         if self.image_id(destination, image) != image:
-            raise ValueError('Transferred SDK image identity differs')
+            raise ValueError('Transferred Docker image identity differs')
         return image

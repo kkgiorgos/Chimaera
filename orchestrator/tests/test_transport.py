@@ -119,6 +119,6 @@ def test_sdk_stream_cancellation_and_timeout_reap_both_processes(sdk_stream, can
 
 def test_sdk_transfer_requires_immutable_image_identity():
     with patch('transport.subprocess.run') as execute:
-        with pytest.raises(ValueError, match='Invalid SDK image ID'):
+        with pytest.raises(ValueError, match='Invalid Docker image ID'):
             SSH().copy_image({}, {}, 'mutable:tag')
         execute.assert_not_called()

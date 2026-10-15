@@ -53,11 +53,12 @@ file while its WAL is active. `docker compose down` retains the volume;
 3. Wait for the machine to appear online. Repeat for the other machines.
 
 Supply an existing guest disk/kernel under **Build and guest assets** if desired.
-Leave these fields empty to prepare them automatically. Choose the **Calibration
-machine** when creating an experiment; it must be one of the selected machines.
-That machine produces the frozen calibration reference and SDK image. The controller
-streams that exact SDK to the other workers over authenticated SSH, without storing
-an image archive on the webserver. Workers do not need SSH access to each other.
+Leave these fields empty to prepare them automatically. Choose the
+**Image preparation & calibration machine** when creating an experiment; it must
+be one of the selected machines.
+That machine produces the frozen calibration reference, SDK image, and application
+image. The controller streams both exact images to the other workers over
+authenticated SSH, without storing an image archive on the webserver. Workers do not need SSH access to each other.
 Every machine uses its own configured asset paths or constructs its own guest disk
 and downloads the pinned kernel. Guest disks remain local.
 
@@ -83,8 +84,8 @@ does not remove running sibling workers.
 
 Choose **New experiment**. Monaco opens the current
 `memory_contention_patterns.json` template with the matching Catppuccin theme.
-Import/export JSON, edit it, select workers and a calibration machine, then **Validate** to preview the
-expanded cases. The server uses the benchmark's real validator; the editor also
+Import/export JSON, edit it, select workers and an image preparation/calibration
+machine, then **Validate** to preview the expanded cases. The server uses the benchmark's real validator; the editor also
 provides JSON schema diagnostics. `ramulator_config` is relative to the repository
 root and must resolve to a file inside that repository.
 
@@ -95,22 +96,22 @@ arrives, preparation runs automatically:
    or reuse its source-keyed SDK and application images.
 2. Prepare its local guest assets, run memory-only calibration and fractional-rate
    checks, and freeze the guest bundle. These steps do not run robot benchmark cases.
-3. Record the SDK's immutable Docker image ID with the calibration. Stream that image
+3. Record both immutable Docker image IDs with the calibration. Stream those images
    with `docker image save`, gzip and `docker image load` over the controller's SSH
-   connections to each remaining worker. Skip transfer when that exact image already
+   connections to each remaining worker. Skip each transfer when that exact image already
    exists there. Imported images do not replace source-keyed local SDK tags.
-4. Verify the image ID after loading. Consumers validate their source keys, build
-   their application against that SDK, prepare their own guest assets, and validate
+4. Verify the image ID after loading. Consumers validate their source keys, use
+   the copied application image, prepare their own guest assets, and validate
    the shared calibration's simulator/configuration hashes and kernel.
 5. Dispatch cases dynamically as workers become ready. The calibration machine can
    run cases while SDK copies and other workers' preparation continue.
 
-The dashboard shows **Copying calibration SDK** during transfer. Transfer failures
+The dashboard shows **Copying prepared images** during transfer. Transfer failures
 are preparation failures with **Retry preparation**. Stop cancels active transfers;
 controller restarts recheck the destination cache and repeat incomplete transfers.
 Transfers have a one-hour limit and use the same verified SSH hosts as other remote
 operations. No image archive is retained by the controller, but the network carries
-the compressed SDK once per worker that lacks it. Old experiments without an explicit
+each compressed image once per worker that lacks it. Old experiments without an explicit
 calibration-machine choice retain their original first-machine default.
 
 SDK image cache keys depend on the content of simulator, transport, bridge, stack
@@ -132,9 +133,9 @@ date via `SOURCE_DATE_EPOCH`; genuinely different binaries/dependencies still fa
 closed and expose the preparation error. The fixed date does not pin packages
 installed from live APT repositories: separately built SDKs can have different
 dependencies and simulator binaries even when their source keys match. To reuse a
-calibration reliably, the orchestrator copies the calibration SDK automatically
-and builds consumers against its immutable image identity. A missing copied SDK
-fails preparation instead of triggering an independent SDK build. No worker
+calibration reliably, the orchestrator copies the calibration SDK and application
+image automatically using immutable identities. A missing copied
+image fails preparation instead of triggering an independent build. No worker
 silently recalibrates.
 
 If preparation reports a shared calibration provenance mismatch, compare the
@@ -228,6 +229,26 @@ retaining history marked deleted. Active workers must be stopped first; collecti
 completion is not required. Remote copies can be cleaned before or after deletion.
 A cleaned/deleted run must be cloned for a new execution rather than resumed.
 
+## Reclaim unused machine assets
+
+Choose **Clean unused assets** on a machine card when that machine has no active
+experiment. It removes unused orchestrator SDK/application Docker images (including
+imported images recorded by new preparations), generated guest disks, and their
+cache metadata. The card reports removed image/disk counts and allocated guest
+disk space reclaimed; Docker layer savings depend on shared layers.
+
+Saved remote experiments, including stopped and failed preparations, retain their
+image and disk dependencies so retries and resume continue to work. Docker
+container dependencies and explicitly configured disk/kernel paths are preserved.
+To release old experiment dependencies, collect results and use **Clean remote
+copies** first, then **Clean unused assets**. Results on the controller stay intact.
+Cleanup fails if saved dependency manifests cannot be read safely.
+
+Cleanup is limited to orchestrator caches. It retains the small pinned kernel,
+Docker build caches, unrelated Docker images, and external guest files. It does not
+run a global Docker prune. Images/disks removed from the cache are recreated or
+copied on demand by a later experiment.
+
 ## Updating an existing deployment
 
 Update the checkout on the webserver and workers, then run this from
@@ -252,10 +273,12 @@ untouched, while new guests use recipe-specific cache names.
 
 For automatic SDK sharing and calibration-machine selection, update all checkouts,
 rebuild the webserver stack, and redeploy supervisors before queueing a new
-experiment. Choose the intended producer in **Calibration machine**. Existing
+experiment. Choose the intended producer in **Image preparation & calibration machine**. Existing
 frozen experiments retain their original source identities and build keys; queue a
 new experiment when adopting the generated-file exclusions, rather than editing
-saved hashes. SDKs and application images remain cached; the application cache now
+saved hashes. New experiments share both Docker images; older frozen calibrations without an
+application image ID keep their original local application build behavior.
+SDKs and application images remain cached; the application cache now
 includes the SDK image identity so an application built against a different SDK
 is rebuilt.
 

@@ -51,12 +51,23 @@ def prepare(directory):
     # A source key alone can reuse an application built against another SDK's live APT packages.
     application_key = hashlib.sha256((builds['application'] + sdk_id).encode()).hexdigest()
     image = 'chimaera:ball-' + application_key[:16]
+    shared_application = calibration and calibration['provenance'].get('application_image_id')
+    if shared_application:
+        image = shared_application
     present = subprocess.run(['docker', 'image', 'inspect', image], capture_output=True)
     if present.returncode:
+        if shared_application:
+            raise ValueError('Calibration application image is missing; complete image transfer before preparation')
         subprocess.run(['docker', 'buildx', 'build', '--load', '--progress', 'plain', '--provenance=false',
             '--platform', 'linux/amd64', '-f', str(root / 'containers/ball-catching/Dockerfile'),
             '--build-arg', 'SDK_IMAGE=' + sdk_reference, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
             '-t', image, str(root)], check=True)
+    application_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image], text=True).strip()
+    if shared_application and application_id != shared_application:
+        raise ValueError('Local application image differs from the calibration application image')
+    for image_id in (sdk_id, application_id):
+        atomic_json(root / '.chimaera-orchestrator/assets' /
+                    ('image-' + image_id.removeprefix('sha256:') + '.json'), dict(image_id=image_id))
     atomic_json(directory / 'stage.json', dict(phase='Preparing guest disk and kernel'))
     disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
     args = []
@@ -77,7 +88,9 @@ def prepare(directory):
     # The source copy contains this host's resolved memory path. The exported
     # experiment and memory.json are portable and remain strictly hashed.
     hashes.pop('source-experiment.json', None)
-    provenance = dict(source_identity=identity, revision=revision, build_inputs=builds, sdk_image_id=sdk_id, disk_sha256=digest(disk), kernel_sha256=digest(kernel),
+    provenance = dict(source_identity=identity, revision=revision, build_inputs=builds,
+                      sdk_image_id=sdk_id, application_image_id=application_id,
+                      disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
     if calibration:
         # Local ext4 images contain host-local filesystem timestamps/UUIDs.

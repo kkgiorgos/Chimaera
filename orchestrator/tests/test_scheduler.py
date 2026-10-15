@@ -633,3 +633,45 @@ def test_resumed_experiment_ignores_old_sdk_transfer_results(controller):
     controller.finished('sdk_transfer', ('e1', 'm1', 0), SDK_ID)
     controller.failed('sdk_transfer', ('e1', 'm1', 0), 'old transfer cancelled')
     assert controller.experiment('e1')['preparations']['m1']['status'] == 'copying_sdk'
+
+
+@pytest.mark.parametrize('fail_application', [False, True])
+def test_selected_machine_supplies_both_images_before_consumer_prepares(controller, fail_application):
+    app_id = 'sha256:' + 'b' * 64
+    value = experiment(controller, count=1)
+    value['calibration']['provenance']['application_image_id'] = app_id
+    value['preparations']['m1'] = dict(status='pending')
+    copy_image = controller.remote.copy_image
+    def copy(source, destination, image, **kwargs):
+        if image == app_id and fail_application:
+            raise RuntimeError('Application transfer interrupted')
+        return copy_image(source, destination, image, **kwargs)
+    controller.remote.copy_image = copy
+    controller.schedule(value)
+    finish_jobs(controller)
+    preparation = controller.experiment('e1')['preparations']['m1']
+    if fail_application:
+        assert preparation['status'] == 'failed'
+        assert 'Application transfer interrupted' in preparation['error']
+    else:
+        copies = [c for c in controller.remote.calls if c[1] == 'copy_image']
+        assert [c[2]['image'] for c in copies] == [SDK_ID, app_id]
+        controller.schedule(controller.experiment('e1'))
+        finish_jobs(controller)
+        assert any(c[0] == 'm1' and c[1] == 'prepare' for c in controller.remote.calls)
+
+
+def test_cleanup_blocks_active_experiments_and_dispatch_while_cleaning(controller):
+    value = experiment(controller, count=1)
+    with pytest.raises(ValueError, match='Stop the experiment'):
+        controller.apply(dict(kind='clean_assets', body=dict(id='m0')))
+    value['status'] = 'stopped'
+    controller.save(value)
+    controller.apply(dict(kind='clean_assets', body=dict(id='m0')))
+    assert controller.machine('m0')['cleaning']
+    value['status'] = 'preparing'
+    value['calibration'] = None
+    value['preparations'] = {}
+    controller.schedule(value)
+    finish_jobs(controller)
+    assert not any(c[1] in ('prepare', 'start') for c in controller.remote.calls)

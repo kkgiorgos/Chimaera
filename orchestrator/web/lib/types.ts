@@ -2,6 +2,8 @@ export interface Machine {
   id: string; name: string; target: string; port: number; repo: string;
   workers: number; cpus: number; memory: string; build_jobs: number; disk: string; kernel: string;
   online?: boolean; deployed?: boolean; seen?: number; error?: string;
+  cleaning?: boolean; cleanup_error?: string;
+  cleanup_result?: { images: number; disks: number; disk_bytes: number };
   snapshot?: { stats: { Name: string; CPUPerc: string; MemUsage: string; MemPerc: string }[];
     tasks: { id: string; experiment: string; kind: string; status: string; container: string }[] };
 }

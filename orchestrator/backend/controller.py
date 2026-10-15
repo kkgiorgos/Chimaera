@@ -192,7 +192,7 @@ class Controller:
         elif kind == 'settings':
             if type(body.get('progress_enabled')) is not bool or type(body.get('progress_interval')) is not int or body['progress_interval'] < 60:
                 raise ValueError('Progress interval must be at least 60 seconds')
-        elif kind not in {'deploy', 'stop', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare', 'retry_collection'}:
+        elif kind not in {'deploy', 'clean_assets', 'stop', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare', 'retry_collection'}:
             raise ValueError('Unknown action')
         key = uuid.uuid4().hex
         self.store.put('commands', key, dict(id=key, kind=kind, body=body, status='pending'))
@@ -202,6 +202,8 @@ class Controller:
         kind, body = command['kind'], command['body']
         if kind == 'machine':
             previous = self.store.get('machines', body['id'], {})
+            if previous.get('cleaning') and any(previous[key] != body[key] for key in ('target', 'port', 'repo', 'disk', 'kernel')):
+                raise ValueError('Wait for asset cleanup before changing machine connection or asset paths')
             if previous and any(e['status'] in ACTIVE and body['id'] in e['machines'] for e in self.store.all('experiments')):
                 # Resource edits affect future dispatch; connection/path edits must wait.
                 if any(previous[key] != body[key] for key in ('target', 'port', 'repo', 'disk', 'kernel')):
@@ -215,6 +217,12 @@ class Controller:
             self.store.put('machines', machine['id'], machine)
             self.submit('deploy-' + machine['id'], 'deploy', machine['id'], lambda: self.remote.deploy(machine))
             event(self.store, f"Deploying supervisor on {machine['name']}")
+        elif kind == 'clean_assets':
+            machine = self.machine(body['id'])
+            if any(e['status'] in ACTIVE and machine['id'] in e['machines'] for e in self.store.all('experiments')):
+                raise ValueError('Stop the experiment before cleaning unused machine assets')
+            machine.update(cleaning=True, cleanup_error=None)
+            self.store.put('machines', machine['id'], machine)
         elif kind == 'experiment':
             key = command['id']
             if self.store.get('experiments', key):
@@ -364,6 +372,9 @@ class Controller:
             except Exception as error:
                 self.failed(kind, context, str(error))
         for machine in self.store.all('machines'):
+            if machine.get('cleaning'):
+                self.submit('clean-assets-' + machine['id'], 'clean_assets', machine['id'],
+                    lambda m=machine: self.remote.call(m, 'clean_assets', keep_paths=[m.get('disk'), m.get('kernel')]))
             if machine.get('deploying'):
                 self.submit('deploy-' + machine['id'], 'deploy', machine['id'], lambda m=machine: self.remote.deploy(m))
             if machine.get('deployed') and time.time() - self.last_poll.get(machine['id'], 0) >= 5:
@@ -381,7 +392,12 @@ class Controller:
             self.schedule(active)
 
     def finished(self, kind, context, result):
-        if kind == 'deploy':
+        if kind == 'clean_assets':
+            machine = self.machine(context)
+            machine.update(cleaning=False, cleanup_result=result, cleanup_error=None)
+            self.store.put('machines', context, machine)
+            event(self.store, f"{machine['name']}: removed {result['images']} unused images and {result['disks']} guest disks")
+        elif kind == 'deploy':
             machine = self.machine(context)
             machine.update(deployed=True, deploying=False, error=None)
             self.store.put('machines', context, machine)
@@ -412,7 +428,7 @@ class Controller:
                 return
             preparation = experiment['preparations'].get(context[1], {})
             if preparation.get('status') == 'copying_sdk' and experiment['status'] not in {'stopped', 'stopping', 'deleted'}:
-                preparation.update(status='pending', sdk_image_id=result, phase='SDK copied')
+                preparation.update(status='pending', sdk_image_id=result, phase='Images copied')
                 experiment['calibration']['provenance']['sdk_image_id'] = result
                 self.save(experiment)
         elif kind == 'stop':
@@ -453,7 +469,12 @@ class Controller:
         # start/prepare/stop are reconciled from the next authoritative snapshot.
 
     def failed(self, kind, context, error):
-        if kind in {'poll', 'deploy'}:
+        if kind == 'clean_assets':
+            machine = self.machine(context)
+            machine.update(cleaning=False, cleanup_error=error)
+            self.store.put('machines', context, machine)
+            event(self.store, f"{machine['name']}: asset cleanup failed: {error}", 'error')
+        elif kind in {'poll', 'deploy'}:
             machine = self.machine(context)
             was_online = machine.get('online')
             machine.update(online=False, error=error)
@@ -469,7 +490,7 @@ class Controller:
                     return
                 preparation = experiment['preparations'].get(context[1], {})
                 if preparation.get('status') == 'copying_sdk':
-                    preparation.update(status='failed', error=error, phase='SDK transfer failed')
+                    preparation.update(status='failed', error=error, phase='Image transfer failed')
                     self.save(experiment)
             if kind in {'collect', 'prepare_collect'}:
                 experiment = self.experiment(context[0])
@@ -614,7 +635,14 @@ class Controller:
             if not key:
                 raise ValueError('Calibration SDK identity is missing; prepare the calibration machine again')
             image = self.remote.image_id(source, 'chimaera:sdk-' + key[:16])
-        return self.remote.copy_image(source, destination, image, cancel=cancelled)
+        # Track imports before streaming so interrupted transfers can be cleaned too.
+        self.remote.call(destination, 'remember_image', image=image)
+        sdk_id = self.remote.copy_image(source, destination, image, cancel=cancelled)
+        application = provenance.get('application_image_id')
+        if application:
+            self.remote.call(destination, 'remember_image', image=application)
+            self.remote.copy_image(source, destination, application, cancel=cancelled)
+        return sdk_id
 
     def schedule(self, experiment):
         machines = [self.machine(key) for key in experiment['machines']]
@@ -639,6 +667,8 @@ class Controller:
         producer = experiment.get('calibration_machine', machines[0]['id'])
         ready = []
         for machine in machines:
+            if machine.get('cleaning'):
+                continue
             preparation = experiment['preparations'].get(machine['id'])
             if preparation and preparation['status'] == 'resetting':
                 self.submit('reset-' + machine['id'], 'reset', (experiment['id'], machine['id']),
@@ -657,7 +687,7 @@ class Controller:
             if not experiment['calibration'] and machine['id'] != producer:
                 continue
             if experiment['calibration'] and machine['id'] != producer and not (preparation or {}).get('sdk_image_id'):
-                experiment['preparations'][machine['id']] = dict(status='copying_sdk', phase='Copying calibration SDK')
+                experiment['preparations'][machine['id']] = dict(status='copying_sdk', phase='Copying prepared images')
                 cancelled = self.sdk_cancellations.setdefault(experiment['id'], threading.Event())
                 self.submit('sdk-' + machine['id'], 'sdk_transfer', (experiment['id'], machine['id'], experiment.get('generation', 0)),
                     lambda m=machine, e=copy.deepcopy(experiment), c=cancelled: self.copy_sdk(e, m, c))
