@@ -43,7 +43,7 @@ def clean_unused(data, keep_paths=()):
     for line in listing.splitlines():
         entry = json.loads(line)
         present.add(entry['ID'])
-        if entry['Repository'] == 'chimaera' and entry['Tag'].startswith(('sdk-', 'ball-')):
+        if entry['Repository'] == 'chimaera' and entry['Tag'].startswith(('sdk-', 'ball-', 'transfer-')):
             candidates.setdefault(entry['ID'], set()).add('chimaera:' + entry['Tag'])
     assets = data / 'assets'
     for marker in assets.glob('image-*.json'):

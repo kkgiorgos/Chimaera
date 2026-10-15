@@ -87,3 +87,13 @@ def test_import_registry_tracks_images_and_rejects_mutable_references(tmp_path):
     assert json.loads(markers[0].read_text()) == dict(image_id=image)
     with pytest.raises(ValueError, match='image ID'):
         agent.rpc('remember_image', image='mutable:tag')
+
+
+def test_cleanup_removes_transfer_tag_with_other_tags_for_unused_image(tmp_path):
+    image = 'sha256:' + 'a' * 64
+    tags = ['ball-unused', 'transfer-' + 'a' * 64]
+    listing = '\n'.join(json.dumps(dict(Repository='chimaera', Tag=tag, ID=image)) for tag in tags)
+    with patch('assets.run', side_effect=['', listing, '']) as docker:
+        assert clean_unused(tmp_path)['images'] == 1
+    assert docker.call_args_list[-1].args[0] == ['docker', 'image', 'rm',
+        *sorted('chimaera:' + tag for tag in tags)]

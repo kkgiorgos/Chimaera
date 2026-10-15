@@ -27,6 +27,9 @@ function time(value: number | null | undefined) {
   if (value < 3600) return `~${Math.ceil(value / 60)} min`;
   return `~${Math.floor(value / 3600)}h ${Math.ceil(value % 3600 / 60)}m`;
 }
+function bytes(value: number) {
+  return value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GiB` : `${(value / 1024 ** 2).toFixed(1)} MiB`;
+}
 function label(value: string) { return value.replaceAll('_', ' '); }
 function Status({ value }: { value: string }) {
   return <span className={`status status-${value}`}><i />{label(value)}</span>;
@@ -149,7 +152,7 @@ export default function Dashboard() {
                   </div>;
                 })}</div>
                 {m.workers > 32 && <p className="muted small">Showing 32 of {m.workers} worker slots.</p>}
-                {preparation && preparation.status !== 'ready' && <div className="preparation"><span>{preparation.phase || label(preparation.status)}</span>{preparation.task && <button className="text-button" onClick={() => showLogs(m.id, preparation.task!, `${m.name} preparation`)}>Logs</button>}{['failed', 'stopped'].includes(preparation.status) && <button className="text-button" onClick={() => command('retry_prepare', { id: experiment!.id, machine: m.id })}>Retry preparation</button>}</div>}
+                {preparation && preparation.status !== 'ready' && <div className="preparation"><span>{preparation.phase || label(preparation.status)}</span>{preparation.transfer && <small role="status">{preparation.transfer.image_kind} {preparation.transfer.image_index}/{preparation.transfer.image_count} · {preparation.transfer.phase} · {bytes(preparation.transfer.bytes_sent)} compressed · {bytes(preparation.transfer.bytes_per_second)}/s · {Math.floor(preparation.transfer.elapsed_seconds)}s · <span title={preparation.transfer.eta_basis}>{preparation.transfer.phase === 'Streaming' ? `Image ETA: ${time(preparation.transfer.eta_seconds)}` : preparation.transfer.phase === 'Checking destination cache' ? 'Estimating ETA' : preparation.transfer.phase}</span> · from {preparation.transfer.source}{Date.now() / 1000 - preparation.transfer.updated > 10 && preparation.status === 'copying_sdk' ? ' · awaiting update' : ''}</small>}{preparation.task && <button className="text-button" onClick={() => showLogs(m.id, preparation.task!, `${m.name} preparation`)}>Logs</button>}{['failed', 'stopped'].includes(preparation.status) && <button className="text-button" onClick={() => command('retry_prepare', { id: experiment!.id, machine: m.id })}>Retry preparation</button>}</div>}
                 {preparation?.error && <p className="machine-error" role="alert">{preparation.error}</p>}
                 {m.error && <p className="machine-error">{m.error}</p>}
                 {m.cleanup_error && <p className="machine-error" role="alert">Asset cleanup: {m.cleanup_error}</p>}

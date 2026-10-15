@@ -38,7 +38,7 @@ class FakeSSH:
         return True
 
 
-    def copy_image(self, source, destination, image, cancel=None):
+    def copy_image(self, source, destination, image, cancel=None, progress=None):
         self.calls.append((destination['id'], 'copy_image', dict(source=source['id'], image=image)))
         return image
 
@@ -675,3 +675,30 @@ def test_cleanup_blocks_active_experiments_and_dispatch_while_cleaning(controlle
     controller.schedule(value)
     finish_jobs(controller)
     assert not any(c[1] in ('prepare', 'start') for c in controller.remote.calls)
+
+
+def test_transfer_progress_reaches_state_and_survives_failure(controller):
+    value = experiment(controller, count=1)
+    value['preparations']['m1'] = dict(status='copying_sdk')
+    controller.save(value)
+    update = dict(phase='Streaming', bytes_sent=1234, bytes_per_second=100,
+                  elapsed_seconds=12, updated=time.time())
+    def transfer(source, destination, image, cancel=None, progress=None):
+        progress(update)
+        return image
+    controller.remote.copy_image = transfer
+    controller.copy_sdk(value, controller.machine('m1'), None)
+    state = next(e for e in controller.state()['experiments'] if e['id'] == value['id'])
+    assert state['preparations']['m1']['transfer']['bytes_sent'] == 1234
+    assert state['preparations']['m1']['transfer']['image_kind'] == 'SDK'
+    controller.failed('sdk_transfer', ('e1', 'm1', 0), 'destination disconnected')
+    stored = controller.experiment('e1')['preparations']['m1']
+    assert stored['transfer']['bytes_sent'] == 1234
+    assert stored['status'] == 'failed'
+    # Reports from the previous generation cannot appear on a resumed experiment.
+    value = controller.experiment('e1')
+    value['generation'] += 1
+    value['preparations']['m1'] = dict(status='copying_sdk')
+    controller.save(value)
+    state = next(e for e in controller.state()['experiments'] if e['id'] == value['id'])
+    assert 'transfer' not in state['preparations']['m1']

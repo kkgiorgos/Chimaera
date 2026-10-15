@@ -151,6 +151,8 @@ class Controller:
         self.last_poll = {}
         self.collection_cancellations = {}
         self.sdk_cancellations = {}
+        self.transfer_progress = {}
+        self.transfer_progress_lock = threading.Lock()
         self.collection_lock = threading.RLock()
         if not self.store.get('settings', 'main'):
             self.store.put('settings', 'main', dict(progress_enabled=True, progress_interval=3600, last_progress=0))
@@ -491,6 +493,10 @@ class Controller:
                 preparation = experiment['preparations'].get(context[1], {})
                 if preparation.get('status') == 'copying_sdk':
                     preparation.update(status='failed', error=error, phase='Image transfer failed')
+                    with self.transfer_progress_lock:
+                        progress = self.transfer_progress.get(tuple(context))
+                        if progress:
+                            preparation['transfer'] = dict(progress)
                     self.save(experiment)
             if kind in {'collect', 'prepare_collect'}:
                 experiment = self.experiment(context[0])
@@ -637,11 +643,21 @@ class Controller:
             image = self.remote.image_id(source, 'chimaera:sdk-' + key[:16])
         # Track imports before streaming so interrupted transfers can be cleaned too.
         self.remote.call(destination, 'remember_image', image=image)
-        sdk_id = self.remote.copy_image(source, destination, image, cancel=cancelled)
+        key = (experiment['id'], destination['id'], experiment.get('generation', 0))
+        def progress(kind, index, count):
+            def update(value):
+                with self.transfer_progress_lock:
+                    self.transfer_progress[key] = dict(value, image_kind=kind, image_index=index,
+                                                       image_count=count, source=source['name'])
+            return update
         application = provenance.get('application_image_id')
+        count = 2 if application else 1
+        sdk_id = self.remote.copy_image(source, destination, image, cancel=cancelled,
+                                       progress=progress('SDK', 1, count))
         if application:
             self.remote.call(destination, 'remember_image', image=application)
-            self.remote.copy_image(source, destination, application, cancel=cancelled)
+            self.remote.copy_image(source, destination, application, cancel=cancelled,
+                                   progress=progress('Application', 2, count))
         return sdk_id
 
     def schedule(self, experiment):
@@ -734,6 +750,12 @@ class Controller:
     def state(self):
         machines = self.store.all('machines')
         experiments = [estimates(e, machines) for e in self.store.all('experiments')]
+        with self.transfer_progress_lock:
+            for experiment in experiments:
+                for machine_id, preparation in experiment['preparations'].items():
+                    key = (experiment['id'], machine_id, experiment.get('generation', 0))
+                    if preparation['status'] in {'copying_sdk', 'failed'} and key in self.transfer_progress:
+                        preparation['transfer'] = dict(self.transfer_progress[key])
         return dict(machines=machines, experiments=experiments,
             settings=self.store.get('settings', 'main'), events=self.store.all('events')[-100:],
             commands=self.store.all('commands')[-20:], time=time.time())

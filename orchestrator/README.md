@@ -99,15 +99,26 @@ arrives, preparation runs automatically:
 3. Record both immutable Docker image IDs with the calibration. Stream those images
    with `docker image save`, gzip and `docker image load` over the controller's SSH
    connections to each remaining worker. Skip each transfer when that exact image already
-   exists there. Imported images do not replace source-keyed local SDK tags.
+   exists there. Archives carry a dedicated `chimaera:transfer-<image-id>` tag so
+   loaded images retain a named reference. Imported images do not replace
+   source-keyed local SDK tags.
 4. Verify the image ID after loading. Consumers validate their source keys, use
    the copied application image, prepare their own guest assets, and validate
    the shared calibration's simulator/configuration hashes and kernel.
 5. Dispatch cases dynamically as workers become ready. The calibration machine can
    run cases while SDK copies and other workers' preparation continue.
 
-The dashboard shows **Copying prepared images** during transfer. Transfer failures
-are preparation failures with **Retry preparation**. Stop cancels active transfers;
+The dashboard shows **Copying prepared images** during transfer, with the current
+SDK/application image, compressed bytes sent, average transfer rate, elapsed time,
+and an estimated ETA for the current image based on its uncompressed Docker size
+and measured export/network throughput. The ETA excludes loading and verification;
+those stages display their status instead. ETA appears after throughput is sampled.
+The report also shows the cache-check, streaming, loading, or verification stage. Byte counts measure
+data forwarded to the destination SSH connection; loading can continue after all
+bytes have been sent. A percentage is not shown because the compressed archive
+size is unknown until export finishes. Verification errors include Docker's load
+output, and streaming errors distinguish source export from destination load.
+Transfer failures are preparation failures with **Retry preparation**. Stop cancels active transfers;
 controller restarts recheck the destination cache and repeat incomplete transfers.
 Transfers have a one-hour limit and use the same verified SSH hosts as other remote
 operations. No image archive is retained by the controller, but the network carries

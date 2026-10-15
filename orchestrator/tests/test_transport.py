@@ -45,14 +45,27 @@ def sdk_stream(tmp_path):
 role, marker, mode, command = sys.argv[1:]
 marker = pathlib.Path(marker)
 image = 'sha256:' + 'a' * 64
-if 'inspect' in command:
+if role != 'source' and 'inspect' in command:
     if not marker.exists():
         sys.exit(1)
     print(marker.read_text())
 elif role == 'source':
+    assert 'docker image tag ' + image + ' chimaera:transfer-' in command
+    assert 'docker image save chimaera:transfer-' in command
     if mode == 'block':
         time.sleep(60)
-    sys.stdout.buffer.write(b'archive-content' * 65536)
+    if mode == 'slow':
+        print('CHIMAERA_TRANSFER_SIZE', 4000000, file=sys.stderr, flush=True)
+        print('CHIMAERA_TRANSFER_BYTES', 1000000, file=sys.stderr, flush=True)
+        sys.stdout.buffer.write(b'archive-content' * 32768)
+        sys.stdout.buffer.flush()
+        time.sleep(1.3)
+        print('CHIMAERA_TRANSFER_BYTES', 2000000, file=sys.stderr, flush=True)
+        sys.stdout.buffer.write(b'archive-content' * 32768)
+        sys.stdout.buffer.flush()
+        time.sleep(1.1)
+    else:
+        sys.stdout.buffer.write(b'archive-content' * 65536)
     if mode == 'sender_failure':
         print('export failed', file=sys.stderr)
         sys.exit(7)
@@ -62,6 +75,9 @@ else:
         print('load failed', file=sys.stderr)
         sys.exit(9)
     assert data == b'archive-content' * 65536
+    print('Loaded image: chimaera:transfer-' + 'a' * 64, flush=True)
+    if mode == 'missing_after_load':
+        sys.exit(0)
     marker.write_text('sha256:' + 'b' * 64 if mode == 'wrong_identity' else image)
 ''')
     ssh = SSH()
@@ -122,3 +138,82 @@ def test_sdk_transfer_requires_immutable_image_identity():
         with pytest.raises(ValueError, match='Invalid Docker image ID'):
             SSH().copy_image({}, {}, 'mutable:tag')
         execute.assert_not_called()
+
+
+def test_transfer_reports_bytes_and_load_verification_phases(sdk_stream):
+    configure, _ = sdk_stream
+    updates = []
+    configure().copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                           progress=updates.append)
+    assert updates[0]['phase'] == 'Checking destination cache'
+    assert {'Streaming', 'Loading image', 'Verifying image', 'Complete'} <= {u['phase'] for u in updates}
+    assert updates[-1]['bytes_sent'] == len(b'archive-content') * 65536
+    assert updates[-1]['bytes_per_second'] > 0
+    assert [u['bytes_sent'] for u in updates] == sorted(u['bytes_sent'] for u in updates)
+
+
+def test_missing_import_reports_destination_and_docker_load_output(sdk_stream):
+    configure, _ = sdk_stream
+    with pytest.raises(RuntimeError, match='Destination image verification failed.*Loaded image: chimaera:transfer-'):
+        configure('missing_after_load').copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID)
+
+
+def test_transfer_eta_waits_for_samples_and_excludes_loading(sdk_stream):
+    configure, _ = sdk_stream
+    updates = []
+    configure('slow').copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                                 progress=updates.append)
+    assert updates[0]['eta_seconds'] is None
+    estimates = [u for u in updates if u['phase'] == 'Streaming' and u['eta_seconds'] is not None]
+    assert estimates
+    assert all(u['eta_seconds'] > 0 for u in estimates)
+    assert all('excludes loading' in u['eta_basis'] for u in estimates)
+    assert all(u['eta_seconds'] is None for u in updates if u['phase'] in {'Loading image', 'Verifying image'})
+    assert updates[-1]['eta_seconds'] == 0
+
+
+def test_transfer_eta_is_unknown_without_size_metadata(sdk_stream):
+    configure, _ = sdk_stream
+    updates = []
+    configure().copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID,
+                           progress=updates.append)
+    assert all(u['eta_seconds'] is None for u in updates if u['phase'] == 'Streaming')
+
+
+def test_metered_export_preserves_archive_through_real_gzip_pipeline(tmp_path, monkeypatch):
+    import os
+    docker = tmp_path / 'docker'
+    marker = tmp_path / 'loaded'
+    docker.write_text("""#!/usr/bin/env python3
+import os,pathlib,sys
+args=sys.argv[1:]
+marker=pathlib.Path(os.environ['LOAD_MARKER'])
+image='sha256:'+'a'*64
+if args[:2]==['image','tag']:
+    sys.exit(0)
+if args[:2]==['image','inspect']:
+    if 'CHIMAERA_TRANSFER_SIZE {{.Size}}' in args:
+        print('CHIMAERA_TRANSFER_SIZE',len(b'archive-content'*65536))
+    elif marker.exists():
+        print(image)
+    else:
+        sys.exit(1)
+elif args[:2]==['image','save']:
+    sys.stdout.buffer.write(b'archive-content'*65536)
+elif args[:2]==['image','load']:
+    assert sys.stdin.buffer.read()==b'archive-content'*65536
+    marker.write_text(image)
+    print('Loaded image: chimaera:transfer-'+'a'*64)
+else:
+    sys.exit(2)
+""")
+    docker.chmod(0o755)
+    monkeypatch.setenv('PATH', str(tmp_path) + os.pathsep + os.environ['PATH'])
+    monkeypatch.setenv('LOAD_MARKER', str(marker))
+    ssh = SSH()
+    ssh.base = lambda machine: ['bash', '-c']
+    updates = []
+    assert ssh.copy_image({}, {}, SDK_ID, progress=updates.append) == SDK_ID
+    assert marker.read_text() == SDK_ID
+    assert updates[-1]['bytes_sent'] > 0
+    assert updates[-1]['bytes_sent'] < len(b'archive-content' * 65536)
