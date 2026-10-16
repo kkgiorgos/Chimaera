@@ -25,6 +25,7 @@ def start(context):
                'image_age_periods': execution['fixed']['image_age_periods'],
                'image_diagnostics': execution['fixed'].get('image_diagnostics', False),
                'detailed_timing_socket': '/tmp/chimaera_time.sock',
+               'checkpoint_gate': bool(execution.get('checkpoint_prepare') or execution.get('checkpoint_restore')),
                'paused': True, 'gui': False, 'partition': 'ball-memory-suite',
                'transport_ip': '127.0.0.1'}
     options.pop('name', None)
@@ -43,6 +44,15 @@ def start(context):
         '--guest-file', '/tmp/chimaera-ball-start=' + str(output / 'start-guest.sh')],
         output='screen', sigterm_timeout='10')
     fixed = execution['fixed']
+    checkpoint_parameters = {}
+    if execution.get('checkpoint_prepare'):
+        checkpoint_parameters = dict(checkpoint_capture=str(output / 'host-replay.bin'),
+                                     checkpoint_output=str(output))
+    if execution.get('checkpoint_restore'):
+        checkpoint = Path(execution['checkpoint_restore'])
+        checkpoint_parameters = dict(checkpoint_replay=str(checkpoint / 'host-replay.bin'),
+            checkpoint_directory=str(checkpoint), checkpoint_output=str(output),
+            pressure_warmup_ns=round(fixed['pressure_warmup'] * 1e9))
     bridge = Node(package='chimaera_ros_bridge', executable='gazebo_host_bridge', output='screen',
         additional_env={'IGN_PARTITION': options['partition'], 'IGN_IP': options['transport_ip']},
         parameters=[dict(config_file=execution['routes'], timing_socket='/tmp/chimaera_time.sock',
@@ -50,7 +60,7 @@ def start(context):
             interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
             physics_step_ns=round(fixed['physics_step'] * 1e9), startup_timeout_s=fixed['startup_timeout_s'],
             max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
-            max_pending_messages=16, status_bar=False)])
+            max_pending_messages=16, status_bar=False, **checkpoint_parameters)])
     return [application, bridge, simulator, *[RegisterEventHandler(OnProcessExit(target_action=process,
         on_exit=[EmitEvent(event=Shutdown(reason='Benchmark component exited'))])) for process in (bridge, simulator)]]
 

@@ -83,6 +83,89 @@ def test_preparation_reuses_images_and_builds_guest_locally_with_shared_calibrat
     assert not (directory / 'export-assets').exists()
 
 
+def test_checkpoint_consumer_imports_producer_disk_and_never_recreates_readiness(tmp_path, monkeypatch):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    request = json.loads((directory / 'request.json').read_text())
+    request['readiness_checkpoint'] = True
+    request['calibration']['provenance'].update(
+        disk_sha256=digest(disk), checkpoint_index_sha256='shared-checkpoints', readiness_checkpoint=True)
+    atomic_json(directory / 'request.json', request)
+    imported = directory / 'imported'
+    imported.mkdir()
+    (imported / 'guest.img').write_bytes(disk.read_bytes())
+    (imported / 'kernel').write_bytes(kernel.read_bytes())
+    def checkpoint_execute(argv, **kwargs):
+        result = execute(argv, **kwargs)
+        if '--skip-build' in argv:
+            atomic_json(directory / 'inputs/runner.json', dict(image=APP_ID, devices=['/dev/kvm'],
+                env={}, mounts=[dict(source='assets', target='/assets/readiness')]))
+        return result
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=checkpoint_execute) as commands, \
+         patch('guest.ensure_assets') as assets, \
+         patch('checkpoints.unpack', return_value=imported) as unpack, \
+         patch('checkpoints.package') as package:
+        prepare(directory)
+    assets.assert_not_called()
+    package.assert_not_called()
+    unpack.assert_called_once_with(directory, APP_ID, 'shared-checkpoints')
+    setup = next(call.args[0] for call in commands.call_args_list if '--skip-build' in call.args[0])
+    assert '--readiness-from' in setup and '--checkpoint-create' not in setup
+    runner = json.loads((directory / 'inputs/runner.json').read_text())
+    assert runner['devices'] == []
+    assert runner['env']['CHIMAERA_CHECKPOINT_ROOT'] == '/opt/chimaera/readiness/checkpoints'
+    assert not any(mount['target'] == '/assets/readiness' for mount in runner['mounts'])
+    ready = json.loads((directory / 'ready.json').read_text())
+    assert ready['provenance']['readiness_checkpoint'] is True
+
+
+def test_checkpoint_consumer_rejects_preparation_without_a_shared_checkpoint(tmp_path, monkeypatch):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    request = json.loads((directory / 'request.json').read_text())
+    request['readiness_checkpoint'] = True
+    atomic_json(directory / 'request.json', request)
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=execute), \
+         patch('guest.ensure_assets') as assets:
+        with pytest.raises(ValueError, match='lacks its readiness checkpoint'):
+            prepare(directory)
+    assets.assert_not_called()
+
+
+def test_checkpoint_producer_freezes_the_prepared_image_and_removes_case_kvm(tmp_path, monkeypatch):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    request = json.loads((directory / 'request.json').read_text())
+    request.update(readiness_checkpoint=True, calibration=None)
+    atomic_json(directory / 'request.json', request)
+    final_image = 'sha256:' + 'c' * 64
+    def checkpoint_execute(argv, **kwargs):
+        result = execute(argv, **kwargs)
+        if '--skip-build' in argv:
+            atomic_json(directory / 'inputs/runner.json', dict(image=APP_ID, devices=['/dev/kvm'],
+                env={}, mounts=[]))
+        return result
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=checkpoint_execute) as commands, \
+         patch('guest.ensure_assets', return_value=(disk, kernel)), \
+         patch('checkpoints.package', return_value=(final_image, 'frozen-index')) as package:
+        prepare(directory)
+    setup = next(call.args[0] for call in commands.call_args_list if '--skip-build' in call.args[0])
+    assert '--checkpoint-create' in setup and '--readiness-from' not in setup
+    package.assert_called_once_with(directory, APP_ID, disk, kernel)
+    runner = json.loads((directory / 'inputs/runner.json').read_text())
+    ready = json.loads((directory / 'ready.json').read_text())
+    assert runner['devices'] == []
+    assert runner['image'] == ready['image'] == final_image
+    assert ready['provenance']['application_image_id'] == final_image
+    assert ready['provenance']['checkpoint_index_sha256'] == 'frozen-index'
+
+
 @pytest.mark.parametrize('field', ['revision', 'fingerprint'])
 def test_source_mismatch_reports_queued_and_local_values_before_using_images(tmp_path, monkeypatch, field):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)

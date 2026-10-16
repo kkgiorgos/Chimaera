@@ -1,14 +1,15 @@
 #include <algorithm>
 #include <chimaera/gem5_controller.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/checkpoint_replay.hpp>
+#include <chimaera_ros_bridge/gazebo_timing_controller.hpp>
+#include <chimaera_ros_bridge/status_bar.hpp>
 #include <cmath>
-#include <iomanip>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <chimaera_ros_bridge/bridge.hpp>
-#include <chimaera_ros_bridge/status_bar.hpp>
-#include <chimaera_ros_bridge/gazebo_timing_controller.hpp>
 
 int main(int argc, char ** argv)
 {
@@ -22,6 +23,17 @@ int main(int argc, char ** argv)
     const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);
     const auto socket =
       node->declare_parameter<std::string>("timing_socket", "/tmp/chimaera_time.sock");
+    const auto capture_path = node->declare_parameter<std::string>("checkpoint_capture", "");
+    const auto replay_path = node->declare_parameter<std::string>("checkpoint_replay", "");
+    const auto checkpoint_directory =
+      node->declare_parameter<std::string>("checkpoint_directory", "");
+    const auto checkpoint_output = node->declare_parameter<std::string>("checkpoint_output", "");
+    const auto pressure_warmup = node->declare_parameter<int64_t>("pressure_warmup_ns", 50000000);
+    if (
+      (!capture_path.empty() && !replay_path.empty()) || pressure_warmup < 0 ||
+      pressure_warmup > 1000000000 ||
+      ((!capture_path.empty() || !replay_path.empty()) && checkpoint_output.empty()))
+      throw std::invalid_argument("Invalid checkpoint capture/replay or pressure warmup");
     if (
       interval < 1 || interval > 3600000000LL || poll < 1 || poll >= interval || steps < 0 ||
       timeout < 1) {
@@ -67,9 +79,42 @@ int main(int argc, char ** argv)
     timing.pump = node->pump;
     timing.cancelled = [] { return !rclcpp::ok(); };
     auto & controller = timing;
+    std::unique_ptr<chimaera_ros_bridge::CheckpointReplay> capture;
+    if (!capture_path.empty()) {
+      capture = std::make_unique<chimaera_ros_bridge::CheckpointReplay>(capture_path, true);
+      node->on_receive = [&](const chimaera::Message & frame) { capture->append(frame); };
+    }
     try {
-      RCLCPP_INFO(node->get_logger(), "Host bridge initialized; waiting for gem5 guest");
       const auto waiting_since = Clock::now();
+      if (!replay_path.empty()) {
+        timing.wait_for_gazebo(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
+        node->wait_for_local_routes(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
+        chimaera_ros_bridge::CheckpointReplay replay(replay_path, false);
+        uint64_t replayed = 0;
+        while (auto frames = replay.next()) {
+          if (!rclcpp::ok()) throw std::runtime_error("Checkpoint replay cancelled");
+          for (auto & frame : *frames) node->submit(std::move(frame));
+          timing.replay_step(std::chrono::microseconds(interval));
+          ++replayed;
+        }
+        // Fail closed if replay does not reproduce the saved robot boundary.
+        std::ifstream expected(checkpoint_directory + "/checkpoint-host-state");
+        std::ifstream actual(checkpoint_output + "/checkpoint-host-state");
+        if (!std::filesystem::exists(checkpoint_output + "/checkpoint-ready"))
+          throw std::runtime_error("Checkpoint replay did not restore arm/camera readiness");
+        for (unsigned index = 0; index < 15; ++index) {
+          double before, after;
+          if (
+            !(expected >> before) || !(actual >> after) || !std::isfinite(before) ||
+            !std::isfinite(after) || std::abs(before - after) > (index == 0 ? 1e-9 : 1e-5))
+            throw std::runtime_error(
+              "Checkpoint host replay does not match saved time/joint state");
+        }
+        RCLCPP_INFO(
+          node->get_logger(), "Replayed %lu host readiness intervals; gem5 stayed paused",
+          replayed);
+      }
+      RCLCPP_INFO(node->get_logger(), "Host bridge initialized; waiting for gem5 guest");
       timing.wait_until_ready(std::chrono::seconds(timeout), [&] {
         if (refresh_due()) {
           std::ostringstream text;
@@ -81,10 +126,23 @@ int main(int argc, char ** argv)
         }
         return !rclcpp::ok();
       });
-      const double startup_seconds = std::chrono::duration<double>(Clock::now() - waiting_since).count();
+      if (!replay_path.empty()) {
+        if (timing.command("BENCHMARK_PRESSURE").rfind("PRESSURE ", 0) != 0)
+          throw std::runtime_error("Simulator rejected pressure warmup");
+        for (int64_t elapsed = 0; elapsed < pressure_warmup; elapsed += interval * 1000) {
+          const auto result = controller.step(std::chrono::microseconds(interval));
+          if (!result.ok()) throw std::runtime_error(result.message);
+        }
+        std::ofstream release(checkpoint_output + "/checkpoint-release");
+        release << '\n';
+        if (!release) throw std::runtime_error("Cannot release checkpoint launch gate");
+      }
       const auto run_begin = Clock::now();
+      const double startup_seconds =
+        std::chrono::duration<double>(run_begin - waiting_since).count();
+      const auto run_origin_ticks = timing.elapsed_ticks();
       auto rate_report_time = run_begin;
-      std::uint64_t rate_report_ticks = 0;
+      std::uint64_t rate_report_ticks = run_origin_ticks;
       RCLCPP_INFO(node->get_logger(), "Co-simulation runs without wall-clock pacing");
       std::uint64_t completed_steps = 0;
       auto report_status = [&] {
@@ -93,7 +151,7 @@ int main(int argc, char ** argv)
         }
         const auto now = Clock::now();
         const auto ticks = timing.elapsed_ticks();
-        const double sim_seconds = ticks / 1e12;
+        const double sim_seconds = (ticks - run_origin_ticks) / 1e12;
         const double wall_seconds = std::chrono::duration<double>(now - run_begin).count();
         const double recent_wall = std::chrono::duration<double>(now - rate_report_time).count();
         const double recent_rate = recent_wall > 0 ? (ticks - rate_report_ticks) / 1e12 / recent_wall : 0;
@@ -129,6 +187,16 @@ int main(int argc, char ** argv)
           throw std::runtime_error(result.message);
         }
         ++completed_steps;
+        if (capture) {
+          capture->boundary();
+          if (std::filesystem::exists(checkpoint_output + "/checkpoint-ready")) {
+            capture->finish();
+            node->on_receive = {};
+            if (timing.command("BENCHMARK_CHECKPOINT").rfind("CHECKPOINT ", 0) != 0)
+              throw std::runtime_error("Simulator rejected readiness checkpoint");
+            break;
+          }
+        }
         report_status();
         executor.spin_some();
         const auto end = Clock::now();
@@ -145,7 +213,7 @@ int main(int argc, char ** argv)
           if (!timing_log) { throw std::runtime_error("Failed writing timing_file"); }
         }
       }
-      const double sim_seconds = timing.elapsed_ticks() / 1e12;
+      const double sim_seconds = (timing.elapsed_ticks() - run_origin_ticks) / 1e12;
       const double wall_seconds = std::chrono::duration<double>(Clock::now() - run_begin).count();
       bar.clear();
       RCLCPP_INFO(

@@ -77,6 +77,26 @@ def test_preparation_only_calibrates_memory_and_packages_guest(tmp_path, monkeyp
     assert all('--case' not in c for c in commands)
 
 
+def test_producer_prepares_readiness_once_after_packaging(tmp_path, monkeypatch):
+    inputs = inputs_record(tmp_path)
+    (inputs / 'experiment.json').write_text(json.dumps(dict(patterns=['stream'])))
+    commands = []
+    monkeypatch.setattr(worker.subprocess, 'run', lambda command, **kw: commands.append(command))
+    worker.prepare(inputs, tmp_path / 'prepared', checkpoint_create=True)
+    assert '--checkpoint-create' in commands[-1]
+    assert '--resume' in commands[-1]
+    assert sum('--checkpoint-create' in command for command in commands) == 1
+    assert all('--case' not in command for command in commands)
+
+
+def test_missing_required_checkpoint_never_falls_back_to_kvm(tmp_path, monkeypatch):
+    inputs = inputs_record(tmp_path)
+    monkeypatch.setenv('CHIMAERA_CHECKPOINT_ROOT', str(tmp_path / 'missing'))
+    with pytest.raises(ValueError, match='Required readiness checkpoints are missing'):
+        worker.run_case(inputs, tmp_path / 'out', 'case-000')
+    assert not (tmp_path / 'out').exists()
+
+
 def test_worker_reuses_bundle_and_shared_calibration_then_resumes_one_case(tmp_path, monkeypatch):
     inputs = inputs_record(tmp_path)
     prepared = inputs / 'prepared'

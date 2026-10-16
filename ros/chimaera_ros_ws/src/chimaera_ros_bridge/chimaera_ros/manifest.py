@@ -8,7 +8,8 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 timing_socket="/tmp/chimaera_time.sock", max_serialized_bytes=4096, max_pending_messages=128,
                 m5ops="address", wait_for_application=False, timing_backend="gem5",
                 gazebo_world="", physics_step_ns=1000000, timing_file="",
-                max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False)
+                max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False,
+                checkpoint_control=False)
 
 
 def fields(value, allowed, required=()):
@@ -88,6 +89,8 @@ def load(path):
     integer(bridge['max_image_age_ns'], 0, 3600000000000)
     if type(bridge['simulation_time_from_readfile']) is not bool:
         raise ValueError("simulation_time_from_readfile must be boolean")
+    if type(bridge['checkpoint_control']) is not bool:
+        raise ValueError("checkpoint_control must be boolean")
     if type(bridge['image_diagnostics']) is not bool:
         raise ValueError("image_diagnostics must be boolean")
     integer(bridge['interval_us'], 2, 3600000000)

@@ -42,6 +42,12 @@ simulated architecture. Results remain coarse binary observations.
 For SSH deployment, a shared case queue, live logs/progress, Discord notifications,
 and central result collection, see the [orchestrator guide](../../orchestrator/README.md).
 The local workflow below remains available independently.
+The orchestrator adds `--checkpoint-create` on its preparation machine and
+distributes a prepared application image containing the exact disk and ready
+guest/host state. Its cases restore without KVM, apply a 50 ms simulated pressure
+warmup, and then throw with independent ball position/direction/speed settings.
+The standalone preparation command below retains its staging-only behavior;
+add `--checkpoint-create` to prepare reusable readiness checkpoints locally.
 
 ## Prepare only
 

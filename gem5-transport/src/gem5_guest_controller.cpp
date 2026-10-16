@@ -20,6 +20,10 @@ Gem5GuestController::Gem5GuestController(GuestM5Ops ops, bool address_bootstrap)
     : impl_(std::make_unique<Impl>(ops, address_bootstrap)) {}
 Gem5GuestController::~Gem5GuestController() = default;
 
+void Gem5GuestController::reconnect() {
+    impl_->poll = Duration{};
+}
+
 void Gem5GuestController::submit(Message data, std::string_view key) {
     if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
     impl_->outgoing.submit(std::move(data), key);

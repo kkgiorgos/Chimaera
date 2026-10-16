@@ -46,6 +46,11 @@
 namespace gem5
 {
 
+namespace memory
+{
+class PhysicalMemory;
+}
+
 namespace ruby
 {
 
@@ -88,6 +93,10 @@ class CacheRecorder
     uint64_t aggregateRecords(uint8_t **data, uint64_t size);
 
     uint64_t getNumRecords() const;
+
+    // With the entire system drained, Read_Write records are the coherent
+    // owners. Copy their latest bytes to backing memory before serialization.
+    void writebackDirtyData(memory::PhysicalMemory &memory) const;
 
     /*!
      * Function for flushing the memory contents of the caches to the

@@ -3,12 +3,14 @@
 
 from m5.objects.AbstractMemory import AbstractMemory
 from m5.params import Param, ResponsePort
+from m5.SimObject import PyBindMethod
 
 
 class Ramulator2(AbstractMemory):
     type = "Ramulator2"
     cxx_class = "gem5::memory::Ramulator2"
     cxx_header = "mem/ramulator2/ramulator2.hh"
+    cxx_exports = [PyBindMethod("setAggressorEnabled")]
 
     port = ResponsePort("Memory request/response port")
     ramulator_config = Param.String("Expanded Ramulator 2.1 YAML/JSON")
@@ -16,6 +18,7 @@ class Ramulator2(AbstractMemory):
         256, "Maximum pending transactions and responses"
     )
     aggressor_pattern = Param.String("none", "none, stream, stride, or random")
+    aggressor_enabled = Param.Bool(True, "Generate traffic; experiments may enable it after readiness")
     aggressor_interval = Param.Unsigned(4, "DRAM cycles between offered requests")
     aggressor_stride = Param.Unsigned(4096, "Stride in bytes")
     aggressor_read_percent = Param.Unsigned(80, "Read percentage, remaining writes")

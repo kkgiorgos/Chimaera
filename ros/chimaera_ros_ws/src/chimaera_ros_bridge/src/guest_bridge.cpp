@@ -43,6 +43,7 @@ int main(int argc, char ** argv)
     Mapping mapping;
     const auto ops = node->declare_parameter<std::string>("m5ops", "address");
     const auto read_time = node->declare_parameter<bool>("simulation_time_from_readfile", false);
+    bool checkpoint_control = node->declare_parameter<bool>("checkpoint_control", false);
     if (ops != "address" && ops != "instruction") {
       throw std::invalid_argument("m5ops must be address or instruction");
     }
@@ -92,6 +93,17 @@ int main(int argc, char ** argv)
       }
       // Deliver, pump ROS once, then queue outgoing messages for the next poll.
       node->exchange(controller);
+      if (checkpoint_control) {
+        // Quiesce at a completed exchange so a checkpoint never splits a
+        // transport header/payload or leaves a stale host handshake behind.
+        char control[96]{};
+        const auto length = m5_read_file_addr(control, sizeof(control) - 1, 0);
+        if (std::string(control, length) == "CHIMAERA_CHECKPOINT\n") {
+          checkpoint_control = false;
+          controller.reconnect();
+          m5_checkpoint_addr(0, 0);
+        }
+      }
     }
     RCLCPP_INFO(node->get_logger(), "Discarded stale stereo pairs: %lu", node->stale_pairs());
   } catch (const std::exception & error) {

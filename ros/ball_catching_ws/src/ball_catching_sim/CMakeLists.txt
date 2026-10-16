@@ -30,5 +30,10 @@ if(BUILD_TESTING)
     --plugin-dir $<TARGET_FILE_DIR:ball_catching_host>
     --output ${CMAKE_CURRENT_BINARY_DIR}/launch-stepping-validation --require-validation)
   set_tests_properties(launch_stepping PROPERTIES TIMEOUT 120)
+  add_test(NAME checkpoint_replay COMMAND ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/checkpoint_replay.py
+    --plugin-dir $<TARGET_FILE_DIR:ball_catching_host>
+    --output ${CMAKE_CURRENT_BINARY_DIR}/checkpoint-replay-validation)
+  set_tests_properties(checkpoint_replay PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
 endif()
 ament_package()

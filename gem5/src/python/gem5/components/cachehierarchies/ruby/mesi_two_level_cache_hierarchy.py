@@ -70,6 +70,7 @@ class MESITwoLevelCacheHierarchy(
         l2_size: str,
         l2_assoc: int,
         num_l2_banks: int,
+        functional_checkpoint_writeback: bool = False,
     ):
         AbstractRubyCacheHierarchy.__init__(self=self)
         AbstractTwoLevelCacheHierarchy.__init__(
@@ -83,6 +84,7 @@ class MESITwoLevelCacheHierarchy(
         )
 
         self._num_l2_banks = num_l2_banks
+        self._functional_checkpoint_writeback = functional_checkpoint_writeback
 
     @overrides(AbstractCacheHierarchy)
     def get_coherence_protocol(self):
@@ -93,6 +95,9 @@ class MESITwoLevelCacheHierarchy(
         cache_line_size = board.get_cache_line_size()
 
         self.ruby_system = RubySystem()
+        self.ruby_system.functional_checkpoint_writeback = (
+            self._functional_checkpoint_writeback
+        )
 
         # MESI_Two_Level needs 3 virtual networks
         self.ruby_system.number_of_virtual_networks = 3

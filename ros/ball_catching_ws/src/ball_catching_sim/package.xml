@@ -14,5 +14,6 @@
   <exec_depend>franka_description</exec_depend><exec_depend>xacro</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend><exec_depend>robot_state_publisher</exec_depend>
   <exec_depend>ball_catching_robot</exec_depend><exec_depend>launch_ros</exec_depend>
+  <test_depend>chimaera_ros_bridge</test_depend><test_depend>rclpy</test_depend>
   <export><build_type>ament_cmake</build_type></export>
 </package>

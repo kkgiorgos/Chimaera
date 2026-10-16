@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <ignition/gazebo/EventManager.hh>
@@ -31,8 +32,8 @@
 #include <thread>
 #include <vector>
 
-#include "ball_catching_sim/scoring.hpp"
 #include "ball_catching_sim/detailed_start.hpp"
+#include "ball_catching_sim/scoring.hpp"
 
 namespace ball_catching
 {
@@ -69,6 +70,7 @@ public:
     feedbackPeriod_ = 1. / (sdf->HasElement("joint_hz") ? sdf->Get<double>("joint_hz") : 250.);
     detailedSocket_ = sdf->HasElement("detailed_timing_socket") ?
       sdf->Get<std::string>("detailed_timing_socket") : "";
+    checkpointGate_ = sdf->HasElement("checkpoint_gate") && sdf->Get<bool>("checkpoint_gate");
     warmup_ = sdf->HasElement("warmup") ? sdf->Get<double>("warmup") : 0.;
     std::istringstream poses(sdf->Get<std::string>("initial_pose"));
     for (auto & q : initialQ_) poses >> q;
@@ -208,10 +210,21 @@ public:
       loggedReady_ = ready_;
       loggedCameras_ = cameras_;
     }
-    if (
-      !launched_ && readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_ &&
-      (requested_ || auto_)) {
-      // No simulator advances while this synchronous switch/reset is pending.
+    const bool readyToLaunch = readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_;
+    if (checkpointGate_ && !output_.empty()) {
+      const auto marker = output_ + "/checkpoint-ready";
+      if (readyToLaunch) {
+        if (!std::filesystem::exists(marker)) std::ofstream(marker).put('\n');
+      } else {
+        std::filesystem::remove(marker);
+      }
+    }
+    const bool released =
+      !checkpointGate_ || std::filesystem::exists(output_ + "/checkpoint-release");
+    // The checkpoint already passed readiness without interference. Pressure
+    // warmup has a fixed duration; do not extend it by gating on readiness again.
+    if (!launched_ && (checkpointGate_ || readyToLaunch) && released && (requested_ || auto_)) {
+      // Both simulators are paused while measurement statistics reset.
       beginDetailedThrow(detailedSocket_);
       ballModel_.SetWorldPoseCmd(
         ecm, ignition::math::Pose3d(initial_, ignition::math::Quaterniond::Identity));
@@ -276,6 +289,7 @@ public:
     // Track containment at every physics step. Evaluate on the first step at
     // the deadline, even when it falls between normal 250 Hz feedback samples.
     const auto evaluation = launched ? score_->Update(inside, now, launchTime_) : std::nullopt;
+    if (checkpointGate_ && !launched && !output_.empty()) SaveCheckpointState(ecm, now);
     if (!evaluation && now - lastPublish_ < feedbackPeriod_ - 1e-8) return;
     lastPublish_ = now;
     builtin_interfaces::msg::Time stamp = rclcpp::Time(static_cast<int64_t>(now * 1e9));
@@ -311,6 +325,28 @@ public:
   }
 
 private:
+  void SaveCheckpointState(const gz::EntityComponentManager & ecm, double now) const
+  {
+    std::array<double, 7> positions{}, velocities{};
+    for (size_t i = 0; i < joints_.size(); ++i) {
+      const auto p = ecm.Component<gz::components::JointPosition>(joints_[i]);
+      const auto v = ecm.Component<gz::components::JointVelocity>(joints_[i]);
+      if (!p || !v || p->Data().empty() || v->Data().empty()) return;
+      positions[i] = p->Data()[0];
+      velocities[i] = v->Data()[0];
+    }
+    const auto path = output_ + "/checkpoint-host-state";
+    {
+      std::ofstream snapshot(path + ".tmp");
+      snapshot << std::setprecision(17) << now;
+      for (double q : positions) snapshot << ' ' << q;
+      for (double v : velocities) snapshot << ' ' << v;
+      snapshot << '\n';
+      if (!snapshot) throw std::runtime_error("Cannot save checkpoint host state");
+    }
+    std::filesystem::rename(path + ".tmp", path);
+  }
+
   void Finish(const Evaluation & evaluation, double now)
   {
     finished_ = true;
@@ -355,6 +391,7 @@ private:
   std::optional<DeadlineScore> score_;
   bool initialized_{false}, auto_{true}, ready_{false}, cameras_{false}, requested_{false};
   bool launched_{false}, launchChecked_{false}, finished_{false};
+  bool checkpointGate_{false};
   std::mutex mutex_;
   std::string output_;
   std::ofstream guestRecords_;

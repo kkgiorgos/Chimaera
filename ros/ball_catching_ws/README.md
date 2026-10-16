@@ -151,10 +151,13 @@ simulation assumptions, not a hardware validation. See the
 [recorded validation](../../docs/ball-catching-validation.md), and
 [home, braking, and timing reference](../../docs/ball-cup-home-braking.md).
 
-For gem5 memory experiments, boot and arm/camera readiness run on KVM. The host
-waits for a confirmed detailed-CPU switch and statistics reset immediately before
-launching the ball. The simulation clock remains continuous across the switch;
-the launch trajectory, freshness rules and scoring stay the same. Rebuild both
-`chimaera_ros_bridge` and `ball_catching_sim` and prepare a fresh suite/bundle.
+For gem5 memory experiments, KVM boots Linux and the selected detailed CPU handles
+arm/camera readiness without aggression. The orchestrator saves that readiness
+once on its preparation machine, including a host readiness replay and the exact
+backing disk. Cases restore without KVM, warm up under their selected pressure
+for 50 simulated ms by default, then reset statistics immediately before throwing.
+Ball position/direction/speed remain independent host-side launch settings.
+Rebuild gem5, transport, `chimaera_ros_bridge` and `ball_catching_sim`, then prepare
+a new experiment and checkpoints after updating.
 See [the experiment protocol](../../docs/ball-catching-memory-contention.md)
-for the cold-cache launch condition and validation limits.
+for checkpoint sharing and validation limits.

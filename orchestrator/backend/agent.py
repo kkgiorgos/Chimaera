@@ -58,13 +58,15 @@ class Agent:
             return existing
         directory.mkdir(parents=True, exist_ok=True)
         atomic_json(directory / 'request.json', dict(experiment=experiment, config=config, cpus=cpus,
-            memory=memory, build_jobs=build_jobs, disk=disk, kernel=kernel, calibration=calibration, source_identity=source_identity))
+            memory=memory, build_jobs=build_jobs, disk=disk, kernel=kernel, calibration=calibration,
+            source_identity=source_identity, readiness_checkpoint=True))
         command = ['docker', 'run', '-d', '--name', 'chimaera-' + key,
             '--label', 'chimaera.experiment=' + experiment,
             '--user', f'{os.getuid()}:{os.getgid()}', '--group-add', str(Path('/var/run/docker.sock').stat().st_gid),
             '-v', '/var/run/docker.sock:/var/run/docker.sock', '-v', f'{self.root}:{self.root}',
             '-e', 'CHIMAERA_REPO=' + str(self.root), '-e', 'HOME=/tmp',
-            '-e', 'CHIMAERA_OPERATION=' + experiment, IMAGE,
+            '-e', 'CHIMAERA_OPERATION=' + experiment,
+            *(['--device', '/dev/kvm'] if not calibration else []), IMAGE,
             'python3', '/app/pipeline.py', str(directory)]
         return self.launch(key, experiment, 'prepare', command, directory)
 
@@ -94,7 +96,7 @@ class Agent:
             archive = directory / 'preparation-failures' / uuid.uuid4().hex[:8]
             archive.mkdir(parents=True)
             for name in ('inputs', 'ready.json', 'stage.json', 'export-assets', 'experiment.json',
-                         'request.json', 'worker.log', 'preparation-report'):
+                         'request.json', 'worker.log', 'preparation-report', 'checkpoint-image'):
                 path = directory / name
                 if path.exists():
                     path.rename(archive / name)

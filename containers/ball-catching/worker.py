@@ -2,6 +2,7 @@
 """Prepare or execute one frozen case inside an isolated Docker worker."""
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -23,8 +24,10 @@ def common(inputs, output):
             '--source-revision', record['source_revision']]
 
 
-def prepare(inputs, output, calibration_from=None):
-    """Only short memory calibration and guest packaging; no robot simulation."""
+def prepare(inputs, output, calibration_from=None, checkpoint_create=False, readiness_from=None):
+    """Calibrate/package, then create or validate shared readiness checkpoints."""
+    if checkpoint_create and readiness_from:
+        raise ValueError('Cannot create and import readiness together')
     command = common(inputs, output)
     shared = ['--calibration-from', str(calibration_from)] if calibration_from else []
     subprocess.run(command + ['--calibrate-only', *shared], check=True)
@@ -34,11 +37,27 @@ def prepare(inputs, output, calibration_from=None):
             '--config', str(inputs / 'experiment.json'), '--gem5-root', '/opt/chimaera/gem5',
             '--calibration', str(output / 'calibration/stream/calibration.json'),
             '--output', str(output / 'rate-validation')], check=True)
-    subprocess.run(command + ['--prepare-only', '--resume'], check=True)
+    bundle = ['--bundle-from', str(readiness_from / 'guest.tar.gz')] if readiness_from else []
+    subprocess.run(command + ['--prepare-only', '--resume', *bundle], check=True)
+    if checkpoint_create:
+        subprocess.run(command + ['--checkpoint-create', '--resume'], check=True)
+    if readiness_from:
+        from readiness_checkpoint import groups, provenance, validate
+        manifest = json.loads((output / 'experiment_manifest.json').read_text())
+        configuration = manifest['configuration']
+        identity = provenance('/opt/chimaera/gem5/build/X86/gem5.opt', '/assets/kernel',
+                              '/assets/guest.img', output / 'guest.tar.gz')
+        for point in groups(configuration, manifest['points']).values():
+            validate(readiness_from / 'checkpoints', configuration, point, identity)
 
 
 def run_case(inputs, output, case):
     command = common(inputs, output)
+    checkpoint = os.environ.get('CHIMAERA_CHECKPOINT_ROOT')
+    if checkpoint:
+        if not (Path(checkpoint) / 'index.json').is_file():
+            raise ValueError('Required readiness checkpoints are missing; prepare the experiment again')
+        command += ['--checkpoint-from', checkpoint]
     prepared = inputs / 'prepared'
     manifest = json.loads((prepared / 'experiment_manifest.json').read_text())
     selected = next((p for p in manifest['points'] if p['id'] == case), None)
@@ -63,12 +82,15 @@ def main():
     cli.add_argument('--prepare', action='store_true')
     cli.add_argument('--case')
     cli.add_argument('--calibration-from', type=Path)
+    cli.add_argument('--checkpoint-create', action='store_true')
+    cli.add_argument('--readiness-from', type=Path)
     args = cli.parse_args()
     try:
         if args.prepare:
             if args.case:
                 raise ValueError('Preparation does not select a case')
-            prepare(args.inputs, args.output, args.calibration_from)
+            prepare(args.inputs, args.output, args.calibration_from,
+                    args.checkpoint_create, args.readiness_from)
             return 0
         if not args.case:
             raise ValueError('--case is required for execution')

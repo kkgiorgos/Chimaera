@@ -105,6 +105,14 @@ struct Gem5TimingController::Impl {
 Gem5TimingController::Gem5TimingController(std::string endpoint, std::chrono::seconds timeout)
     : impl_(std::make_unique<Impl>(std::move(endpoint), timeout)) {}
 Gem5TimingController::~Gem5TimingController() = default;
+std::string Gem5TimingController::command(const std::string& command) {
+    if (command.empty() || command.find_first_of("\r\n") != std::string::npos)
+        throw std::invalid_argument("invalid application timing command");
+    impl_->request(command + "\n");
+    const auto reply = impl_->response();
+    if (reply.starts_with("ERROR ")) impl_->error(reply);
+    return reply;
+}
 void Gem5TimingController::start(Duration interval) {
     auto& s = *impl_;
     if (s.finished) throw std::logic_error("gem5 has finished; only shutdown is available");

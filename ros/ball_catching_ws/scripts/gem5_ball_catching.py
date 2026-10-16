@@ -1,4 +1,4 @@
-"""Full-system ball catching: KVM startup/readiness followed by a fixed Timing or O3 throw ROI."""
+"""Ball catching: detailed readiness checkpoints and KVM-free case restoration."""
 import argparse
 import json
 from pathlib import Path
@@ -6,13 +6,16 @@ import re
 
 import m5
 from gem5.components.boards.x86_board import X86Board
+from gem5.components.boards.mem_mode import MemMode
 from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import MESITwoLevelCacheHierarchy
 from gem5.components.memory.ramulator2 import Ramulator2Memory
 from gem5.components.processors.cpu_types import CPUTypes
-from gem5.components.processors.simple_switchable_processor import SimpleSwitchableProcessor
+from gem5.components.processors.simple_core import SimpleCore
+from gem5.components.processors.switchable_processor import SwitchableProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import DiskImageResource, KernelResource
 from gem5.simulate.simulator import Simulator
+from gem5.simulate.exit_event import ExitEvent
 
 from chimaera_gem5 import TimingServer, add_chimaera_arguments, configure_ticks, guest_start_script
 
@@ -32,18 +35,32 @@ cpu_type = hardware.get('cpu_type', 'timing')
 if cpu_type not in ('timing', 'o3'):
     parser.error('hardware cpu_type must be timing or o3')
 configure_ticks()
-processor = SimpleSwitchableProcessor(starting_core_type=CPUTypes.KVM,
-    switch_core_type=CPUTypes(cpu_type), isa=ISA.X86, num_cores=hardware['num_cores'])
-for core in processor.get_cores():
-    core.get_simobject().usePerf = False
+restore = experiment.get('checkpoint_restore')
+capture = experiment.get('checkpoint_prepare')
+if restore and capture:
+    parser.error('Cannot prepare and restore a checkpoint together')
+if capture and (experiment['aggressor']['pattern'] != 'none' or experiment['aggressor']['gbps']):
+    parser.error('Readiness checkpoints require a disabled aggressor')
+# Keep the detailed CPU paths identical on producer and consumers. The restore
+# graph contains no KVM CPUs or KvmVM object, including switched-out objects.
+cores = {'detailed': [SimpleCore(cpu_type=CPUTypes(cpu_type), core_id=i, isa=ISA.X86)
+                      for i in range(hardware['num_cores'])]}
+if not restore:
+    cores['boot'] = [SimpleCore(cpu_type=CPUTypes.KVM, core_id=i, isa=ISA.X86)
+                     for i in range(hardware['num_cores'])]
+    for core in cores['boot']:
+        core.get_simobject().usePerf = False
+processor = SwitchableProcessor(switchable_cores=cores, starting_cores='detailed' if restore else 'boot')
 cache = MESITwoLevelCacheHierarchy(l1d_size=hardware['l1d_size'],
     l1i_size=hardware['l1i_size'], l1d_assoc=hardware['l1_assoc'],
     l1i_assoc=hardware['l1_assoc'], l2_size=hardware['l2_size'],
-    l2_assoc=hardware['l2_assoc'], num_l2_banks=1)
+    l2_assoc=hardware['l2_assoc'], num_l2_banks=1, functional_checkpoint_writeback=True)
 aggressor = {'aggressor_' + key: value for key, value in experiment['aggressor'].items()}
+aggressor['aggressor_enabled'] = False
 memory = Ramulator2Memory(experiment['ramulator_config'], size='3GiB', aggressor=aggressor)
 board = X86Board(clk_freq=hardware['cpu_clock'], processor=processor,
                  memory=memory, cache_hierarchy=cache)
+board.set_mem_mode(MemMode.TIMING if restore else MemMode.ATOMIC_NONCACHING)
 # The board uses a gem5 COW disk overlay. Stage into the guest at KVM boot;
 # the user's base image is never mounted or modified.
 preamble = 'chimaera_root mkdir -p /opt/chimaera\n'
@@ -52,7 +69,7 @@ boot = guest_start_script('/tmp/chimaera-ball-start', files, preamble=preamble)
 board.set_kernel_disk_workload(kernel=KernelResource(local_path=args.kernel),
     disk_image=DiskImageResource(local_path=args.image),
     kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off'],
-    readfile_contents=boot)
+    readfile_contents=boot, checkpoint=Path(restore) / 'cpt' if restore else None)
 
 if args.instantiate_only:
     # Use the board's documented direct-instantiation lifecycle. No timing
@@ -66,13 +83,24 @@ if args.instantiate_only:
     print('Full-system configuration instantiated without simulation: ' + json.dumps(record))
     raise SystemExit(0)
 
+def record_cpu():
+    active = processor.get_cores()
+    if len(active) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in active):
+        raise RuntimeError('Detailed CPU switch did not select the requested model')
+    (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
+        cpu_type=cpu_type, num_cores=len(active),
+        simobjects=[core.get_simobject().type for core in active], tick=m5.curTick()), indent=2) + '\n')
+
+
 def prepare_clock():
     serial = (Path(m5.options.outdir) / 'board.pc.com_1.device').read_text(errors='replace')
     serial = re.sub(r'\[\s*\d+\.\d+\] [^\r\n]*(?:\r?\n|$)', '', serial)
     counts = re.findall(r'^CHIMAERA_ONLINE_CPUS=(\d+)\r?$', serial, re.MULTILINE)
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
-    # Keep one clock origin across KVM readiness and detailed execution.
+    processor.switch_to_processor('detailed')
+    record_cpu()
+    # Readiness and the throw use one detailed CPU and one clock origin.
     # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile
     # mechanism to give the guest the exact origin used by the timing server.
     boot_file = Path(str(board.readfile))
@@ -83,24 +111,32 @@ def prepare_clock():
 
 class BallTimingServer(TimingServer):
     detailed_started = False
-    switch_start_tick = None
+    pressure_started = False
+    restore_boundary_tick = None
+    checkpoint_pending = False
+
+    def begin_pressure(self):
+        if not self.roi_started or self.finished or self.detailed_started or self.pressure_started or capture:
+            raise RuntimeError('Cannot enable pressure outside a restored prelaunch session')
+        for controller in memory.get_memory_controllers():
+            controller.setAggressorEnabled(True)
+        self.pressure_started = True
+        (Path(m5.options.outdir) / 'pressure_start.json').write_text(
+            json.dumps({'tick': m5.curTick(), 'frequency': 1e12}) + '\n')
+        return f'PRESSURE {m5.curTick()}'
 
     def begin_throw(self):
         if not self.roi_started or self.finished:
             raise RuntimeError('Cannot launch outside an active timing session')
         if self.detailed_started:
             raise RuntimeError('Detailed throw already started')
-        start = m5.curTick()
-        processor.switch()
-        cores = processor.get_cores()
-        if len(cores) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in cores):
-            raise RuntimeError('Detailed CPU switch did not select the requested model')
-        (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
-            cpu_type=cpu_type, num_cores=len(cores),
-            simobjects=[core.get_simobject().type for core in cores], tick=m5.curTick()), indent=2) + '\n')
-        # KVM can need a few ticks to drain an outstanding MMIO. Charge those
-        # ticks to the next host interval, as with an ordinary step overshoot.
-        self.switch_start_tick = start
+        if capture:
+            raise RuntimeError('Checkpoint preparation must never throw the ball')
+        if restore and not self.pressure_started:
+            raise RuntimeError('Restored launch requires the pressure warmup barrier')
+        record_cpu()
+        if not restore:
+            self.begin_pressure()
         self.detailed_started = True
         m5.stats.reset()
         (Path(m5.options.outdir) / 'measurement_start.json').write_text(
@@ -108,27 +144,60 @@ class BallTimingServer(TimingServer):
         return f'READY {m5.curTick()}'
 
     def run_for_ticks(self, ticks):
-        if self.switch_start_tick is None:
+        if self.restore_boundary_tick is None:
             return super().run_for_ticks(ticks)
-        start = self.switch_start_tick
+        start = self.restore_boundary_tick
         remaining = max(0, start + ticks - m5.curTick())
         response = super().run_for_ticks(remaining)
-        self.switch_start_tick = None
+        self.restore_boundary_tick = None
         if response.startswith('OK '):
             return f'OK {start} {m5.curTick()}'
         return response
 
     def _run_once(self):
         event = super()._run_once()
+        if event == ExitEvent.CHECKPOINT and self.checkpoint_pending:
+            self.finished = False
         if not self.roi_started:
             serial = (Path(m5.options.outdir) / 'board.pc.com_1.device').read_text(errors='replace')
             if 'CHIMAERA_GUEST_APPLICATION_EXIT=' in serial:
                 raise RuntimeError('Guest application exited before workbegin; inspect serial log')
         return event
 
+    def save_ready_checkpoint(self):
+        if not capture or restore or not self.roi_started or self.detailed_started:
+            raise RuntimeError('Not a readiness checkpoint preparation session')
+        boundary = m5.curTick()
+        Path(str(board.readfile)).write_text('CHIMAERA_CHECKPOINT\n')
+        self.checkpoint_pending = True
+        # A bounded guest-only interval lets the bridge finish its current
+        # exchange and reset its handshake before issuing m5 checkpoint.
+        limit = boundary + 1_000_000_000_000
+        while m5.curTick() < limit and not self.finished:
+            self.simulator.set_max_ticks(limit - m5.curTick())
+            if self._run_once() == ExitEvent.CHECKPOINT:
+                break
+        else:
+            raise RuntimeError('Guest did not reach the checkpoint transport barrier')
+        self.checkpoint_pending = False
+        directory = Path(capture)
+        m5.checkpoint(str(directory / 'cpt'))
+        origin = json.loads((Path(m5.options.outdir) / 'roi_time_origin.json').read_text())
+        (directory / 'checkpoint.json').write_text(json.dumps(dict(
+            version=1, hardware=hardware, boundary_tick=boundary, saved_tick=m5.curTick(),
+            time_origin_ns=origin['nanoseconds'], aggressor_enabled=False), indent=2) + '\n')
+        return f'CHECKPOINT {m5.curTick()}'
+
+    def exit_handlers(self):
+        return {**super().exit_handlers(), ExitEvent.CHECKPOINT: lambda: True}
+
     def handle_command(self, line):
         if line == 'BENCHMARK_BEGIN':
             return self.begin_throw()
+        if line == 'BENCHMARK_PRESSURE':
+            return self.begin_pressure()
+        if line == 'BENCHMARK_CHECKPOINT':
+            return self.save_ready_checkpoint()
         if line == 'BENCHMARK_DUMP':
             m5.stats.dump()
             return f'DUMP {m5.curTick()}'
@@ -136,4 +205,23 @@ class BallTimingServer(TimingServer):
 
 timing = BallTimingServer(on_ready=prepare_clock)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
-timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)
+if restore:
+    record = json.loads((Path(restore) / 'checkpoint.json').read_text())
+    if record['version'] != 1 or record['hardware'] != hardware or record['aggressor_enabled'] is not False:
+        raise RuntimeError('Readiness checkpoint is incompatible with the requested architecture')
+    simulator._instantiate()
+    # Complete Ruby/cache and device startup while the aggressor is still
+    # disabled. Otherwise the first pressured step would also rebuild caches.
+    m5.simulate(0)
+    if m5.curTick() != record['saved_tick']:
+        raise RuntimeError('Restored checkpoint tick differs from its metadata')
+    timing.simulator = simulator
+    timing.roi_started = True
+    timing.restore_boundary_tick = record['boundary_tick']
+    Path(str(board.readfile)).write_text(f'CHIMAERA_TIME_ORIGIN_NS {record["time_origin_ns"]}\n')
+    (Path(m5.options.outdir) / 'roi_time_origin.json').write_text(
+        json.dumps({'nanoseconds': record['time_origin_ns']}) + '\n')
+    record_cpu()
+    timing.serve(args.socket_path, managed_shutdown=args.managed_shutdown)
+else:
+    timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

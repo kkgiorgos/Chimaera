@@ -42,6 +42,11 @@ public:
   void wait_until_ready(std::chrono::seconds timeout, const std::function<bool()> & cancelled)
   {
     gem5_.wait_until_ready(timeout, cancelled);
+    wait_for_gazebo(timeout, cancelled);
+  }
+
+  void wait_for_gazebo(std::chrono::seconds timeout, const std::function<bool()> & cancelled)
+  {
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     std::unique_lock lock(mutex_);
     while (!seen_) {
@@ -82,6 +87,33 @@ public:
     // DDS and the host command gateway run asynchronously to the timing barrier.
     // Allow their executors to consume commands while both simulators are paused.
     settle();
+    advance_physics();
+  }
+
+  // Reconstruct the external simulator's prefix at native speed. gem5 remains
+  // paused at its checkpoint until every recorded physics interval is replayed.
+  void replay_step(chimaera::Duration interval)
+  {
+    if (
+      pending_ || interval.count() <= 0 || interval.count() % physics_step_.count() != 0 ||
+      interval / physics_step_ > std::numeric_limits<uint32_t>::max())
+      throw std::invalid_argument("Invalid checkpoint replay interval");
+    interval_ = interval;
+    pending_ = true;
+    settle();
+    // These observations belong to the replayed prefix. Preserve only the
+    // observations from its final boundary for the restored guest.
+    while (bridge_.take()) {
+    }
+    advance_physics();
+    wait();
+  }
+
+  std::string command(const std::string & command) { return gem5_.command(command); }
+
+private:
+  void advance_physics()
+  {
     {
       std::lock_guard lock(mutex_);
       if (!seen_ || !paused_) {
@@ -125,6 +157,7 @@ public:
     if (!reply->accepted) { throw std::runtime_error("Gazebo rejected a step"); }
   }
 
+public:
   void wait() override
   {
     if (!pending_) {
@@ -143,7 +176,10 @@ public:
     }
     if (iterations_ != target_ || time_ns_ != target_time_) {
       throw std::runtime_error(
-        "Gazebo step mismatch: check physics_step_ns and exclusive world control");
+        "Gazebo step mismatch: expected iterations=" + std::to_string(target_) + " time_ns=" +
+        std::to_string(target_time_) + "; observed iterations=" + std::to_string(iterations_) +
+        " time_ns=" + std::to_string(time_ns_) +
+        ". Check physics_step_ns and exclusive world control");
     }
     lock.unlock();
     gazebo_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - gazebo_begin_).count();

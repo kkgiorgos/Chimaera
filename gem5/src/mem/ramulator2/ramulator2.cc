@@ -18,6 +18,7 @@ Ramulator2::Ramulator2(const Params &p)
       port(name() + ".port", *this, 0)
 {
     aggressorPattern = p.aggressor_pattern;
+    aggressorEnabled = p.aggressor_enabled;
     aggressorInterval = p.aggressor_interval;
     aggressorStride = p.aggressor_stride;
     aggressorReadPercent = p.aggressor_read_percent;

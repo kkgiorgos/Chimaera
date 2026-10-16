@@ -31,6 +31,7 @@
 
 #include "debug/RubyCacheTrace.hh"
 #include "mem/packet.hh"
+#include "mem/physical.hh"
 #include "mem/ruby/system/RubySystem.hh"
 #include "mem/ruby/system/Sequencer.hh"
 #include "sim/sim_exit.hh"
@@ -106,6 +107,22 @@ CacheRecorder::enqueueNextFlushRequest()
             exitSimLoop("Finished Drain", 0);
         }
         DPRINTF(RubyCacheTrace, "Flushed all %d records\n", m_records_flushed);
+    }
+}
+
+void
+CacheRecorder::writebackDirtyData(memory::PhysicalMemory &memory) const
+{
+    for (const auto *record : m_records) {
+        // Clean/shared copies may be older than an exclusive owner's data.
+        // MESI_Two_Level records only that owner as Read_Write (ST).
+        if (record->m_type != RubyRequestType_ST)
+            continue;
+        auto request = std::make_shared<Request>(record->m_data_address,
+            m_block_size_bytes, 0, Request::funcRequestorId);
+        Packet packet(request, MemCmd::WriteReq);
+        packet.dataStaticConst(record->m_data);
+        memory.functionalAccess(&packet);
     }
 }
 

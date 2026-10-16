@@ -77,27 +77,43 @@ zero; `fixed.warmup` can add a hold if an experiment needs one. The separate
 twelve-hour wall-time limit is unchanged. Both duration and the Ramulator configuration remain
 customizable in the experiment JSON.
 
-The host evaluates the same arm, fresh-camera and continuous-ready hold gates
-while coupled stepping still uses KVM. Immediately before applying launch pose
-and velocity, it sends `BENCHMARK_BEGIN` to the paused gem5 timing server and
-waits for acknowledgement. The server switches to the selected detailed CPU,
-verifies its model/core count, resets statistics and saves
-`gem5/measurement_start.json` before replying. A failed switch prevents launch.
-The serial Gazebo controller has finished its guest step before this physics
-callback, so the barrier does not overlap a pending gem5 step. Any KVM drain ticks are charged to the next host interval rather than adding
-an extra interval. The origin stays fixed across the switch; image ages, joint/command timestamps and scoring remain
-on the same timeline. The runner no longer resets statistics asynchronously
-after observing `launch.json`.
+KVM now ends at the guest bridge's workbegin marker. The selected detailed CPU
+(`timing` by default) executes arm/camera readiness with the aggressor disabled.
+Immediately before applying launch pose and velocity, the host sends
+`BENCHMARK_BEGIN` to the paused timing server. The server verifies the active CPU,
+resets statistics and saves `gem5/measurement_start.json` before replying. There
+is no CPU switch at launch. The clock origin stays fixed throughout readiness
+and measurement, and statistics reset synchronously with the throw boundary.
 
-All postlaunch computation uses the detailed CPU, and the physics step,
-readiness tolerances, frame-freshness rules, trajectory and scoring are unchanged.
-KVM does not warm the detailed caches or O3 predictor. This defines a cold
-microarchitectural state at launch; it does not guarantee identical outcomes to
-the former detailed-startup runs. Use fresh suites for comparisons with this
-protocol, and validate catch/miss outcomes in full-system runs before claiming
-numerical equivalence. Native launches leave the timing socket unset and need
-no gem5 barrier. Rebuild `chimaera_ros_bridge` and `ball_catching_sim`, then stage
-a fresh guest bundle so the address-compatible clock is included.
+Orchestrated experiments perform this readiness run only on the preparation
+machine, once per compatible hardware/camera/controller configuration. The guest
+bridge finishes an exchange, marks its next exchange for a fresh host handshake,
+and requests a gem5 checkpoint. The final application image carries that checkpoint,
+the exact backing disk, kernel and guest bundle, plus the host readiness input
+replay. Each case restores without constructing any KVM CPU or KvmVM object.
+Its host replays the readiness prefix while gem5 stays paused and checks the
+resulting simulation time and joint positions/velocities against the saved boundary.
+Gazebo's renderer/physics engine internals are reconstructed by replay, rather
+than serialized as process memory. A mismatch fails the case.
+
+The MESI checkpoint path copies drained dirty cache owners into physical RAM
+and restores with empty caches. This avoids MESI's unsupported flush operation
+and unreliable warm-cache trace reconstruction. Guest architectural state and
+RAM survive; the short case warmup also repopulates caches. This policy is the
+same for every case, including baselines.
+
+Case pressure starts after restoration. `fixed.pressure_warmup` defaults to
+50 simulated ms, is limited to one second, and rounds up to complete coupling
+intervals. Measurement excludes this warmup and starts at launch. Readiness has
+already passed without aggression; pressure does not extend the hold by requiring
+readiness again. Baselines receive the same hold with no traffic. Ball launch
+position, direction and speed are host-only and may vary across cases sharing a
+checkpoint. Missing or changed checkpoints fail closed, with no boot fallback.
+
+Use fresh suites for this protocol and validate full-system restore/throw outcomes
+before claiming numerical equivalence to earlier runs. Native launches leave the
+timing socket unset. Rebuild gem5, transport, `chimaera_ros_bridge` and
+`ball_catching_sim`, and prepare new images/checkpoints after updating.
 
 The preset uses 0.5 ms physics/exchange intervals, 100 us guest polling and fixed
 1 kHz joint feedback. The experiment owns these settings, so every point uses
@@ -150,8 +166,10 @@ Omit `--case` to run the full 12-point preset. Native Chimaera sessions run
 serially because their data sockets are fixed. `--image`, `--kernel`,
 `--gem5-root` and `--config` override local paths. The default artifacts are
 `gem5/resources/x86-ubuntu-22.04-ros-humble.img` and
-`gem5/resources/x86-linux-kernel-5.15.180`. KVM is used for boot, arm/camera readiness and any configured prelaunch hold; measurement
-uses the fixed `hardware.cpu_type` (`timing` by default, or `o3`). The guest overlay is packaged with runtime libraries and
+`gem5/resources/x86-linux-kernel-5.15.180`. Standalone runs use KVM only for boot;
+readiness and measurement use the fixed `hardware.cpu_type` (`timing` by default,
+or `o3`). Orchestrated cases restore readiness checkpoints without KVM.
+The guest overlay is packaged with runtime libraries and
 injected during boot into gem5's COW disk overlay. The original image remains
 read-only; no offline mount or deployment is necessary.
 

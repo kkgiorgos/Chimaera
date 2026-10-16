@@ -102,6 +102,18 @@ int main() {
                                      true, true, true, true,
                                      true, true, true, true}));
     expect(received.empty());
+    // A readiness checkpoint starts the new host handshake again without
+    // losing queued application output or sleeping on the old poll interval.
+    controller.submit(data, "state");
+    controller.reconnect();
+    const auto sent_before_restore = sent.size();
+    enqueue(control::encode_startup(Duration(3)));
+    enqueue(control::encode({data}));
+    expect(controller.run_next().ok());
+    expect(waits.size() == 2);
+    expect(sent[sent_before_restore + 1] == control::startup_request());
+    expect(control::decode(sent[sent_before_restore + 3]) == control::Batch{data});
+    expect(controller.take() == data);
     // Configuration cannot reappear inside a running data session.
     enqueue(control::encode_startup(Duration(7)));
     expect(!controller.run_next().ok());

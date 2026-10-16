@@ -57,6 +57,12 @@ class RubySystem(ClockedObject):
         "Use phys_mem as the functional \
         store and only use ruby for timing.",
     )
+    functional_checkpoint_writeback = Param.Bool(
+        False,
+        "Copy drained MESI_Two_Level dirty cache data to physical memory "
+        "before checkpointing, without unsupported protocol flushes; "
+        "restore with empty caches and an explicit caller-provided warmup",
+    )
 
     # Profiler related configuration variables
     hot_lines = Param.Bool(False, "")

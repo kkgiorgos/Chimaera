@@ -56,6 +56,7 @@
 #include "mem/ruby/system/DMASequencer.hh"
 #include "mem/ruby/system/Sequencer.hh"
 #include "mem/simple_mem.hh"
+#include "sim/drain.hh"
 #include "sim/eventq.hh"
 #include "sim/simulate.hh"
 #include "sim/system.hh"
@@ -233,6 +234,16 @@ RubySystem::memWriteback()
     }
     DPRINTF(RubyCacheTrace, "Cache Trace Complete\n");
 
+    if (params().functional_checkpoint_writeback) {
+        fatal_if(protocolInfo->getName() != "MESI_Two_Level",
+                 "Functional checkpoint writeback requires MESI_Two_Level");
+        fatal_if(!DrainManager::instance().isDrained(),
+                 "Functional checkpoint writeback requires a drained system");
+        m_cache_recorder->writebackDirtyData(params().system->getPhysMem());
+        m_cooldown_enabled = false;
+        return;
+    }
+
     // If there is no dirty block, we don't need to flush the cache
     if (m_cache_recorder->getNumRecords() == 0)
     {
@@ -350,6 +361,11 @@ RubySystem::serialize(CheckpointOut &cp) const
     uint8_t *raw_data = new uint8_t[4096];
     uint64_t cache_trace_size = m_cache_recorder->aggregateRecords(
                                                         &raw_data, 4096);
+    // MESI_Two_Level's cache trace reconstruction can leave coherence events
+    // pending when warmup exits. Restore empty caches from the authoritative
+    // physical snapshot instead; the caller provides an explicit warmup.
+    if (params().functional_checkpoint_writeback)
+        cache_trace_size = 0;
     std::string cache_trace_file = name() + ".cache.gz";
     writeCompressedTrace(raw_data, cache_trace_file, cache_trace_size);
 
@@ -419,7 +435,7 @@ RubySystem::unserialize(CheckpointIn &cp)
 
     readCompressedTrace(cache_trace_file, uncompressed_trace,
                         cache_trace_size);
-    m_warmup_enabled = true;
+    m_warmup_enabled = cache_trace_size != 0;
 
     // Create the cache recorder that will hang around until startup.
     makeCacheRecorder(uncompressed_trace, cache_trace_size, block_size_bytes);

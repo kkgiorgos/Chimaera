@@ -3,6 +3,7 @@
   "fixed": {
     "duration": 1.5,
     "warmup": 0.0,
+    "pressure_warmup": 0.05,
     "physics_step": 0.0005,
     "joint_hz": 1000.0,
     "camera_position": [

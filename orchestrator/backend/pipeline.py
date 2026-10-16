@@ -14,6 +14,7 @@ def prepare(directory):
     root = Path(os.environ['CHIMAERA_REPO'])
     request = json.loads((directory / 'request.json').read_text())
     calibration = request.get('calibration')
+    checkpoint_mode = request.get('readiness_checkpoint', False)
     config = request['config']
     # The stored JSON remains portable; resolve its repository-relative memory config here.
     config['ramulator_config'] = str(root / config['ramulator_config'])
@@ -78,7 +79,16 @@ def prepare(directory):
         atomic_json(root / '.chimaera-orchestrator/assets' /
                     ('image-' + image_id.removeprefix('sha256:') + '.json'), dict(image_id=image_id))
     atomic_json(directory / 'stage.json', dict(phase='Preparing guest disk and kernel'))
-    disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
+    readiness = None
+    if checkpoint_mode and calibration:
+        from checkpoints import unpack
+        checkpoint_index = calibration['provenance'].get('checkpoint_index_sha256')
+        if not checkpoint_index:
+            raise ValueError('Shared preparation lacks its readiness checkpoint; prepare the producer again')
+        readiness = unpack(directory, application_id, checkpoint_index)
+        disk, kernel = readiness / 'guest.img', readiness / 'kernel'
+    else:
+        disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
     args = []
     if calibration:
         for pattern, record in calibration['records'].items():
@@ -86,7 +96,13 @@ def prepare(directory):
                 raise ValueError('Invalid calibration pattern')
             atomic_json(directory / 'shared-calibration' / pattern / 'calibration.json', record)
         args = ['--calibration-from', str(directory / 'shared-calibration')]
-    atomic_json(directory / 'stage.json', dict(phase='Calibrating and freezing inputs' if not calibration else 'Validating shared calibration and freezing inputs'))
+    if checkpoint_mode:
+        args += ['--readiness-from', str(readiness)] if readiness else ['--checkpoint-create']
+    phase = 'Calibrating and freezing inputs' if not calibration else 'Validating shared calibration and freezing inputs'
+    if checkpoint_mode:
+        phase = ('Calibrating and creating readiness checkpoints' if not calibration
+                 else 'Validating shared calibration and readiness checkpoints')
+    atomic_json(directory / 'stage.json', dict(phase=phase))
     subprocess.run([sys.executable, str(root / 'containers/ball-catching/setup.py'), '--skip-build', '--image', image,
         '--config', str(directory / 'experiment.json'), '--output', str(directory / 'inputs'),
         '--disk', str(disk), '--kernel', str(kernel), '--cpus', str(request['cpus']),
@@ -101,11 +117,30 @@ def prepare(directory):
                       sdk_image_id=sdk_id, application_image_id=application_id,
                       disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
+    if checkpoint_mode:
+        from checkpoints import LOCATION, package
+        if not calibration:
+            atomic_json(directory / 'stage.json', dict(phase='Packaging ready checkpoint and backing disk'))
+            application_id, checkpoint_index = package(directory, application_id, disk, kernel)
+            image = application_id
+            atomic_json(root / '.chimaera-orchestrator/assets' /
+                ('image-' + application_id.removeprefix('sha256:') + '.json'), dict(image_id=application_id))
+        provenance.update(application_image_id=application_id, readiness_checkpoint=True,
+                          checkpoint_index_sha256=checkpoint_index)
+        # Both producer and consumers execute the immutable prepared image.
+        runner = json.loads((inputs / 'runner.json').read_text())
+        runner.update(image=application_id, devices=[])
+        runner['env']['CHIMAERA_CHECKPOINT_ROOT'] = LOCATION + '/checkpoints'
+        runner['mounts'] = [mount for mount in runner['mounts'] if mount['target'] != '/assets/readiness']
+        atomic_json(inputs / 'runner.json', runner)
     if calibration:
         # Local ext4 images contain host-local filesystem timestamps/UUIDs.
         # Keep each disk's digest in its provenance without requiring identical bytes.
         expected = calibration['provenance']
-        for key in ('source_identity', 'revision', 'kernel_sha256', 'input_hashes'):
+        keys = ('source_identity', 'revision', 'kernel_sha256', 'input_hashes')
+        if checkpoint_mode:
+            keys += ('disk_sha256', 'checkpoint_index_sha256')
+        for key in keys:
             if provenance[key] != expected[key]:
                 raise ValueError('Prepared inputs, revision or kernel differ from the calibration machine')
         if expected.get('build_inputs') is not None and builds != expected['build_inputs']:

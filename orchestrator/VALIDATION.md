@@ -55,7 +55,10 @@ remote hosts, independent full SDK builds with identical simulator hashes, large
 asset transfers, fresh guest boot, KVM instantiation, and complete robot benchmark
 execution have **not** been qualified on the destination cluster. The guest
 construction path is implemented but requires that boot/full-system validation.
-There is no coordinated simulation checkpoint support; resume is at case boundaries.
+Ready guest checkpoints plus a validated host input replay now support starting
+cases after detailed, aggressor-free readiness. This protocol still requires
+full-system restore/throw qualification on the destination cluster. It does not
+resume interrupted throws in place.
 
 ETAs are estimates from live throw speed and observed case durations. They have not
 yet been calibrated against real distributed runs and remain unknown when the
@@ -106,3 +109,57 @@ This repair has not yet been validated with a full guest boot or benchmark run.
 Running workers and existing experiment data were left untouched. Existing
 prepared experiments retain their original disks; a new experiment after updating
 and redeploying supervisors uses the corrected recipe cache entry.
+
+## Readiness checkpoints — 2026-10-16
+
+The final Python workflow checks passed **168 tests**:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+PYTHONPATH=ros/ball_catching_ws/scripts:orchestrator/backend \
+python3 -m pytest -q orchestrator/tests containers/tests \
+  containers/ball-catching/tests \
+  ros/ball_catching_ws/tests/test_detailed_start.py \
+  ros/ball_catching_ws/tests/test_readiness_checkpoint.py \
+  ros/ball_catching_ws/tests/test_checkpoint_replay.py
+```
+
+Coverage includes producer-only KVM, shared checkpoint/bundle/disk identity,
+compatible ball variations, corruption rejection, fixed pressure warmup, no
+aggressor during readiness, and refusal to launch checkpoint preparation.
+The Ubuntu 22.04/Humble/Fortress container build of the changed native code passed
+**3 transport, 6 bridge and 3 ball CTests**, plus **86 ROS Python checks**
+(two optional simulator-instantiation checks skipped in that ROS-only invocation).
+`npm run typecheck` and `git diff --check` passed.
+
+The real Fortress `checkpoint_replay` CTest captures host readiness input and
+replays it into a fresh host while the synthetic guest stays paused. It checks
+saved joint state/time, a different ball speed, the pressure barrier, and a throw
+after the fixed hold even when the guest reports no longer ready under pressure.
+Real Docker checkpoint-image packaging, exact asset import, and cached import
+also passed with disposable fixture artifacts.
+
+Populated-cache testing exposed unsupported MESI flushes and a stalled MESI
+warm-cache trace restore. The opt-in checkpoint path writes drained dirty owners
+into backing RAM and saves an empty cache trace. Cases restore CPU/RAM state with
+cold caches and use their configured short warmup to repopulate them; baselines
+use the same policy. Other Ruby clients retain their existing default behavior.
+
+The final SDK built successfully. The native gem5 regression
+`ros/ball_catching_ws/tests/verify_checkpoint_memory.py`, with its statically
+linked `checkpoint_memory.cc` workload, saved 1 MiB of dirty data, verified every
+64-bit value directly in compressed checkpoint RAM, and resumed without KVM to
+print `CHECKPOINT_MEMORY_OK` and `CHECKPOINT_MEMORY_RESTORE_OK`. This verifies RAM
+independently of cache reconstruction. A full-system CPU/device topology smoke
+check initialized KVM, switched to detailed CPUs, populated caches, checkpointed,
+and restored without KVM at the saved tick; pressure/measurement barriers passed.
+That smoke check did not boot Linux through application readiness. Timing and O3
+restore graphs also instantiated without KVM objects. A real Ramulator check
+accepted zero aggressor requests while disabled and generated traffic only after
+explicit enable.
+
+These checks do not establish numerical equivalence to the previous protocol or
+qualify a complete robot guest readiness/restore/throw campaign on the cluster.
+Host replay reconstructs Gazebo from recorded input; it does not serialize its
+renderer/physics internals. Fresh experiments are required after deployment;
+in-flight throws are not resumable.

@@ -120,6 +120,7 @@ class Ramulator2Base : public AbstractMemory
         ContentionStats(statistics::Group *parent);
     } contentionStats;
     std::string aggressorPattern = "none";
+    bool aggressorEnabled = true;
     unsigned int aggressorInterval = 4, aggressorStride = 4096;
     unsigned int aggressorReadPercent = 80, aggressorMaxPending = 128;
     unsigned int aggressorDutyPercent = 100, aggressorPeriod = 12000;
@@ -159,6 +160,7 @@ class Ramulator2Base : public AbstractMemory
     EventFunctionWrapper tickEvent;
 
   public:
+    void setAggressorEnabled(bool enabled);
     DrainState drain() override;
 
     void startup() override;

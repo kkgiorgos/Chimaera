@@ -10,8 +10,10 @@ Queued experiments wait behind unresolved failures.
 Requirements:
 
 - Docker Engine with Compose, and an up-to-date checkout of this repository.
-- Linux x86-64 workers with Docker Engine/Compose, writable repositories, KVM,
+- Linux x86-64 workers with Docker Engine/Compose, writable repositories,
   and permission for the SSH user to use Docker and the guest assets.
+- KVM on the selected preparation machine for its initial guest boot. Case
+  workers restore detailed checkpoints and do not need `/dev/kvm`.
 - Bash and gzip on workers for compressed image streams. The producer also needs
   Python 3 and an OpenSSH client on its host.
 - SSH key access from the webserver to each worker. No inbound worker HTTP ports
@@ -89,8 +91,11 @@ image bytes never pass through the webserver. Configure the destination SSH targ
 (including aliases, ports, identities, and any jump hosts) to work from the producer
 host as well as the controller. Producer credentials and SSH configuration belong
 to its host SSH user; the controller does not copy credentials or forward an agent.
-Every machine uses its own configured asset paths or constructs its own guest disk
-and downloads the pinned kernel. Guest disks remain local.
+The preparation machine uses its configured assets or constructs a guest disk
+and downloads the pinned kernel. Its final application image includes the exact
+backing disk, kernel, guest bundle and readiness checkpoints. Consumers import
+these assets from that image; independently generated disks cannot restore the
+producer's checkpoint. Consumer disk/kernel overrides are therefore unused.
 
 Docker image stores can assign different image IDs after a save/load transfer.
 When IDs differ, transfer verification compares the producer and destination's
@@ -131,7 +136,7 @@ active experiment. Build parallelism is separate from case worker limits.
 The supervisor mounts its host repository at the **same absolute path** inside
 the container. This is necessary because sibling workers' Docker bind mounts are
 resolved on the host. It runs as the SSH user's UID/GID, with access to the host
-Docker socket and KVM device metadata. Only this trusted supervisor controls Docker;
+Docker socket. Only preparation on the producer receives the KVM device. This trusted supervisor controls Docker;
 benchmark cases retain the existing runner's read-only mounts, private network,
 private IPC, resource limits, and dropped capabilities.
 
@@ -154,19 +159,46 @@ arrives, preparation runs automatically:
 
 1. On the chosen calibration machine, validate the queued source identity and build
    or reuse its source-keyed SDK and application images.
-2. Prepare its local guest assets, run memory-only calibration and fractional-rate
-   checks, and freeze the guest bundle. These steps do not run robot benchmark cases.
-3. Record both immutable Docker image IDs with the calibration. Stream those images
+2. Prepare its guest assets, run memory-only calibration and fractional-rate
+   checks, and freeze the guest bundle. Boot Linux once per compatible readiness
+   configuration with KVM, switch to the selected detailed CPU at workbegin, and
+   reach arm/fresh-camera readiness with the aggressor disabled. Save the guest
+   at a completed bridge exchange and record the host readiness prefix. No ball
+   is thrown during preparation. The default matrix produces one checkpoint.
+3. Package the checkpoints and exact backing disk/kernel/bundle into the application
+   image. Record both immutable Docker image IDs with the calibration. Stream those images
    with `docker image save`, gzip and `docker image load` over a direct SSH
    connection from the producer to each remaining worker. Skip each transfer when that exact image already
    exists there. Archives carry a dedicated `chimaera:transfer-<image-id>` tag so
    loaded images retain a named reference. Imported images do not replace
    source-keyed local SDK tags.
 4. Verify the image ID after loading. Consumers validate their source keys, use
-   the copied application image, prepare their own guest assets, and validate
-   the shared calibration's simulator/configuration hashes and kernel.
+   the copied application image, import the producer's frozen assets, and validate
+   calibration, checkpoint integrity, simulator, kernel, disk and bundle hashes.
+   Consumers run no robot readiness simulation and receive no KVM device.
 5. Dispatch cases dynamically as workers become ready. The calibration machine can
    run cases while SDK copies and other workers' preparation continue.
+
+Every case restores the same compatible, aggressor-free detailed guest state.
+While gem5 stays paused, its host replays the recorded readiness commands at native
+speed to reconstruct Gazebo time, robot motion and readiness. A mismatch in saved
+time or joint positions/velocities fails the case. This is a host input replay,
+not a serialized snapshot of Gazebo's renderer or physics engine internals.
+The restored guest reconnects to a fresh bridge. Drained dirty cache data is
+preserved in RAM; MESI caches restart empty to avoid its unsupported flush and
+warm-cache reconstruction paths. Case pressure then runs for
+`fixed.pressure_warmup` (default **0.05 simulated seconds**, at most one second,
+rounded up to complete coupling intervals). The host resets measurement statistics
+at the throw boundary and launches without repeating the readiness gate under
+pressure. This hold also repopulates caches. Baselines receive the same hold with
+the aggressor disabled.
+
+Ball position, direction and speed remain host-only launch settings, so all throws
+with the same hardware/camera/controller configuration share a checkpoint across
+pressure levels and access patterns. Changed hardware, memory, camera setup or
+controller rates require compatible checkpoints; preparation groups those separately.
+Missing or incompatible checkpoints fail preparation/execution; there is no KVM
+fallback. Use a new experiment after updating the simulator/bridge for this protocol.
 
 The dashboard shows **Copying prepared images** during transfer, with the current
 SDK/application image, compressed bytes sent, average transfer rate, elapsed time,
@@ -279,9 +311,9 @@ cancels its SSH download and prevents late callbacks from restoring deleted file
 **Stop** kills reachable workers immediately. Stop is pending for unreachable
 machines, and the queue remains held until they acknowledge it. An assignment
 arriving late is rejected using a persisted stop generation. **Resume** preserves
-completed cases and queues the others with fresh attempts. There is no coordinated
-gem5/Gazebo/ROS checkpoint system in the existing benchmark, so interrupted cases
-restart from their beginning. Old attempts remain in the result package.
+completed cases and queues the others with fresh attempts. Interrupted cases
+restart from their prepared readiness checkpoint; in-flight throws are not
+checkpointed. Old attempts remain in the result package.
 
 To stop one worker, use its **Stop** button on the machine card or case row.
 Only the selected attempt is terminated; other cases continue and queued cases

@@ -126,6 +126,7 @@ public:
 
   void submit(chimaera::Message bytes)
   {
+    if (on_receive) on_receive(bytes);
     if (bytes.size() >= 8 && std::memcmp(bytes.data(), "CBP1", 4) == 0) {
       const auto first = length_at(bytes.data() + 4);
       if (first > bytes.size() - 8) throw std::runtime_error("invalid stereo frame length");
@@ -312,6 +313,7 @@ public:
   static constexpr std::size_t max_bytes = 4096;
   static constexpr std::size_t max_messages = 128;
   std::function<void()> pump;
+  std::function<void(const chimaera::Message &)> on_receive;
   std::function<std::optional<int64_t>()> simulation_time;
 
 private:

@@ -27,6 +27,16 @@ namespace gem5
 namespace memory
 {
 
+void
+Ramulator2Base::setAggressorEnabled(bool enabled)
+{
+    if (enabled && !aggressorEnabled) {
+        aggressorCycle = 0;
+        aggressorNextOffer = 0;
+    }
+    aggressorEnabled = enabled;
+}
+
 Ramulator2Base::Ramulator2Base(const AbstractMemoryParams &p,
                                const std::string &config, size_t num_ports,
                                unsigned int max_outstanding)
@@ -78,7 +88,7 @@ Ramulator2Base::injectAggressor()
     // An independent device ingress: no gem5 packets, cache pollution, CPU
     // instructions or backing-store writes. Addresses are above guest RAM.
     const uint64_t cycle = aggressorCycle++;
-    if (aggressorPattern == "none" || drainState() != DrainState::Running) {
+    if (!aggressorEnabled || aggressorPattern == "none" || drainState() != DrainState::Running) {
         return;
     }
     const bool due = aggressorGbps > 0 ? cycle >= aggressorNextOffer :

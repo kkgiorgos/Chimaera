@@ -28,6 +28,11 @@ def main():
     cli.add_argument('--memory', default='12g')
     cli.add_argument('--calibration-from', type=Path,
                      help='Reuse a frozen calibration directory; simulator/config hashes must match')
+    checkpoint = cli.add_mutually_exclusive_group()
+    checkpoint.add_argument('--checkpoint-create', action='store_true',
+                            help='Boot once per readiness configuration and save aggressor-free checkpoints')
+    checkpoint.add_argument('--readiness-from', type=Path,
+                            help='Validate imported checkpoints and the exact producer guest bundle')
     args = cli.parse_args()
     try:
         if args.build_jobs < 1 or args.output.exists():
@@ -58,23 +63,43 @@ def main():
         config = runner.load(inputs / 'runner.json')
         prepared = inputs / 'prepared'
         prepared.mkdir()
-        # Apply the exact worker isolation during setup, but no KVM is needed
-        # for memory-only calibration or guest packaging.
-        calibration = dict(config, devices=[])
+        # Memory calibration/packaging and consumer validation need no KVM.
+        # Only the producer's readiness boot receives the device.
+        calibration = dict(config, devices=config['devices'] if args.checkpoint_create else [])
         calibration['command'] = ['python3', '/app/containers/ball-catching/worker.py',
                                   '--prepare', '--output', '/output']
         if args.calibration_from:
             calibration['mounts'] = [*config['mounts'], dict(
                 source=str(args.calibration_from.resolve(strict=True)), target='/assets/shared-calibration')]
             calibration['command'] += ['--calibration-from', '/assets/shared-calibration']
+        if args.checkpoint_create:
+            calibration['command'] += ['--checkpoint-create']
+        if args.readiness_from:
+            calibration['mounts'] = [*calibration['mounts'], dict(
+                source=str(args.readiness_from.resolve(strict=True)), target='/assets/readiness')]
+            calibration['command'] += ['--readiness-from', '/assets/readiness']
         job = dict(name='prepare', args=[], env={})
         import uuid
         command = runner.command(calibration, job, prepared, image, 'chimaera-ball-prepare-' + uuid.uuid4().hex[:12])
+        if args.checkpoint_create:
+            # Readiness is a full-system run and can exceed a small worker RAM
+            # budget, just like orchestrated cases. Keep it a soft reservation.
+            command[command.index('--memory')] = '--memory-reservation'
+            swap = command.index('--memory-swap')
+            del command[swap:swap + 2]
         if os.environ.get('CHIMAERA_OPERATION'):
             command[2:2] = ['--label', 'chimaera.experiment=' + os.environ['CHIMAERA_OPERATION']]
         print(shlex.join(command), flush=True)
         subprocess.run(command, check=True)
-        print(f'Ready: {inputs / "runner.json"}; no robot benchmark cases were run', flush=True)
+        if args.checkpoint_create or args.readiness_from:
+            exported = json.loads((inputs / 'runner.json').read_text())
+            exported['devices'] = []
+            if args.readiness_from:
+                exported['mounts'].append(dict(source=str(args.readiness_from.resolve()), target='/assets/readiness'))
+            exported['env']['CHIMAERA_CHECKPOINT_ROOT'] = ('/assets/readiness/checkpoints'
+                if args.readiness_from else '/assets/inputs/prepared/checkpoints')
+            (inputs / 'runner.json').write_text(json.dumps(exported, indent=2) + '\n')
+        print(f'Ready: {inputs / "runner.json"}', flush=True)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         cli.error(str(error))
 

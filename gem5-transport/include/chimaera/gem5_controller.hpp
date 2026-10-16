@@ -25,6 +25,8 @@ public:
     // Actual progress since the first step's start, at the fixed 1 THz frequency.
     [[nodiscard]] std::uint64_t elapsed_ticks() const noexcept;
     void shutdown(); // QUIT: terminate gem5 while paused, without running guest code.
+    // Application commands are only allowed between completed timing steps.
+    std::string command(const std::string& command);
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -63,6 +65,9 @@ public:
     void submit(Message data, std::string_view coalescing_key = {}) override;
     std::optional<Message> take() override;
     ControllerResult run_next() override;
+    // Require a fresh host handshake after restoring a completed exchange.
+    // Queued application messages remain in guest memory.
+    void reconnect();
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

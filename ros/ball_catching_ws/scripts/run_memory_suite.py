@@ -48,7 +48,7 @@ def execution_fingerprint():
     result = hashlib.sha256()
     paths = [SCRIPTS / name for name in ('run_memory_suite.py', 'run_trial.py',
              'gem5_ball_catching.py', 'calibrate_memory.py', 'benchmark_metrics.py',
-             'benchmark_status.py', 'guest_records.py')]
+             'benchmark_status.py', 'guest_records.py', 'readiness_checkpoint.py')]
     for package in ('ball_catching_robot', 'ball_catching_sim', 'chimaera_ros_bridge'):
         root = Path(get_package_prefix(package))
         paths += [path for path in root.rglob('*') if path.is_file()
@@ -76,13 +76,14 @@ def load_config(path, cpu_type=None):
     data['hardware'].setdefault('cpu_type', 'timing')
     data['fixed'].setdefault('image_diagnostics', False)
     data['fixed'].setdefault('guest_dds_shm_bytes', 0)
+    data['fixed'].setdefault('pressure_warmup', 0.05)
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
-                  'guest_dds_shm_bytes'},
+                  'guest_dds_shm_bytes', 'pressure_warmup'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -99,9 +100,14 @@ def load_config(path, cpu_type=None):
                 'cup_radius', 'cup_depth', 'image_age_periods'):
         positive(fixed[key], key)
     positive(fixed['warmup'], 'warmup', zero=True)
+    positive(fixed['pressure_warmup'], 'pressure_warmup', zero=True)
+    if fixed['pressure_warmup'] > 1:
+        raise ValueError('pressure_warmup must be at most one simulated second')
     for key in ('interval_us', 'poll_us', 'startup_timeout_s', 'camera_width', 'camera_height'):
         if type(fixed[key]) is not int:
             raise ValueError(key + ' must be an integer')
+    if math.ceil(fixed['pressure_warmup'] * 1e6 / fixed['interval_us']) * fixed['interval_us'] > 1e6:
+        raise ValueError('pressure_warmup rounded to coupling intervals exceeds one second')
     step_ns = round(fixed['physics_step'] * 1e9)
     if step_ns < 1 or fixed['interval_us'] * 1000 % step_ns or not 0 < fixed['poll_us'] < fixed['interval_us']:
         raise ValueError('Exchange must contain whole physics steps and 0 < poll_us < interval_us')
@@ -275,6 +281,7 @@ def session(output, data, point, calibration=None):
                     max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
                     image_diagnostics=fixed['image_diagnostics'],
                     simulation_time_from_readfile=True,
+                    checkpoint_control=False,
                     startup_timeout_s=fixed['startup_timeout_s'], status_bar=False),
         deploy=dict(guest_root=GUEST_ROOT,
                     install_trees=[dict(source=get_package_prefix('ball_catching_robot'), destination='app')]))
@@ -459,9 +466,10 @@ def native_trial(directory, data, point):
                                  point['rates']['control_hz'])))
 
 
-def gem5_trial(directory, output, data, point, args, calibration, bundle):
+def gem5_trial(directory, output, data, point, args, calibration, bundle,
+               checkpoint_prepare=None, checkpoint_restore=None):
     from ball_catching_sim.scene import generate
-    directory.mkdir()
+    directory.mkdir(parents=True)
     fixed = data['fixed']
     options = {key: fixed[key] for key in ('duration', 'warmup', 'physics_step', 'joint_hz',
                 'camera_position', 'camera_width', 'camera_height', 'cup_radius', 'cup_depth')}
@@ -469,6 +477,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                    camera_hz=point['rates']['camera_hz'], output=str(directory))
     _, robot, _, camera = generate(directory, **options)
     guest_session = session(output, data, point, camera)
+    if checkpoint_prepare:
+        guest_session['bridge']['checkpoint_control'] = True
     guest_session['routes'] = GUEST_ROOT + '/routes.json'
     write_json(directory / 'guest-session.json', guest_session)
     start = directory / 'start-guest.sh'
@@ -487,6 +497,12 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                      gem5_root=str(args.gem5_root), bundle=str(bundle), options=options,
                      rates=point['rates'], routes=str(output / 'routes.json'),
                      fixed=fixed, scripts=str(SCRIPTS))
+    if checkpoint_prepare:
+        if point['pressure'] or point['pattern'] != 'none':
+            raise ValueError('Readiness preparation requires a disabled aggressor')
+        execution['checkpoint_prepare'] = str(checkpoint_prepare)
+    if checkpoint_restore:
+        execution['checkpoint_restore'] = str(checkpoint_restore)
     write_json(directory / 'execution.json', execution)
     command = ['ros2', 'launch', 'ball_catching_sim', 'benchmark.launch.py',
                'execution:=' + str(directory / 'execution.json'), 'output:=' + str(directory)]
@@ -504,6 +520,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
         try:
             while process.poll() is None:
                 now = time.monotonic()
+                if checkpoint_prepare and (directory / 'checkpoint.json').exists():
+                    break
                 failure = launch_failure(directory / 'launch_validation.json')
                 if failure:
                     raise RuntimeError(failure + '; inspect launch_validation.json and ground_truth.csv')
@@ -527,7 +545,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
             failure = launch_failure(directory / 'launch_validation.json')
             if failure:
                 raise RuntimeError(failure + '; inspect launch_validation.json and ground_truth.csv')
-            if not (directory / 'result.json').exists():
+            if not (directory / 'result.json').exists() and not (
+                    checkpoint_prepare and (directory / 'checkpoint.json').is_file()):
                 failure = (launch_failure(directory / 'launch_validation.json')
                            or guest_failure(roi / 'board.pc.com_1.device')
                            or host_failure(directory / 'launch.log'))
@@ -536,10 +555,19 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                 raise RuntimeError('Co-simulation exited without task result; inspect launch.log and guest serial')
         finally:
             stop(process)
+    if checkpoint_prepare:
+        if (directory / 'launch.json').exists():
+            raise RuntimeError('Readiness preparation launched the ball')
+        return
     result = json.loads((directory / 'result.json').read_text())
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
     metrics = memory_metrics(roi, data['peak_gbps'])
+    pressure_warmup = 0
+    if checkpoint_restore:
+        pressure_start = json.loads((roi / 'pressure_start.json').read_text())['tick']
+        measurement_start = json.loads((roi / 'measurement_start.json').read_text())['tick']
+        pressure_warmup = (measurement_start - pressure_start) / 1e12
     write_json(directory / 'benchmark.json', dict(mode='gem5', point=point,
         memory=metrics, hardware=data['hardware'], aggressor=aggressor,
         ramulator_sha256=data['ramulator_sha256'],
@@ -548,6 +576,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
         calibrated_sustainable_gbps=calibration[point['pattern']]['sustainable_gbps'] if point['pressure'] else None,
         peak_gbps=data['peak_gbps'], wall_seconds=time.monotonic() - started,
         telemetry=telemetry,
+        checkpoint=str(checkpoint_restore) if checkpoint_restore else None,
+        pressure_warmup_seconds=pressure_warmup,
+        requested_pressure_warmup_seconds=fixed['pressure_warmup'] if checkpoint_restore else 0,
         measurement_window='launch boundary to final evaluation; boundary quantization applies',
         commands=command_metrics(directory / 'commands.csv', result['launch_time'], result['result_time'],
                                  point['rates']['control_hz'])))
@@ -570,11 +601,24 @@ def main():
                         help='Reuse a frozen calibration set after validating simulator and configuration hashes')
     parser.add_argument('--prepare-only', action='store_true',
                         help='Check artifacts and stage the guest; do not run calibration, gem5 or Gazebo')
+    parser.add_argument('--checkpoint-create', action='store_true',
+                        help='Reach detailed readiness without aggression and freeze reusable checkpoints')
+    parser.add_argument('--checkpoint-from', type=Path,
+                        help='Require compatible readiness checkpoints; never boot a case with KVM')
+    parser.add_argument('--bundle-from', type=Path,
+                        help='Stage the producer\'s exact guest bundle with --prepare-only')
     parser.add_argument('--source-revision', help='Source revision for a frozen export without a Git checkout')
     parser.add_argument('--resume', action='store_true')
     args = parser.parse_args()
     if args.prepare_only and (args.native_preflight or args.calibrate_only):
         parser.error('--prepare-only cannot be combined with native execution or calibration')
+    if (args.checkpoint_create or args.checkpoint_from) and (
+            args.prepare_only or args.calibrate_only or args.native_preflight):
+        parser.error('Checkpoint execution cannot be combined with native/calibration/staging-only modes')
+    if args.checkpoint_create and args.checkpoint_from:
+        parser.error('Cannot create and restore checkpoints together')
+    if args.bundle_from and not args.prepare_only:
+        parser.error('--bundle-from requires --prepare-only')
     data = load_config(args.config, args.cpu_type)
     all_points = plan(data)
     points = all_points
@@ -632,7 +676,10 @@ def main():
         if not args.calibrate_only:
             bundle = output / 'guest.tar.gz'
             if not bundle.exists():
-                bundle = prepare_bundle(output, data, points)
+                if args.bundle_from:
+                    shutil.copy2(args.bundle_from, bundle)
+                else:
+                    bundle = prepare_bundle(output, data, points)
         provenance = dict(gem5_sha256=digest(gem5), kernel_sha256=digest(args.kernel),
             execution_sha256=execution_fingerprint(),
             image=str(args.image), image_size=args.image.stat().st_size,
@@ -682,6 +729,26 @@ def main():
     if args.calibrate_only:
         print(json.dumps(calibration, indent=2))
         return 0
+    from readiness_checkpoint import groups, provenance as checkpoint_provenance, freeze, validate
+    checkpoint_identity = None
+    if args.checkpoint_create or args.checkpoint_from:
+        checkpoint_identity = checkpoint_provenance(gem5, args.kernel, args.image, bundle)
+    if args.checkpoint_create:
+        root = output / 'checkpoints'
+        selected = groups(data, all_points)
+        if (root / 'index.json').is_file():
+            for point in selected.values():
+                validate(root, data, point, checkpoint_identity)
+            return 0
+        for identifier, point in selected.items():
+            directory = root / identifier
+            baseline = dict(point, pattern='none', pressure=0)
+            print('Preparing aggressor-free readiness checkpoint ' + identifier, flush=True)
+            gem5_trial(directory, output, data, baseline, args, calibration, bundle,
+                       checkpoint_prepare=directory)
+        freeze(root, checkpoint_identity, selected)
+        print('Readiness checkpoints ready: ' + str(root), flush=True)
+        return 0
     failed = False
     try:
         for point in points:
@@ -696,7 +763,10 @@ def main():
                 if args.native_preflight:
                     native_trial(directory, data, point)
                 else:
-                    gem5_trial(directory, output, data, point, args, calibration, bundle)
+                    checkpoint = (validate(args.checkpoint_from, data, point, checkpoint_identity)
+                                  if args.checkpoint_from else None)
+                    gem5_trial(directory, output, data, point, args, calibration, bundle,
+                               **({'checkpoint_restore': checkpoint} if checkpoint else {}))
                 point.update(status='complete', trials=[directory.name],
                              config=json.loads((directory / 'experiment.json').read_text()))
                 result = json.loads((directory / 'result.json').read_text())
