@@ -283,6 +283,17 @@ completed cases and queues the others with fresh attempts. There is no coordinat
 gem5/Gazebo/ROS checkpoint system in the existing benchmark, so interrupted cases
 restart from their beginning. Old attempts remain in the result package.
 
+To stop one worker, use its **Stop** button on the machine card or case row.
+Only the selected attempt is terminated; other cases continue and queued cases
+can use the freed slot. Its status stays **Stop pending** until the supervisor
+acknowledges it, including when the machine is offline or the controller restarts.
+The supervisor rejects delayed launch requests for that stopped attempt. Logs
+and partial output are collected normally. A completed result that wins the race
+with a stop request is preserved. Individually stopped cases remain stopped until
+their own **Retry** action starts a fresh attempt; **Retry failed cases** leaves
+them stopped. Once other work finishes, stopped cases hold the experiment queue
+until retried or partial results are accepted.
+
 ## Notifications and results
 
 Set `DISCORD_WEBHOOK_URL` in `.env`, then recreate the controller container. The

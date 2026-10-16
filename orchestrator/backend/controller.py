@@ -19,8 +19,8 @@ from common import Store, atomic_json, digest, event, identifier, source_identit
 from transport import SSH
 from notifications import notification_event
 
-BUSY = {'dispatching', 'running', 'collecting'}
-OCCUPIED = {'dispatching', 'running'}
+BUSY = {'dispatching', 'running', 'stopping', 'collecting'}
+OCCUPIED = {'dispatching', 'running', 'stopping'}
 ACTIVE = {'preparing', 'running', 'stopping', 'needs_attention'}
 
 
@@ -95,6 +95,10 @@ def estimates(experiment, machines, now=None):
         case['eta_basis'] = 'Insufficient data'
         if case['status'] not in BUSY:
             continue
+        if case['status'] == 'stopping':
+            case['eta_basis'] = 'Waiting for worker to acknowledge stop'
+            active_remaining.append(None)
+            continue
         attempt = case['attempts'][-1]
         machine = next((m for m in machines if m['id'] == attempt['machine']), {})
         if not machine.get('online') or (machine.get('seen') and now - machine['seen'] > 30):
@@ -161,12 +165,12 @@ class Controller:
         for experiment in self.store.all('experiments'):
             for case in experiment['cases']:
                 if case['status'] == 'collecting' and case['attempts'][-1]['status'] in {'failed', 'stopped'}:
-                    case['status'] = 'failed'
+                    case['status'] = case['attempts'][-1]['status']
             self.save(experiment)
 
     def submit(self, key, kind, context, operation):
         if key not in self.jobs:
-            pool = self.io_pool if kind in {'collect', 'prepare_collect', 'transfer', 'sdk_transfer'} else self.stop_pool if kind == 'stop' else self.pool
+            pool = self.io_pool if kind in {'collect', 'prepare_collect', 'transfer', 'sdk_transfer'} else self.stop_pool if kind in {'stop', 'stop_case'} else self.pool
             self.jobs[key] = (kind, context, pool.submit(operation))
 
     def close(self):
@@ -195,7 +199,7 @@ class Controller:
         elif kind == 'settings':
             if type(body.get('progress_enabled')) is not bool or type(body.get('progress_interval')) is not int or body['progress_interval'] < 60:
                 raise ValueError('Progress interval must be at least 60 seconds')
-        elif kind not in {'deploy', 'clean_assets', 'stop', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare', 'retry_collection'}:
+        elif kind not in {'deploy', 'clean_assets', 'stop', 'stop_case', 'resume', 'retry', 'accept_partial', 'delete', 'cleanup', 'retry_prepare', 'retry_collection'}:
             raise ValueError('Unknown action')
         key = uuid.uuid4().hex
         self.store.put('commands', key, dict(id=key, kind=kind, body=body, status='pending'))
@@ -240,7 +244,14 @@ class Controller:
             event(self.store, f"Queued {experiment['name']} ({len(experiment['cases'])} cases)")
         else:
             experiment = self.experiment(body['id'])
-            if kind == 'stop':
+            if kind == 'stop_case':
+                if experiment['status'] not in {'preparing', 'running', 'needs_attention'}:
+                    raise ValueError('Experiment is not running')
+                case = next((c for c in experiment['cases'] if c['id'] == body.get('case')), None)
+                if not case or case['status'] not in OCCUPIED or not case['attempts'] or case['attempts'][-1]['id'] != body.get('attempt'):
+                    raise ValueError('The selected attempt is no longer running')
+                case.update(status='stopping', stop_requested=True)
+            elif kind == 'stop':
                 self.sdk_cancellations.setdefault(experiment['id'], threading.Event()).set()
                 for preparation in experiment['preparations'].values():
                     if preparation['status'] == 'copying_sdk':
@@ -258,6 +269,8 @@ class Controller:
                 if experiment.get('remote_cleaned') or experiment.get('results_deleted'):
                     raise ValueError('Results or inputs were deleted; clone this configuration for a new run')
                 for case in experiment['cases']:
+                    case.pop('stop_requested', None)
+                    case.pop('stop_error', None)
                     if case['status'] == 'collecting':
                         case['resume_after_collection'] = True
                     elif case['status'] != 'completed':
@@ -274,7 +287,7 @@ class Controller:
                 if experiment['status'] not in {'running', 'needs_attention'}:
                     raise ValueError('Resume the experiment before retrying cases')
                 for case in experiment['cases']:
-                    if case['status'] == 'failed' and (not body.get('case') or case['id'] == body['case']):
+                    if (case['status'] == 'failed' or (case['status'] == 'stopped' and body.get('case'))) and (not body.get('case') or case['id'] == body['case']):
                         case['status'] = 'queued'
                 experiment['status'] = 'running'
             elif kind == 'retry_collection':
@@ -435,6 +448,8 @@ class Controller:
                 images = result if isinstance(result, dict) else dict(sdk_image_id=result)
                 preparation.update(images, status='pending', phase='Images copied')
                 self.save(experiment)
+        elif kind == 'stop_case':
+            self.ingest(self.machine(context[3]), dict(tasks=[result]))
         elif kind == 'stop':
             if isinstance(result, dict) and 'tasks' in result:
                 self.ingest(self.machine(context[1]), result)
@@ -455,7 +470,7 @@ class Controller:
             attempt['collection_status'] = 'completed'
             attempt.pop('collection_error', None)
             if case['attempts'][-1]['id'] == attempt_id and case['status'] != 'queued':
-                case['status'] = 'completed' if attempt['status'] == 'completed' else 'failed'
+                case['status'] = attempt['status'] if attempt['status'] in {'completed', 'stopped'} else 'failed'
                 if case.pop('resume_after_collection', False) and case['status'] != 'completed':
                     case['status'] = 'queued'
             self.save(experiment)
@@ -474,6 +489,12 @@ class Controller:
         # start/prepare/stop are reconciled from the next authoritative snapshot.
 
     def failed(self, kind, context, error):
+        if kind == 'stop_case':
+            experiment = self.experiment(context[0])
+            case = next(c for c in experiment['cases'] if c['id'] == context[1])
+            if case['attempts'][-1]['id'] == context[2] and case.get('stop_requested'):
+                case['stop_error'] = error
+                self.save(experiment)
         if kind == 'clean_assets':
             machine = self.machine(context)
             machine.update(cleaning=False, cleanup_error=error)
@@ -513,7 +534,7 @@ class Controller:
                     attempt = next(a for a in case['attempts'] if a['id'] == context[2])
                     attempt.update(collection_status='failed', collection_error=error)
                     if case['attempts'][-1]['id'] == attempt['id'] and case['status'] not in {'queued', 'running', 'dispatching'}:
-                        case['status'] = 'collection_failed' if attempt['status'] == 'completed' else 'failed'
+                        case['status'] = 'collection_failed' if attempt['status'] == 'completed' else 'stopped' if attempt['status'] == 'stopped' else 'failed'
                         if case.pop('resume_after_collection', False) and attempt['status'] != 'completed':
                             case['status'] = 'queued'
                 else:
@@ -573,6 +594,9 @@ class Controller:
                         if task['status'] in {'completed', 'failed', 'stopped'}:
                             attempt.update(status=task['status'], finished=task.get('finished', time.time()),
                                 exit_code=task.get('exit_code'), oom=task.get('oom', False))
+                            if case['attempts'][-1]['id'] == attempt['id']:
+                                case.pop('stop_requested', None)
+                                case.pop('stop_error', None)
                             if task['status'] == 'failed' and not attempt.get('failure_notified'):
                                 attempt['failure_notified'] = True
                                 notification_event(self.store, f"{experiment['name']} / {case['id']}: failed on {machine['name']}" +
@@ -580,11 +604,11 @@ class Controller:
                                     experiment=experiment, case=case, attempt=attempt, machine=machine, detail=task.get('error'))
                             if not attempt.get('collected') and attempt.get('collection_status') != 'failed':
                                 if case['attempts'][-1]['id'] == attempt['id'] and case['status'] != 'queued':
-                                    case['status'] = 'collecting' if task['status'] == 'completed' else 'failed'
+                                    case['status'] = 'collecting' if task['status'] == 'completed' else task['status']
                                 self.submit('collect-' + attempt['id'], 'collect', (experiment['id'], case['id'], attempt['id']),
                                     lambda m=machine, e=copy.deepcopy(experiment), c=case['id'], a=copy.deepcopy(attempt): self.collect(m, e, c, a))
-                        elif case['attempts'][-1]['id'] == attempt['id']:
-                            case['status'] = 'running'
+                        elif case['attempts'][-1]['id'] == attempt['id'] and attempt.get('status') not in {'completed', 'failed', 'stopped'}:
+                            case['status'] = 'stopping' if case.get('stop_requested') else 'running'
                             attempt['status'] = 'running'
                             if not attempt.get('start_notified'):
                                 attempt['start_notified'] = True
@@ -685,6 +709,15 @@ class Controller:
 
     def schedule(self, experiment):
         machines = [self.machine(key) for key in experiment['machines']]
+        for case in experiment['cases']:
+            if case.get('stop_requested'):
+                attempt = case['attempts'][-1]
+                machine = self.machine(attempt['machine'])
+                if machine.get('online'):
+                    self.submit('stop-case-' + attempt['id'], 'stop_case',
+                        (experiment['id'], case['id'], attempt['id'], machine['id']),
+                        lambda m=machine, c=case['id'], a=attempt['id'], e=experiment['id']:
+                            self.remote.call(m, 'stop_case', experiment=e, case=c, attempt=a))
         if experiment['status'] == 'stopping':
             pending = []
             for machine in machines:
@@ -773,7 +806,7 @@ class Controller:
             notification_event(self.store, f"{experiment['name']}: completed",
                     title="Experiment completed", experiment=experiment)
         elif not any(c['status'] in BUSY for c in remaining) and (
-                all(c['status'] in {'failed', 'collection_failed'} for c in remaining) or (failed_preparation and not ready)):
+                all(c['status'] in {'failed', 'stopped', 'collection_failed'} for c in remaining) or (failed_preparation and not ready)):
             experiment['status'] = 'needs_attention'
         self.save(experiment)
 

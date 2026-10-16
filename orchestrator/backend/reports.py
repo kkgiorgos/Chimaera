@@ -13,7 +13,8 @@ def build_report(controller, experiment):
     for case in experiment['cases']:
         eligible = [a for a in case['attempts'] if a.get('collected') and a['status'] == 'completed']
         status = {'failed': 'infrastructure_failure', 'stopped': 'interrupted',
-                  'running': 'running', 'dispatching': 'running', 'collecting': 'running'}.get(case['status'], 'pending')
+                  'running': 'running', 'dispatching': 'running', 'stopping': 'running',
+                  'collecting': 'running'}.get(case['status'], 'pending')
         point = dict(case['point'], status=status, trials=[])
         if eligible:
             path = base / 'attempts' / eligible[-1]['id'] / 'suite/dashboard.html'

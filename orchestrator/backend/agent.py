@@ -41,7 +41,7 @@ class Agent:
         self.lock = threading.RLock()
 
     def rpc(self, method, **params):
-        if method not in {'snapshot', 'prepare', 'start', 'stop', 'logs', 'cleanup', 'clean_assets', 'remember_image', 'asset_destination', 'reset_prepare'}:
+        if method not in {'snapshot', 'prepare', 'start', 'stop', 'stop_case', 'logs', 'cleanup', 'clean_assets', 'remember_image', 'asset_destination', 'reset_prepare'}:
             raise ValueError('Unknown supervisor operation')
         with self.lock:
             return getattr(self, method)(**params)
@@ -110,6 +110,9 @@ class Agent:
         return self.store.get('tasks', key)
 
     def ensure_started(self, task):
+        if task['kind'] == 'case' and self.store.get('stopped_attempts', task['id']):
+            self.stop_case(task['experiment'], task['case'], task['id'])
+            return
         try:
             raw = run(['docker', 'inspect', task['container']], text=True, timeout=10)
         except RuntimeError as error:
@@ -134,6 +137,8 @@ class Agent:
         self.check_generation(experiment, generation)
         identifier(case)
         key = identifier(attempt)
+        if self.store.get('stopped_attempts', key):
+            raise ValueError('Attempt was stopped; retry with a fresh attempt')
         existing = self.store.get('tasks', key)
         if existing:
             return existing
@@ -273,6 +278,54 @@ class Agent:
             self.store.put('tasks', task['id'], task)
         return dict(tasks=tasks, stats=stats,
             host=dict(cpus=os.cpu_count(), load=os.getloadavg(), memory=Path('/proc/meminfo').read_text()), time=time.time())
+
+    def stop_case(self, experiment, case, attempt):
+        directory = self.directory(experiment) / 'attempts' / identifier(attempt)
+        identifier(case)
+        task = self.store.get('tasks', attempt)
+        if task and (task['experiment'] != experiment or task['kind'] != 'case' or task['case'] != case):
+            raise ValueError('Attempt does not belong to this case')
+        # Reject a start RPC arriving after this stop, including after a restart.
+        self.store.put('stopped_attempts', attempt, True)
+        if not task:
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / 'worker.log').write_text('Stopped before the worker was launched.\n')
+            task = dict(id=attempt, experiment=experiment, case=case, kind='case',
+                container='chimaera-' + attempt, output=str(directory),
+                status='stopped', finished=time.time())
+        elif task['status'] in {'accepted', 'running'}:
+            try:
+                state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
+            except RuntimeError as error:
+                if 'no such' not in str(error).lower():
+                    raise
+                state = None
+            if state and not state['Running'] and task['status'] == 'running':
+                # Preserve a result that finished before the stop reached us.
+                self.reconcile()
+                return self.store.get('tasks', attempt)
+            if state:
+                try:
+                    run(['docker', 'kill', task['container']], timeout=30)
+                except RuntimeError:
+                    state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
+                    if state['Running']:
+                        raise
+                    self.reconcile()
+                    return self.store.get('tasks', attempt)
+                state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
+                if state['Running']:
+                    raise RuntimeError('Worker is still running after stop')
+            task.update(status='stopped', finished=time.time())
+            directory.mkdir(parents=True, exist_ok=True)
+            try:
+                with (directory / 'worker.log').open('wb') as stream:
+                    subprocess.run(['docker', 'logs', task['container']], stdout=stream,
+                                   stderr=subprocess.STDOUT, timeout=30, check=True)
+            except (OSError, subprocess.SubprocessError) as error:
+                task['log_error'] = str(error)
+        self.store.put('tasks', attempt, task)
+        return task
 
     def stop(self, experiment, generation=0):
         self.directory(experiment)

@@ -31,6 +31,11 @@ class FakeSSH:
             return task
         if method == 'snapshot':
             return dict(tasks=list(self.tasks.values()), stats=[])
+        if method == 'stop_case':
+            task = self.tasks[params['attempt']]
+            if task['status'] == 'running':
+                task['status'] = 'stopped'
+            return copy.deepcopy(task)
         if method == 'stop':
             for task in self.tasks.values():
                 if task['experiment'] == params['experiment']:
@@ -763,3 +768,99 @@ def test_transfer_progress_reaches_state_and_survives_failure(controller):
     controller.save(value)
     state = next(e for e in controller.state()['experiments'] if e['id'] == value['id'])
     assert 'transfer' not in state['preparations']['m1']
+
+
+def running_cases(controller, count=2):
+    value = experiment(controller, count=count)
+    for i, case in enumerate(value['cases']):
+        attempt = dict(id=f'a{i}', machine='m0', status='running', started=1, cpus=1, memory='2g')
+        case.update(status='running', attempts=[attempt])
+        controller.remote.tasks[attempt['id']] = dict(id=attempt['id'], experiment='e1',
+            case=case['id'], kind='case', status='running', output=f'/remote/a{i}')
+    controller.save(value)
+    return value
+
+
+def test_stop_one_case_preserves_other_cases_and_requires_explicit_retry(controller, monkeypatch):
+    monkeypatch.setattr(controller, 'collect', lambda *args: True)
+    running_cases(controller)
+    controller.apply(dict(kind='stop_case', body=dict(id='e1', case='case-000', attempt='a0')))
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    finish_jobs(controller)
+    value = controller.experiment('e1')
+    assert value['cases'][0]['status'] == 'stopped'
+    assert value['cases'][0]['attempts'][0]['collection_status'] == 'completed'
+    assert value['cases'][1]['status'] == 'running'
+    assert controller.remote.tasks['a1']['status'] == 'running'
+    # A stale running snapshot cannot undo an acknowledged stop.
+    stale = dict(controller.remote.tasks['a0'], status='running')
+    controller.ingest(controller.machine('m0'), dict(tasks=[stale]))
+    assert controller.experiment('e1')['cases'][0]['status'] == 'stopped'
+    controller.schedule(controller.experiment('e1'))
+    assert len(controller.experiment('e1')['cases'][0]['attempts']) == 1
+    controller.apply(dict(kind='retry', body=dict(id='e1')))
+    assert controller.experiment('e1')['cases'][0]['status'] == 'stopped'
+    controller.apply(dict(kind='retry', body=dict(id='e1', case='case-000')))
+    assert controller.experiment('e1')['cases'][0]['status'] == 'queued'
+
+
+def test_individual_stop_survives_offline_machine_and_controller_restart(controller, monkeypatch):
+    monkeypatch.setattr(controller, 'collect', lambda *args: True)
+    running_cases(controller, count=1)
+    machine = controller.machine('m0')
+    machine['online'] = False
+    controller.store.put('machines', 'm0', machine)
+    controller.apply(dict(kind='stop_case', body=dict(id='e1', case='case-000', attempt='a0')))
+    controller.schedule(controller.experiment('e1'))
+    assert not any(call[1] == 'stop_case' for call in controller.remote.calls)
+    # Even a running snapshot while the request is pending retains Stop pending.
+    controller.ingest(machine, dict(tasks=[controller.remote.tasks['a0']]))
+    assert controller.experiment('e1')['cases'][0]['status'] == 'stopping'
+    reopened = Controller(ROOT, controller.data, controller.remote)
+    try:
+        monkeypatch.setattr(reopened, 'collect', lambda *args: True)
+        assert reopened.experiment('e1')['cases'][0]['stop_requested']
+        machine['online'] = True
+        reopened.store.put('machines', 'm0', machine)
+        reopened.schedule(reopened.experiment('e1'))
+        finish_jobs(reopened)
+        finish_jobs(reopened)
+        assert reopened.experiment('e1')['cases'][0]['status'] == 'stopped'
+    finally:
+        reopened.close()
+
+
+def test_stopping_last_case_holds_queue_and_rejects_stale_stop_button(controller, monkeypatch):
+    monkeypatch.setattr(controller, 'collect', lambda *args: True)
+    running_cases(controller, count=1)
+    with pytest.raises(ValueError, match='no longer running'):
+        controller.apply(dict(kind='stop_case', body=dict(id='e1', case='case-000', attempt='old')))
+    controller.apply(dict(kind='stop_case', body=dict(id='e1', case='case-000', attempt='a0')))
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    finish_jobs(controller)
+    controller.schedule(controller.experiment('e1'))
+    assert controller.experiment('e1')['status'] == 'needs_attention'
+
+
+def test_individual_stop_preserves_completed_result_racing_with_request(controller, monkeypatch):
+    monkeypatch.setattr(controller, 'collect', lambda *args: True)
+    running_cases(controller, count=1)
+    controller.apply(dict(kind='stop_case', body=dict(id='e1', case='case-000', attempt='a0')))
+    controller.remote.tasks['a0']['status'] = 'completed'
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    finish_jobs(controller)
+    assert controller.experiment('e1')['cases'][0]['status'] == 'completed'
+
+
+def test_stopped_case_keeps_status_if_result_collection_fails(controller):
+    value = running_cases(controller, count=1)
+    value['cases'][0].update(status='stopped')
+    value['cases'][0]['attempts'][0]['status'] = 'stopped'
+    controller.save(value)
+    controller.failed('collect', ('e1', 'case-000', 'a0'), 'download failed')
+    case = controller.experiment('e1')['cases'][0]
+    assert case['status'] == 'stopped'
+    assert case['attempts'][0]['collection_status'] == 'failed'

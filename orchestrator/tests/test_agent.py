@@ -133,3 +133,76 @@ def test_memory_warning_survives_lower_usage_restart_and_completion(tmp_path):
     agent.store.put('tasks', 'a', lower)
     with patch.object(agent, 'reconcile'):
         assert agent.snapshot()['tasks'][0]['memory_warning'] == exceeded['memory_warning']
+
+
+def test_individual_stop_kills_only_selected_container_and_keeps_logs(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    for key in ('a', 'b'):
+        agent.store.put('tasks', key, dict(id=key, experiment='e', case='case-' + key,
+            kind='case', status='running', container='chimaera-' + key,
+            output=str(agent.directory('e') / 'attempts' / key)))
+    with patch('agent.run', side_effect=[json.dumps([dict(State=dict(Running=True))]), b'',
+            json.dumps([dict(State=dict(Running=False))])]) as docker, \
+         patch('agent.subprocess.run') as logs:
+        stopped = agent.rpc('stop_case', experiment='e', case='case-a', attempt='a')
+    assert stopped['status'] == 'stopped'
+    assert (Path(stopped['output']) / 'worker.log').exists()
+    assert docker.call_args_list[1].args[0] == ['docker', 'kill', 'chimaera-a']
+    assert logs.call_args.args[0] == ['docker', 'logs', 'chimaera-a']
+    assert agent.store.get('tasks', 'b')['status'] == 'running'
+    assert agent.stop_case('e', 'case-a', 'a')['status'] == 'stopped'
+
+
+def test_stop_before_dispatch_blocks_late_start_after_restart(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    assert agent.stop_case('e', 'case-a', 'a')['status'] == 'stopped'
+    reopened = Agent(tmp_path, tmp_path / 'data')
+    with patch('agent.run') as docker, pytest.raises(ValueError, match='Attempt was stopped'):
+        reopened.start('e', 'case-a', 'a', 1, '2g')
+    docker.assert_not_called()
+
+
+def test_stop_rejects_attempt_from_another_case(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    agent.store.put('tasks', 'a', dict(id='a', experiment='e', case='case-a', kind='case'))
+    with pytest.raises(ValueError, match='does not belong'):
+        agent.stop_case('other', 'case-a', 'a')
+    assert not agent.store.get('stopped_attempts', 'a')
+
+
+def test_recovery_does_not_launch_accepted_attempt_with_pending_stop(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    task = dict(id='a', experiment='e', case='case-a', kind='case', status='accepted',
+        container='chimaera-a', output=str(agent.directory('e') / 'attempts/a'))
+    agent.store.put('tasks', 'a', task)
+    agent.store.put('stopped_attempts', 'a', True)
+    with patch('agent.run', side_effect=RuntimeError('No such container')) as docker, \
+         patch('agent.subprocess.run'):
+        agent.ensure_started(task)
+    assert docker.call_count == 1
+    assert agent.store.get('tasks', 'a')['status'] == 'stopped'
+
+
+def test_stop_preserves_case_that_already_finished(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    task = dict(id='a', experiment='e', case='case-a', kind='case', status='running',
+        container='chimaera-a', output=str(tmp_path / 'a'))
+    agent.store.put('tasks', 'a', task)
+    def finished():
+        agent.store.put('tasks', 'a', dict(task, status='completed'))
+    with patch('agent.run', return_value=json.dumps([dict(State=dict(Running=False, ExitCode=0))])) as docker, \
+         patch.object(agent, 'reconcile', side_effect=finished):
+        assert agent.stop_case('e', 'case-a', 'a')['status'] == 'completed'
+    assert docker.call_count == 1
+
+
+def test_failed_kill_keeps_attempt_running_for_stop_retry(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    agent.store.put('tasks', 'a', dict(id='a', experiment='e', case='case-a', kind='case',
+        status='running', container='chimaera-a', output=str(tmp_path / 'a')))
+    running = json.dumps([dict(State=dict(Running=True))])
+    with patch('agent.run', side_effect=[running, RuntimeError('kill failed'), running]), \
+         pytest.raises(RuntimeError, match='kill failed'):
+        agent.stop_case('e', 'case-a', 'a')
+    assert agent.store.get('tasks', 'a')['status'] == 'running'
+    assert agent.store.get('stopped_attempts', 'a')

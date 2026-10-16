@@ -17,6 +17,7 @@ export interface Attempt {
 }
 export interface Case {
   id: string; status: string; attempts: Attempt[]; eta_seconds?: number | null; eta_basis?: string;
+  stop_requested?: boolean; stop_error?: string;
   point: { pattern?: string; pressure?: number; [key: string]: unknown };
 }
 export interface Experiment {
