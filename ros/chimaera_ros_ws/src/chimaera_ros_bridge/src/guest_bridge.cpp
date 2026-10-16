@@ -61,8 +61,8 @@ int main(int argc, char ** argv)
         throw std::runtime_error(result.message);
       }
       if (read_time && !time_ready) {
-        // Bootstrap has confirmed the host's CPU switch. The experiment replaces
-        // its already-consumed boot readfile with the exact detailed-time origin.
+        // Bootstrap has established the host timing session. The experiment
+        // replaces its consumed boot readfile with the fixed simulation origin.
         char data[96]{};
         const auto length =
           ops == "instruction" ? m5_read_file(data, 95, 0) : m5_read_file_addr(data, 95, 0);

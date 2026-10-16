@@ -1,4 +1,4 @@
-"""Full-system ball catching: KVM boot followed by a fixed Timing or O3 CPU ROI."""
+"""Full-system ball catching: KVM startup/readiness followed by a fixed Timing or O3 throw ROI."""
 import argparse
 import json
 from pathlib import Path
@@ -66,19 +66,13 @@ if args.instantiate_only:
     print('Full-system configuration instantiated without simulation: ' + json.dumps(record))
     raise SystemExit(0)
 
-def prepare_roi():
+def prepare_clock():
     serial = (Path(m5.options.outdir) / 'board.pc.com_1.device').read_text(errors='replace')
     serial = re.sub(r'\[\s*\d+\.\d+\] [^\r\n]*(?:\r?\n|$)', '', serial)
     counts = re.findall(r'^CHIMAERA_ONLINE_CPUS=(\d+)\r?$', serial, re.MULTILINE)
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
-    processor.switch()
-    cores = processor.get_cores()
-    if len(cores) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in cores):
-        raise RuntimeError('Detailed CPU switch did not select the requested model')
-    (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
-        cpu_type=cpu_type, num_cores=len(cores),
-        simobjects=[core.get_simobject().type for core in cores], tick=m5.curTick()), indent=2) + '\n')
+    # Keep one clock origin across KVM readiness and detailed execution.
     # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile
     # mechanism to give the guest the exact origin used by the timing server.
     boot_file = Path(str(board.readfile))
@@ -88,6 +82,42 @@ def prepare_roi():
     (Path(m5.options.outdir) / 'roi_time_origin.json').write_text(json.dumps({'nanoseconds': origin}) + '\n')
 
 class BallTimingServer(TimingServer):
+    detailed_started = False
+    switch_start_tick = None
+
+    def begin_throw(self):
+        if not self.roi_started or self.finished:
+            raise RuntimeError('Cannot launch outside an active timing session')
+        if self.detailed_started:
+            raise RuntimeError('Detailed throw already started')
+        start = m5.curTick()
+        processor.switch()
+        cores = processor.get_cores()
+        if len(cores) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in cores):
+            raise RuntimeError('Detailed CPU switch did not select the requested model')
+        (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
+            cpu_type=cpu_type, num_cores=len(cores),
+            simobjects=[core.get_simobject().type for core in cores], tick=m5.curTick()), indent=2) + '\n')
+        # KVM can need a few ticks to drain an outstanding MMIO. Charge those
+        # ticks to the next host interval, as with an ordinary step overshoot.
+        self.switch_start_tick = start
+        self.detailed_started = True
+        m5.stats.reset()
+        (Path(m5.options.outdir) / 'measurement_start.json').write_text(
+            json.dumps({'tick': m5.curTick(), 'frequency': 1e12}) + '\n')
+        return f'READY {m5.curTick()}'
+
+    def run_for_ticks(self, ticks):
+        if self.switch_start_tick is None:
+            return super().run_for_ticks(ticks)
+        start = self.switch_start_tick
+        remaining = max(0, start + ticks - m5.curTick())
+        response = super().run_for_ticks(remaining)
+        self.switch_start_tick = None
+        if response.startswith('OK '):
+            return f'OK {start} {m5.curTick()}'
+        return response
+
     def _run_once(self):
         event = super()._run_once()
         if not self.roi_started:
@@ -97,16 +127,13 @@ class BallTimingServer(TimingServer):
         return event
 
     def handle_command(self, line):
-        if line == 'BENCHMARK_RESET':
-            m5.stats.reset()
-            (Path(m5.options.outdir) / 'measurement_start.json').write_text(
-                json.dumps({'tick': m5.curTick(), 'frequency': 1e12}) + '\n')
-            return f'RESET {m5.curTick()}'
+        if line == 'BENCHMARK_BEGIN':
+            return self.begin_throw()
         if line == 'BENCHMARK_DUMP':
             m5.stats.dump()
             return f'DUMP {m5.curTick()}'
         return super().handle_command(line)
 
-timing = BallTimingServer(on_ready=prepare_roi)
+timing = BallTimingServer(on_ready=prepare_clock)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

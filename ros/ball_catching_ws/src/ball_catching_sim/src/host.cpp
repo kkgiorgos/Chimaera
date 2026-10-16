@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "ball_catching_sim/scoring.hpp"
+#include "ball_catching_sim/detailed_start.hpp"
 
 namespace ball_catching
 {
@@ -66,6 +67,8 @@ public:
     score_.emplace(duration_);
     auto_ = sdf->Get<bool>("auto_throw");
     feedbackPeriod_ = 1. / (sdf->HasElement("joint_hz") ? sdf->Get<double>("joint_hz") : 250.);
+    detailedSocket_ = sdf->HasElement("detailed_timing_socket") ?
+      sdf->Get<std::string>("detailed_timing_socket") : "";
     warmup_ = sdf->HasElement("warmup") ? sdf->Get<double>("warmup") : 0.;
     std::istringstream poses(sdf->Get<std::string>("initial_pose"));
     for (auto & q : initialQ_) poses >> q;
@@ -208,6 +211,8 @@ public:
     if (
       !launched_ && readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_ &&
       (requested_ || auto_)) {
+      // No simulator advances while this synchronous switch/reset is pending.
+      beginDetailedThrow(detailedSocket_);
       ballModel_.SetWorldPoseCmd(
         ecm, ignition::math::Pose3d(initial_, ignition::math::Quaterniond::Identity));
       ball_.SetLinearVelocity(ecm, velocity_);
@@ -343,6 +348,7 @@ private:
   double commandTime_{-1}, launchTime_{0}, lastPublish_{-1};
   double feedbackPeriod_{.004}, warmup_{0}, readySince_{-1}, worldTime_{0};
   std::ofstream commands_;
+  std::string detailedSocket_;
   std::ofstream readiness_;
   double lastReadiness_{-1};
   bool loggedReady_{false}, loggedCameras_{false};

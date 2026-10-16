@@ -45,7 +45,14 @@ if(BUILD_GUEST_BRIDGE)
   add_library(chimaera_gem5_clock SHARED src/gem5_clock.cpp)
   target_include_directories(chimaera_gem5_clock PRIVATE ${GEM5_OP_INCLUDE})
   target_link_libraries(chimaera_gem5_clock PRIVATE ${GEM5_M5_LIBRARY})
-  install(TARGETS chimaera_gem5_clock LIBRARY DESTINATION lib)
+  # libm5.a's address stubs use absolute relocations. Build its supported PIC
+  # variant for the clock loaded into robot processes during KVM readiness.
+  enable_language(C ASM)
+  add_library(chimaera_gem5_clock_addr SHARED src/gem5_clock.cpp
+    ${GEM5_MMAP_INCLUDE}/m5_mmap.c ${GEM5_MMAP_INCLUDE}/abi/x86/m5op_addr.S)
+  target_compile_definitions(chimaera_gem5_clock_addr PRIVATE CHIMAERA_CLOCK_ADDRESS M5OP_PIC)
+  target_include_directories(chimaera_gem5_clock_addr PRIVATE ${GEM5_OP_INCLUDE} ${GEM5_MMAP_INCLUDE})
+  install(TARGETS chimaera_gem5_clock chimaera_gem5_clock_addr LIBRARY DESTINATION lib)
   target_include_directories(guest_bridge PRIVATE ${GEM5_OP_INCLUDE} ${GEM5_MMAP_INCLUDE})
   target_link_libraries(guest_bridge PRIVATE ${GEM5_M5_LIBRARY})
 endif()

@@ -247,7 +247,7 @@ def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=F
             'calibration:=' + json.dumps(calibration or {}),
             f'image_age_periods:={image_age_periods}',
             f'image_diagnostics:={str(image_diagnostics).lower()}',
-            'gem5_clock_library:=' + GUEST_ROOT + '/lib/libchimaera_gem5_clock.so',
+            'gem5_clock_library:=' + GUEST_ROOT + '/lib/libchimaera_gem5_clock_addr.so',
             'gem5_time_origin_file:=/tmp/chimaera-sim-time-origin.ns',
             'record_telemetry:=true',
             *[f'{key}:={point["rates"][key]}' for key in ('control_hz', 'planner_hz', 'plan_interval', 'camera_hz')]]
@@ -271,7 +271,7 @@ def session(output, data, point, calibration=None):
                     timing_backend='gazebo', gazebo_world='ball_catching',
                     physics_step_ns=round(fixed['physics_step'] * 1e9),
                     max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
-                    max_pending_messages=16, m5ops='instruction', wait_for_application=True,
+                    max_pending_messages=16, m5ops='address', wait_for_application=True,
                     max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
                     image_diagnostics=fixed['image_diagnostics'],
                     simulation_time_from_readfile=True,
@@ -321,7 +321,7 @@ def prepare_bundle(output, data, points):
     libraries = root / 'lib'
     libraries.mkdir()
     from ament_index_python.packages import get_package_prefix
-    clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock.so'
+    clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock_addr.so'
     shutil.copyfile(clock, libraries / clock.name)
     # RMW is loaded dynamically and absent from application ldd output. Bundle
     # the selected plugin and its dependencies so DDS matches native validation.
@@ -513,7 +513,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle):
                         raise RuntimeError(f'Guest application failed: {failure}; inspect guest serial')
                     next_guest_check = now + 1
                 if not reset and (directory / 'launch.json').exists():
-                    timing_command(timing_socket, 'BENCHMARK_RESET', fixed['wall_timeout_s'])
+                    if not (roi / 'measurement_start.json').exists():
+                        raise RuntimeError('Ball launched before detailed measurement was ready')
                     reset = True
                 if (directory / 'result.json').exists():
                     if not reset:

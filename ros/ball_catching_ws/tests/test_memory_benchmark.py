@@ -388,7 +388,7 @@ def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch
     from chimaera_ros.runner import plan as bridge_plan
     import xml.etree.ElementTree as ET
     prefix = tmp_path / 'bridge'
-    clock = prefix / 'lib/libchimaera_gem5_clock.so'
+    clock = prefix / 'lib/libchimaera_gem5_clock_addr.so'
     clock.parent.mkdir(parents=True)
     clock.write_bytes(b'clock-test-payload')
     middleware = prefix / 'lib/librmw_fastrtps_cpp.so'
@@ -414,7 +414,7 @@ def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch
     bundle = prepare_bundle(output, data, plan(data))
     with tarfile.open(bundle) as archive:
         root = GUEST_ROOT.lstrip('/')
-        assert archive.extractfile(root + '/lib/libchimaera_gem5_clock.so').read() == clock.read_bytes()
+        assert archive.extractfile(root + '/lib/libchimaera_gem5_clock_addr.so').read() == clock.read_bytes()
         assert archive.extractfile(root + '/lib/librmw_fastrtps_cpp.so').read() == middleware.read_bytes()
         assert archive.extractfile(root + '/lib/libtest.so').read() == dependency.read_bytes()
         assert b'rm -f /tmp/chimaera-sim-time-origin.ns' in archive.extractfile(root + '/guest_start').read()

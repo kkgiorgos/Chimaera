@@ -43,12 +43,14 @@ are discarded. Frames already in flight cannot be replaced or recalled. Both
 images must have the same timestamp; independently selecting each camera's latest
 image would risk losing stereo correspondence.
 
-Guest age checks use `m5_rpns()` relative to the exact detailed-simulation origin,
-not delayed `/clock` callbacks or host wall time. After CPU switching, the suite
+Guest age checks use `m5_rpns()` relative to the fixed coupling origin,
+not delayed `/clock` callbacks or host wall time. At workbegin, the suite
 replaces its already-consumed boot readfile with that origin. The guest bridge
-reads it after bootstrap confirms detailed execution and publishes a small local
+reads it after bootstrap establishes the timing session and publishes a small local
 origin file. An optional clock library lets perception read the same gem5 clock
-without introducing simulator instructions into native execution. Native checks
+without introducing simulator operations into native execution. The ball-catching
+guest uses address-based m5 operations and `libchimaera_gem5_clock_addr.so`, which
+work under both KVM and the detailed CPU. Native checks
 use ROS simulation time. Image delivery fails closed until this clock is ready.
 Readiness reflects capture age, so stale arrivals cannot falsely refresh it.
 
@@ -74,6 +76,28 @@ and readiness precede that window. Extra continuous-ready warmup defaults to
 zero; `fixed.warmup` can add a hold if an experiment needs one. The separate
 twelve-hour wall-time limit is unchanged. Both duration and the Ramulator configuration remain
 customizable in the experiment JSON.
+
+The host evaluates the same arm, fresh-camera and continuous-ready hold gates
+while coupled stepping still uses KVM. Immediately before applying launch pose
+and velocity, it sends `BENCHMARK_BEGIN` to the paused gem5 timing server and
+waits for acknowledgement. The server switches to the selected detailed CPU,
+verifies its model/core count, resets statistics and saves
+`gem5/measurement_start.json` before replying. A failed switch prevents launch.
+The serial Gazebo controller has finished its guest step before this physics
+callback, so the barrier does not overlap a pending gem5 step. Any KVM drain ticks are charged to the next host interval rather than adding
+an extra interval. The origin stays fixed across the switch; image ages, joint/command timestamps and scoring remain
+on the same timeline. The runner no longer resets statistics asynchronously
+after observing `launch.json`.
+
+All postlaunch computation uses the detailed CPU, and the physics step,
+readiness tolerances, frame-freshness rules, trajectory and scoring are unchanged.
+KVM does not warm the detailed caches or O3 predictor. This defines a cold
+microarchitectural state at launch; it does not guarantee identical outcomes to
+the former detailed-startup runs. Use fresh suites for comparisons with this
+protocol, and validate catch/miss outcomes in full-system runs before claiming
+numerical equivalence. Native launches leave the timing socket unset and need
+no gem5 barrier. Rebuild `chimaera_ros_bridge` and `ball_catching_sim`, then stage
+a fresh guest bundle so the address-compatible clock is included.
 
 The preset uses 0.5 ms physics/exchange intervals, 100 us guest polling and fixed
 1 kHz joint feedback. The experiment owns these settings, so every point uses
@@ -126,7 +150,7 @@ Omit `--case` to run the full 12-point preset. Native Chimaera sessions run
 serially because their data sockets are fixed. `--image`, `--kernel`,
 `--gem5-root` and `--config` override local paths. The default artifacts are
 `gem5/resources/x86-ubuntu-22.04-ros-humble.img` and
-`gem5/resources/x86-linux-kernel-5.15.180`. KVM is used for boot only; measurement
+`gem5/resources/x86-linux-kernel-5.15.180`. KVM is used for boot, arm/camera readiness and any configured prelaunch hold; measurement
 uses the fixed `hardware.cpu_type` (`timing` by default, or `o3`). The guest overlay is packaged with runtime libraries and
 injected during boot into gem5's COW disk overlay. The original image remains
 read-only; no offline mount or deployment is necessary.
@@ -190,7 +214,7 @@ the user's run; native qualification is a feasibility check.
 
 Current presets allow twelve wall hours per attempt. The bridge's separate
 15-minute startup deadline covers connecting to gem5 and local ROS routes; it
-does not cap robot readiness after detailed simulation begins. Running processes
+does not cap robot readiness during coupled KVM startup. Running processes
 load their limits at startup. Existing prepared directories keep their frozen
 budgets; an increased limit requires a fresh directory and a restarted run.
 The original `timing-validation-480-dds8` directory therefore retains its
@@ -272,7 +296,7 @@ This comparison isolates CPU execution behaviour before adding an aggressor.
 Both runs use `case-003`: the fixed 3 m/s loft, 90/30/250 Hz camera/planner/control,
 640×480 RGB stereo, a two-camera-period freshness limit, four 3 GHz cores,
 identical caches and dual-channel DDR4. KVM still boots the same Ubuntu 22.04 / ROS
-Humble image, then switches to the requested detailed model at workbegin. CPU
+Humble image, then switches to the requested detailed model at the throw boundary. CPU
 selection is included in configuration identity and resume checks. This is a
 comparison of gem5 models, not a calibrated claim about a particular PC.
 

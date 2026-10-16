@@ -150,3 +150,11 @@ simulation assumptions, not a hardware validation. See the
 [cup design](../../docs/ball-catching-design.md),
 [recorded validation](../../docs/ball-catching-validation.md), and
 [home, braking, and timing reference](../../docs/ball-cup-home-braking.md).
+
+For gem5 memory experiments, boot and arm/camera readiness run on KVM. The host
+waits for a confirmed detailed-CPU switch and statistics reset immediately before
+launching the ball. The simulation clock remains continuous across the switch;
+the launch trajectory, freshness rules and scoring stay the same. Rebuild both
+`chimaera_ros_bridge` and `ball_catching_sim` and prepare a fresh suite/bundle.
+See [the experiment protocol](../../docs/ball-catching-memory-contention.md)
+for the cold-cache launch condition and validation limits.

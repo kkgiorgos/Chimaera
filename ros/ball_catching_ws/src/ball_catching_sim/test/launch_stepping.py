@@ -10,7 +10,9 @@ import math
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
+import threading
 import time
 import xml.etree.ElementTree as ET
 
@@ -28,9 +30,39 @@ VELOCITY = [-3 / math.sqrt(5), 0., 6 / math.sqrt(5)]
 
 def check(root, plugin_directory, mode, require_validation):
     root.mkdir(parents=True)
+    barrier = mode == 'detailed'
+    endpoint = f'/tmp/ball-launch-{os.getpid()}.sock' if barrier else ''
+    replies = []
+    server = None
+    if barrier:
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(endpoint)
+        server.listen(1)
+        server.settimeout(20)
+        def acknowledge():
+            try:
+                with server.accept()[0] as connection:
+                    command = bytearray()
+                    while not command.endswith(b'\n'):
+                        chunk = connection.recv(1)
+                        if not chunk:
+                            raise RuntimeError('Host disconnected before requesting the switch')
+                        command.extend(chunk)
+                    assert command == b'BENCHMARK_BEGIN\n'
+                    assert not (root / 'launch.json').exists()
+                    # Make the host wait at the physics boundary for the switch.
+                    time.sleep(.05)
+                    assert not (root / 'launch.json').exists()
+                    replies.append('ready')
+                    connection.sendall(b'READY 123000\n')
+            except Exception as error:
+                replies.append(error)
+        worker = threading.Thread(target=acknowledge, daemon=True)
+        worker.start()
     world, _, _, _ = generate(root, launch_position=POSITION,
         launch_direction=[-1., 0., 2.], launch_speed=3., physics_step=STEP,
-        joint_hz=1 / STEP, warmup=.002, duration=.025, output=str(root))
+        joint_hz=1 / STEP, warmup=.002, duration=.025, output=str(root),
+        detailed_timing_socket=endpoint)
     tree = ET.parse(world)
     scene = tree.getroot().find('world')
     # Rendering is irrelevant to a one-shot physics command regression.
@@ -113,6 +145,12 @@ def check(root, plugin_directory, mode, require_validation):
                 os.killpg(process.pid, signal.SIGTERM)
                 process.wait(timeout=5)
             node.destroy_node()
+            if server:
+                server.close()
+                worker.join(timeout=1)
+                Path(endpoint).unlink(missing_ok=True)
+        if barrier:
+            assert replies == ['ready'], replies
 
     if mode == 'blocked':
         validation = json.loads((root / 'launch_validation.json').read_text())
@@ -157,7 +195,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--plugin-dir', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--mode', action='append', choices=('continuous', 'batch', 'step', 'blocked'))
+    parser.add_argument('--mode', action='append', choices=('continuous', 'batch', 'step', 'blocked', 'detailed'))
     parser.add_argument('--require-validation', action='store_true')
     args = parser.parse_args()
     os.environ['ROS_DOMAIN_ID'] = '197'
@@ -166,7 +204,7 @@ def main():
     rclpy.init()
     try:
         records = [check(root / mode, args.plugin_dir.resolve(), mode, args.require_validation)
-                   for mode in args.mode or ('continuous', 'batch', 'step', 'blocked')]
+                   for mode in args.mode or ('continuous', 'batch', 'step', 'blocked', 'detailed')]
     finally:
         rclpy.shutdown()
     (root / 'summary.json').write_text(json.dumps(records, indent=2) + '\n')

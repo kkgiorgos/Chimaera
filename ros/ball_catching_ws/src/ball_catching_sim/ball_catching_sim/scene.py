@@ -93,7 +93,7 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
              camera_hz=90.0, camera_width=640, camera_height=480,
              physics_step=0.001, cup_radius=0.12, cup_depth=0.14,
              auto_throw=True, duration=1.50, output='', camera_position=(-.65, 0., 1.),
-             joint_hz=250., warmup=0.):
+             joint_hz=250., warmup=0., detailed_timing_socket=''):
     initial_pose = home_pose() if initial_pose is None else initial_pose
     if len(initial_pose) != 7 or not all(math.isfinite(x) for x in initial_pose):
         raise ValueError('initial_pose must contain seven finite joint angles')
@@ -219,7 +219,8 @@ def generate(directory, *, initial_pose=None, launch_position=(1.8, 0, 1.6),
                             launch_velocity=numbers(velocity),
                             cup_radius=cup_radius, cup_depth=cup_depth,
                             auto_throw=str(auto_throw).lower(), duration=duration,
-                            output=output, joint_hz=joint_hz, warmup=warmup).items():
+                            output=output, joint_hz=joint_hz, warmup=warmup,
+                            detailed_timing_socket=detailed_timing_socket).items():
         child(plugin, name, value)
     path = directory / 'world.sdf'
     path.write_text(ET.tostring(sdf, encoding='unicode'))

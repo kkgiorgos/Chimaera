@@ -24,6 +24,7 @@ def start(context):
     options = {**execution['options'], **execution['rates'], 'robot': False,
                'image_age_periods': execution['fixed']['image_age_periods'],
                'image_diagnostics': execution['fixed'].get('image_diagnostics', False),
+               'detailed_timing_socket': '/tmp/chimaera_time.sock',
                'paused': True, 'gui': False, 'partition': 'ball-memory-suite',
                'transport_ip': '127.0.0.1'}
     options.pop('name', None)
