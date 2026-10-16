@@ -11,6 +11,7 @@ export interface Attempt {
   id: string; machine: string; started: number; finished?: number; status: string;
   cpus: number; memory: string; collected?: boolean; oom?: boolean; exit_code?: number;
   collection_status?: string; collection_error?: string;
+  memory_budget_bytes?: number; memory_peak_bytes?: number; memory_warning?: string;
   progress?: { phase?: string; average_speed?: number; simulated_seconds?: number;
     throw_percent?: number; outcome?: string; last_update_age_seconds?: number };
 }

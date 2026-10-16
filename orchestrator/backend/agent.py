@@ -21,6 +21,19 @@ DATA = ROOT / '.chimaera-orchestrator'
 IMAGE = 'chimaera-supervisor:local'
 
 
+def memory_bytes(value):
+    """Parse configured Docker sizes and human-readable docker stats sizes."""
+    match = re.fullmatch(r'\s*(\d+(?:\.\d+)?)\s*(b|[kmg](?:i?b)?)?\s*', value, re.I)
+    if not match:
+        raise ValueError('Invalid memory size: ' + value)
+    unit = (match[2] or '').lower()
+    power = {'': 0, 'b': 0, 'k': 1, 'm': 2, 'g': 3}.get(unit)
+    if power is None:
+        power = {'k': 1, 'm': 2, 'g': 3}[unit[0]]
+    base = 1024 if len(unit) <= 1 or 'i' in unit else 1000
+    return int(float(match[1]) * base ** power)
+
+
 class Agent:
     def __init__(self, root=ROOT, data=DATA):
         self.root, self.data = Path(root), Path(data)
@@ -136,9 +149,15 @@ class Agent:
         output = directory / 'attempts' / key
         output.mkdir(parents=True, exist_ok=True)
         command = runner.command(config, job, output, config['image'], 'chimaera-' + key)
+        # Orchestrated cases may exceed their RAM budget without losing a run.
+        # Keep standalone runner hard limits unchanged.
+        command[command.index('--memory')] = '--memory-reservation'
+        swap = command.index('--memory-swap')
+        del command[swap:swap + 2]
         command.remove('--rm')
         command[2:2] = ['-d', '--label', 'chimaera.experiment=' + experiment]
-        return self.launch(key, experiment, 'case', command, output, case=case)
+        return self.launch(key, experiment, 'case', command, output, case=case,
+                           memory_budget_bytes=memory_bytes(memory))
 
     def reconcile(self):
         for task in self.store.all('tasks'):
@@ -234,7 +253,25 @@ class Agent:
             stats = run(['docker', 'stats', '--no-stream', '--format', '{{json .}}', *containers], text=True, timeout=15) if containers else ''
         except (RuntimeError, OSError, subprocess.SubprocessError):
             stats = ''
-        return dict(tasks=tasks, stats=[json.loads(line) for line in stats.splitlines()],
+        stats = [json.loads(line) for line in stats.splitlines()]
+        by_name = {item['Name']: item for item in stats}
+        for task in tasks:
+            sample = by_name.get(task['container'])
+            if task['kind'] != 'case' or not sample or not task.get('memory_budget_bytes'):
+                continue
+            try:
+                used = memory_bytes(sample['MemUsage'].split('/', 1)[0])
+            except (ValueError, KeyError):
+                continue
+            task['memory_peak_bytes'] = max(task.get('memory_peak_bytes', 0), used)
+            if task['memory_peak_bytes'] > task['memory_budget_bytes']:
+                task['memory_warning'] = (
+                    f"RAM budget exceeded: observed {task['memory_peak_bytes'] / 1024**3:.2f} GiB "
+                    f"against {task['memory_budget_bytes'] / 1024**3:.2f} GiB configured. "
+                    'Worker may continue above budget; increase RAM per worker or reduce '
+                    'worker count for future runs.')
+            self.store.put('tasks', task['id'], task)
+        return dict(tasks=tasks, stats=stats,
             host=dict(cpus=os.cpu_count(), load=os.getloadavg(), memory=Path('/proc/meminfo').read_text()), time=time.time())
 
     def stop(self, experiment, generation=0):

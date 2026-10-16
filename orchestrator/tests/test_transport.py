@@ -8,6 +8,42 @@ import pytest
 from transport import SSH
 
 
+@pytest.mark.parametrize('calibration_present', [False, True])
+def test_case_collection_skips_container_only_calibration_link(tmp_path, calibration_present):
+    import shlex
+    from controller import safe_extract
+
+    output = tmp_path / 'attempt'
+    suite = output / 'suite'
+    suite.mkdir(parents=True)
+    target = tmp_path / 'worker-assets/calibration'
+    if calibration_present:
+        target.mkdir(parents=True)
+        (target / 'calibration.json').write_text('shared calibration')
+    (suite / 'calibration').symlink_to(target, target_is_directory=True)
+    (suite / 'guest.tar.gz').write_bytes(b'large guest input')
+    (suite / 'result.json').write_text('{"success": false}')
+    (output / 'worker.log').write_text('completed')
+    ssh = SSH()
+    ssh.base = lambda machine: ['bash', '-c']
+    real_popen = subprocess.Popen
+
+    def local_tar(argv, **kwargs):
+        command = shlex.split(argv[-1])
+        assert command[:4] == ['docker', 'exec', 'chimaera-supervisor', 'tar']
+        return real_popen(command[3:], **kwargs)
+
+    archive = tmp_path / 'results.tar.gz'
+    with patch('transport.subprocess.Popen', side_effect=local_tar):
+        ssh.fetch({}, str(output), archive)
+    extracted = tmp_path / 'extracted'
+    safe_extract(archive, extracted)
+    assert (extracted / 'suite/result.json').read_text() == '{"success": false}'
+    assert (extracted / 'worker.log').read_text() == 'completed'
+    assert not (extracted / 'suite/calibration').exists()
+    assert not (extracted / 'suite/guest.tar.gz').exists()
+
+
 def test_deleting_experiment_interrupts_ssh_fetch_and_reaps_process(tmp_path):
     ssh = SSH()
     cancelled = threading.Event()

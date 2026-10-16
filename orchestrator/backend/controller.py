@@ -553,6 +553,13 @@ class Controller:
                         if not attempt:
                             continue
                         attempt.update(progress=task.get('progress', {}), remote_output=task['output'])
+                        for field in ('memory_budget_bytes', 'memory_peak_bytes', 'memory_warning'):
+                            if field in task:
+                                attempt[field] = task[field]
+                        if attempt.get('memory_warning') and not attempt.get('memory_warning_notified'):
+                            attempt['memory_warning_notified'] = True
+                            event(self.store, f"{experiment['name']} / {case['id']} on {machine['name']}: "
+                                + attempt['memory_warning'], 'warning', notify=True)
                         if task['status'] in {'completed', 'failed', 'stopped'}:
                             attempt.update(status=task['status'], finished=task.get('finished', time.time()),
                                 exit_code=task.get('exit_code'), oom=task.get('oom', False))

@@ -143,6 +143,8 @@ main { min-width: 0; padding: 0 36px 50px; max-width: 1800px; width: 100%; margi
 main > .banner { border-radius: 6px; margin-top: 15px; }
 .banner.danger { background: rgb(var(--ctp-red) / .09); color: rgb(var(--ctp-red)); border: 1px solid rgb(var(--ctp-red) / .2); }
 .banner.warning { background: rgb(var(--ctp-yellow) / .07); color: rgb(var(--ctp-yellow)); }
+.warning-text { color: rgb(var(--ctp-yellow)) !important; }
+.activity-row.warning .activity-dot { background: rgb(var(--ctp-yellow)); }
 .danger-text { color: rgb(var(--ctp-red)) !important; }
 .empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 45px 25px; border: 1px dashed rgb(var(--ctp-surface1)); border-radius: 8px; width: 100%; }
 .empty-symbol { color: rgb(var(--ctp-accent)); margin-bottom: 16px; }

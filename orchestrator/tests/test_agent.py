@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent import Agent
+from agent import Agent, memory_bytes
 
 
 def test_stop_generation_blocks_late_dispatch(tmp_path):
@@ -83,3 +83,53 @@ def test_retry_preparation_tolerates_already_removed_container(tmp_path):
     with patch('agent.run', side_effect=RuntimeError('Error: No such container: removed')):
         agent.reset_prepare('e')
     assert agent.store.get('tasks', 'e-prepare') is None
+
+
+@pytest.mark.parametrize('size,expected', [('2g', 2 * 1024**3), ('512M', 512 * 1024**2),
+    ('2.25GiB', int(2.25 * 1024**3)), ('900MB', 900000000), ('128B', 128)])
+def test_memory_sizes(size, expected):
+    assert memory_bytes(size) == expected
+
+
+def test_case_launch_uses_soft_memory_budget(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    agent = Agent(root, tmp_path / 'data')
+    directory = agent.directory('e')
+    (directory / 'inputs').mkdir(parents=True)
+    (directory / 'ready.json').write_text('{}')
+    (directory / 'inputs/runner.json').write_text(json.dumps(dict(
+        image='test:local', command=['true'], jobs=[dict(name='case-000')],
+        mounts=[], devices=[], cpus=1, memory='2g')))
+    with patch('agent.run', side_effect=[RuntimeError('No such container'), b'created']):
+        task = agent.start('e', 'case-000', 'a', 1, '2g')
+    argv = task['command']
+    assert argv[argv.index('--memory-reservation') + 1] == '2g'
+    assert '--memory' not in argv
+    assert '--memory-swap' not in argv
+    assert task['memory_budget_bytes'] == 2 * 1024**3
+
+
+def test_memory_warning_survives_lower_usage_restart_and_completion(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    agent = Agent(root, tmp_path / 'data')
+    agent.store.put('tasks', 'a', dict(id='a', case='case-000', experiment='e', kind='case',
+        status='running', container='chimaera-a', output=str(tmp_path / 'output'),
+        memory_budget_bytes=2 * 1024**3))
+
+    def snapshot(usage):
+        with patch.object(agent, 'reconcile'), patch('agent.run', return_value=json.dumps(
+                dict(Name='chimaera-a', MemUsage=usage + ' / 32GiB'))):
+            return agent.snapshot()['tasks'][0]
+
+    assert 'memory_warning' not in snapshot('1.5GiB')
+    exceeded = snapshot('2.5GiB')
+    assert exceeded['status'] == 'running'
+    assert 'increase RAM' in exceeded['memory_warning']
+    agent = Agent(root, tmp_path / 'data')
+    lower = snapshot('1.5GiB')
+    assert lower['memory_peak_bytes'] == int(2.5 * 1024**3)
+    assert lower['memory_warning'] == exceeded['memory_warning']
+    lower['status'] = 'completed'
+    agent.store.put('tasks', 'a', lower)
+    with patch.object(agent, 'reconcile'):
+        assert agent.snapshot()['tasks'][0]['memory_warning'] == exceeded['memory_warning']

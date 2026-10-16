@@ -37,9 +37,12 @@ class SSH:
         return result['result']
 
     def fetch(self, machine, path, destination, cancel=None):
-        # tar streams over SSH; extraction and path/link checks happen locally.
+        # Calibration is already frozen in the experiment's calibration.json.
+        # The per-case link targets /assets inside the worker, not the supervisor.
+        # Do not dereference that link (including for existing failed attempts).
         command = shlex.join(['docker', 'exec', 'chimaera-supervisor', 'tar',
                               '-C', path, '--exclude=./suite/guest.tar.gz',
+                              '--exclude=./suite/calibration',
                               '-chSzf', '-', '.'])
         if cancel is not None and cancel.is_set():
             raise RuntimeError('Result collection cancelled')

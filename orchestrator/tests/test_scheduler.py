@@ -77,6 +77,31 @@ def finish_jobs(controller):
                 controller.failed(kind, context, str(error))
 
 
+def test_memory_budget_warning_is_persisted_and_notified_once(controller):
+    value = experiment(controller, count=1)
+    value['cases'][0].update(status='running', attempts=[dict(id='a', machine='m0', status='running')])
+    controller.save(value)
+    task = dict(id='a', experiment='e1', kind='case', status='running', output='/remote/a',
+                memory_budget_bytes=2 * 1024**3, memory_peak_bytes=3 * 1024**3,
+                memory_warning='RAM budget exceeded; increase RAM for future runs.')
+    machine = controller.machine('m0')
+    controller.ingest(machine, dict(tasks=[task]))
+    controller.ingest(machine, dict(tasks=[task]))
+    attempt = controller.experiment('e1')['cases'][0]['attempts'][0]
+    assert attempt['status'] == 'running'
+    assert attempt['memory_peak_bytes'] == 3 * 1024**3
+    assert attempt['memory_warning'] == task['memory_warning']
+    warnings = [e for e in controller.store.all('events') if e['level'] == 'warning']
+    assert len(warnings) == 1
+    assert warnings[0]['notify']
+    assert 'Machine 0' in warnings[0]['message']
+    task.pop('memory_warning')
+    task.pop('memory_peak_bytes')
+    controller.ingest(machine, dict(tasks=[task]))
+    assert controller.experiment('e1')['cases'][0]['attempts'][0]['memory_warning']
+    assert len([e for e in controller.store.all('events') if e['level'] == 'warning']) == 1
+
+
 def test_dynamic_dispatch_fills_all_hosts(controller):
     value = experiment(controller)
     controller.schedule(value)

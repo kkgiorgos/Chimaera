@@ -112,8 +112,18 @@ controller, redeploy supervisors, and queue a new experiment. Redeployment and
 retry do not refresh an existing experiment's frozen identity. Keep cached images;
 matching build inputs can reuse them in the new experiment.
 
-CPU settings use Docker quotas, not exclusive core pinning. You choose worker
-counts and resource limits; there is no tuning or automatic overcommit policy.
+CPU settings use Docker quotas, not exclusive core pinning. RAM per worker is a
+soft budget (`--memory-reservation`), with no Docker hard memory or swap limit.
+Workers can exceed it instead of being killed at the configured size. The
+supervisor samples Docker memory usage, retains the highest observed usage, and
+warns in the case table, activity feed, and configured Discord notifications once
+per attempt when usage exceeds the budget. Warnings persist after completion and
+controller/supervisor restarts. Peaks between samples may be missed. Increase RAM
+per worker or reduce worker count for future runs when warnings appear. Host-wide
+memory exhaustion can still cause an OS kill; a soft budget does not reserve
+physical RAM or prevent overcommit. Standalone container runners retain their hard
+limits. Existing containers keep their original limits until a fresh attempt.
+You choose worker counts and CPU quotas; there is no automatic tuning policy.
 Changes to worker count/size apply to future assignments. Existing cases retain
 their launch limits. Connection/repository/asset paths cannot change during an
 active experiment. Build parallelism is separate from case worker limits.
@@ -252,6 +262,12 @@ A failed case notifies Discord while other cases continue. Catch and miss both
 count as successful benchmark results. At the end, failures hold the experiment
 queue until you **Retry failed cases** or **Accept partial results**. Preparation
 failures have separate log and manual retry controls.
+
+Case downloads exclude the shared `suite/calibration` link, whose target exists
+only inside the worker container. The frozen calibration is included separately
+in the experiment's `calibration.json`; per-case guest input bundles are also
+excluded. This collection policy applies to existing attempts, so **Retry
+collection** can recover their results without rerunning simulations.
 
 Case execution and collection are separate states. A failed SSH download or missing
 output directory is marked **Result collection failed**, with the error visible in
