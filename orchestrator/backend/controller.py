@@ -17,6 +17,7 @@ import uuid
 
 from common import Store, atomic_json, digest, event, identifier, source_identity
 from transport import SSH
+from notifications import notification_event
 
 BUSY = {'dispatching', 'running', 'collecting'}
 OCCUPIED = {'dispatching', 'running'}
@@ -302,7 +303,8 @@ class Controller:
                 if experiment['status'] != 'needs_attention' or any(c['status'] in BUSY for c in experiment['cases']):
                     raise ValueError('Wait for active cases to finish before accepting partial results')
                 experiment.update(status='partial', finished=time.time())
-                event(self.store, f"{experiment['name']}: partial results accepted", notify=True)
+                notification_event(self.store, f"{experiment['name']}: partial results accepted",
+                    title="Partial results accepted", experiment=experiment)
             elif kind in {'delete', 'cleanup'}:
                 if kind == 'delete':
                     executing = any(c['status'] in OCCUPIED for c in experiment['cases'])
@@ -457,8 +459,9 @@ class Controller:
                 if case.pop('resume_after_collection', False) and case['status'] != 'completed':
                     case['status'] = 'queued'
             self.save(experiment)
-            event(self.store, f"{experiment['name']} / {case_id}: {case['status']}",
-                  'error' if case['status'] == 'failed' else 'info', notify=True)
+            notification_event(self.store, f"{experiment['name']} / {case_id}: {case['status']}",
+                  'error' if case['status'] == 'failed' else 'info', title="Case results collected",
+                  experiment=experiment, case=case, attempt=attempt, machine=self.machine(attempt['machine']))
         elif kind == 'prepare_collect':
             experiment = self.experiment(context[0])
             if experiment.get('results_deleted'):
@@ -484,7 +487,9 @@ class Controller:
                 machine['deploying'] = False
             self.store.put('machines', context, machine)
             if was_online or kind == 'deploy':
-                event(self.store, f"{machine['name']}: {error}", 'error', notify=True)
+                notification_event(self.store, f"{machine['name']}: {error}", 'error',
+                    title="Machine unreachable" if kind == 'poll' else "Supervisor deployment failed",
+                    machine=machine, detail=error)
         else:
             if kind == 'sdk_transfer':
                 experiment = self.experiment(context[0])
@@ -516,7 +521,9 @@ class Controller:
                 self.save(experiment)
             marker = f'{kind}-{context}-{error}'
             if not self.store.get('errors', marker):
-                event(self.store, f'{kind}: {error}', 'error', notify=True)
+                notification_event(self.store, f'{kind}: {error}', 'error',
+                    title=f'{kind.replace("_", " ").title()} failed', detail=error,
+                    experiment=self.experiment(context[0]) if kind in {'sdk_transfer', 'collect', 'prepare_collect', 'stop', 'stop_case', 'prepare', 'reset', 'cleanup'} else None)
                 self.store.put('errors', marker, True)
 
     def ingest(self, machine, snapshot):
@@ -545,7 +552,9 @@ class Controller:
                         # A persistent marker is kept separately because snapshots are repeatedly ingested.
                         marker = experiment['id'] + '-' + task['id'] + '-' + str(task.get('started')) + '-failure'
                         if not self.store.get('markers', marker):
-                            event(self.store, f"{experiment['name']}: preparation failed on {machine['name']}", 'error', notify=True)
+                            notification_event(self.store, f"{experiment['name']}: preparation failed on {machine['name']}", 'error',
+                                title="Preparation failed", experiment=experiment, machine=machine,
+                                detail=task.get('error') or task.get('phase'))
                             self.store.put('markers', marker, True)
                 else:
                     for case in experiment['cases']:
@@ -558,15 +567,17 @@ class Controller:
                                 attempt[field] = task[field]
                         if attempt.get('memory_warning') and not attempt.get('memory_warning_notified'):
                             attempt['memory_warning_notified'] = True
-                            event(self.store, f"{experiment['name']} / {case['id']} on {machine['name']}: "
-                                + attempt['memory_warning'], 'warning', notify=True)
+                            notification_event(self.store, f"{experiment['name']} / {case['id']} on {machine['name']}: "
+                                + attempt['memory_warning'], 'warning', title="Worker memory warning",
+                                experiment=experiment, case=case, attempt=attempt, machine=machine, detail=attempt['memory_warning'])
                         if task['status'] in {'completed', 'failed', 'stopped'}:
                             attempt.update(status=task['status'], finished=task.get('finished', time.time()),
                                 exit_code=task.get('exit_code'), oom=task.get('oom', False))
                             if task['status'] == 'failed' and not attempt.get('failure_notified'):
                                 attempt['failure_notified'] = True
-                                event(self.store, f"{experiment['name']} / {case['id']}: failed on {machine['name']}" +
-                                    (' (memory limit exceeded)' if task.get('oom') else ''), 'error', notify=True)
+                                notification_event(self.store, f"{experiment['name']} / {case['id']}: failed on {machine['name']}" +
+                                    (' (memory limit exceeded)' if task.get('oom') else ''), 'error', title="Case failed",
+                                    experiment=experiment, case=case, attempt=attempt, machine=machine, detail=task.get('error'))
                             if not attempt.get('collected') and attempt.get('collection_status') != 'failed':
                                 if case['attempts'][-1]['id'] == attempt['id'] and case['status'] != 'queued':
                                     case['status'] = 'collecting' if task['status'] == 'completed' else 'failed'
@@ -577,7 +588,8 @@ class Controller:
                             attempt['status'] = 'running'
                             if not attempt.get('start_notified'):
                                 attempt['start_notified'] = True
-                                event(self.store, f"{experiment['name']} / {case['id']}: started on {machine['name']}", notify=True)
+                                notification_event(self.store, f"{experiment['name']} / {case['id']}: started on {machine['name']}",
+                                    title="Case started", experiment=experiment, case=case, attempt=attempt, machine=machine)
             self.save(experiment)
 
     def collect(self, machine, experiment, case_id, attempt):
@@ -688,7 +700,8 @@ class Controller:
                 for case in experiment['cases']:
                     if case['status'] in OCCUPIED:
                         case['status'] = 'stopped'
-                event(self.store, f"{experiment['name']}: stopped", notify=True)
+                notification_event(self.store, f"{experiment['name']}: stopped",
+                    title="Experiment stopped", experiment=experiment)
             self.save(experiment)
             return
         producer = experiment.get('calibration_machine', machines[0]['id'])
@@ -757,7 +770,8 @@ class Controller:
         preparing = any(p['status'] in ('preparing', 'running', 'accepted', 'transferring', 'pending', 'copying_sdk') for p in experiment['preparations'].values())
         if not remaining and not failed_preparation and not preparing:
             experiment.update(status='completed', finished=time.time())
-            event(self.store, f"{experiment['name']}: completed", notify=True)
+            notification_event(self.store, f"{experiment['name']}: completed",
+                    title="Experiment completed", experiment=experiment)
         elif not any(c['status'] in BUSY for c in remaining) and (
                 all(c['status'] in {'failed', 'collection_failed'} for c in remaining) or (failed_preparation and not ready)):
             experiment['status'] = 'needs_attention'

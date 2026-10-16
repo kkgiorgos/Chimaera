@@ -13,6 +13,7 @@ import urllib.request
 from common import atomic_json, event, identifier, case_log, tail_file
 from controller import Controller, estimates, validate_config
 from reports import build_report
+from notifications import content, notification_event
 
 
 def notify(controller):
@@ -23,7 +24,7 @@ def notify(controller):
         if not item['notify'] or item['sent']:
             continue
         try:
-            request = urllib.request.Request(webhook, data=json.dumps(dict(content=item['message'][:1900],
+            request = urllib.request.Request(webhook, data=json.dumps(dict(content=content(item),
                 allowed_mentions=dict(parse=[]))).encode(), headers={'Content-Type': 'application/json', 'User-Agent': 'Chimaera/1.0'})
             with urllib.request.urlopen(request, timeout=10):
                 pass
@@ -47,7 +48,8 @@ def periodic(controller):
     completed = sum(c['status'] == 'completed' for c in active['cases'])
     eta = active.get('eta_seconds')
     remaining = f'{eta / 3600:.1f} hours estimated remaining' if eta is not None else 'ETA awaiting sufficient data'
-    event(controller.store, f"{active['name']}: {completed}/{len(active['cases'])} complete; {active['status']}; {remaining}", notify=True)
+    notification_event(controller.store, f"{active['name']}: {completed}/{len(active['cases'])} complete; {active['status']}; {remaining}",
+        title="Progress update", experiment=active)
     settings['last_progress'] = time.time()
     controller.store.put('settings', 'main', settings)
 

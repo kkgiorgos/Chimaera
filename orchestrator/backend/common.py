@@ -148,8 +148,10 @@ class Store:
             self.db.execute('DELETE FROM records WHERE kind=? AND id=?', (kind, key))
 
 
-def event(store, message, level='info', notify=False):
+def event(store, message, level='info', notify=False, notification=None):
     key = str(time.time_ns())
     value = dict(id=key, time=time.time(), message=message, level=level, notify=notify, sent=False)
+    if notification is not None:
+        value['notification'] = notification
     store.put('events', key, value)
     return value

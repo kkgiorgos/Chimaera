@@ -288,6 +288,14 @@ restart from their beginning. Old attempts remain in the result package.
 Set `DISCORD_WEBHOOK_URL` in `.env`, then recreate the controller container. The
 URL remains server-side and is never returned to the browser.
 
+Discord messages use Markdown headings and labeled fields, with event timestamps,
+experiment and case IDs, case parameters, machine names, worker allocations,
+elapsed time, exit codes, memory-limit failures, and collection status when available.
+Experiment summaries include counts by case state; periodic updates also include
+the estimated remaining time and its basis. Details are captured when the event
+occurs, so delayed delivery retains the original context. Long messages omit
+trailing fields with an explicit marker; full details remain in the orchestrator.
+
 Notifications cover case starts/completions/failures, experiment completion/stop,
 and operational failures. Periodic progress/ETA messages default to **60 minutes**;
 enable/disable them or change the interval live in **Notifications**. A persistent
