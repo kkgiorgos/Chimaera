@@ -1,6 +1,6 @@
 """Verify the guest restore gate through a real gem5 drain/save/restore.
 
-Build checkpoint_barrier.cc statically against libm5 and the bridge includes.
+Build checkpoint_barrier.cc statically against libm5, m5_mmap.c and the bridge includes.
 Run this config once to capture, then with --restore, using the same arguments.
 """
 import argparse

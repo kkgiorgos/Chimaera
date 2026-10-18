@@ -29,6 +29,8 @@
 
 #include "mem/ruby/system/CacheRecorder.hh"
 
+#include <unordered_set>
+
 #include "debug/RubyCacheTrace.hh"
 #include "mem/packet.hh"
 #include "mem/physical.hh"
@@ -111,17 +113,26 @@ CacheRecorder::enqueueNextFlushRequest()
 }
 
 void
-CacheRecorder::writebackDirtyData(memory::PhysicalMemory &memory) const
+CacheRecorder::writebackCachedData(memory::PhysicalMemory &memory,
+                                  RubySystem &ruby) const
 {
+    std::unordered_set<Addr> written;
+    std::vector<uint8_t> data(m_block_size_bytes);
     for (const auto *record : m_records) {
-        // Clean/shared copies may be older than an exclusive owner's data.
-        // MESI_Two_Level records only that owner as Read_Write (ST).
-        if (record->m_type != RubyRequestType_ST)
+        if (!written.insert(record->m_data_address).second)
             continue;
+        // A modified line downgraded to shared is Read_Only in the trace,
+        // but memory remains stale until L2 eviction. Use Ruby's functional
+        // lookup to select the coherent owner for all recorded cache lines.
         auto request = std::make_shared<Request>(record->m_data_address,
             m_block_size_bytes, 0, Request::funcRequestorId);
+        Packet read(request, MemCmd::ReadReq);
+        read.dataStatic(data.data());
+        fatal_if(!ruby.functionalRead(&read),
+                 "Cannot read drained checkpoint cache line %#x",
+                 record->m_data_address);
         Packet packet(request, MemCmd::WriteReq);
-        packet.dataStaticConst(record->m_data);
+        packet.dataStatic(data.data());
         memory.functionalAccess(&packet);
     }
 }

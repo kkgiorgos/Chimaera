@@ -127,6 +127,24 @@ int main(int argc, char ** argv)
         return !rclcpp::ok();
       });
       if (!replay_path.empty()) {
+        // Draining advances the guest beyond the last recorded physics
+        // boundary. Reconstruct that time before enabling memory pressure;
+        // otherwise the warmup can expire while gem5 is still paused.
+        std::istringstream restored(timing.command("BENCHMARK_RESTORE"));
+        std::string marker, extra;
+        uint64_t boundary, saved;
+        if (
+          !(restored >> marker >> boundary >> saved) || marker != "RESTORE" ||
+          (restored >> extra) || saved < boundary)
+          throw std::runtime_error("Invalid restored clock boundary");
+        const auto interval_ticks = static_cast<uint64_t>(interval) * 1000000;
+        const auto gap = saved - boundary;
+        const auto catchup = gap / interval_ticks + (gap % interval_ticks != 0);
+        for (uint64_t count = 0; count < catchup; ++count) {
+          const auto result = controller.step(std::chrono::microseconds(interval));
+          if (!result.ok()) throw std::runtime_error(result.message);
+        }
+        RCLCPP_INFO(node->get_logger(), "Aligned restored host clock in %lu intervals", catchup);
         if (timing.command("BENCHMARK_PRESSURE").rfind("PRESSURE ", 0) != 0)
           throw std::runtime_error("Simulator rejected pressure warmup");
         for (int64_t elapsed = 0; elapsed < pressure_warmup; elapsed += interval * 1000) {

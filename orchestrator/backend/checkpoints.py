@@ -5,6 +5,8 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import tarfile
+import tempfile
 import uuid
 
 from common import atomic_json, digest, run
@@ -17,6 +19,54 @@ def copy_file(source, destination):
     destination.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(['cp', '--reflink=auto', '--sparse=always', '--preserve=timestamps',
                     '--', str(source), str(destination)], check=True)
+
+
+def sparse_copy(command, destination):
+    """Extract a Docker tar stream while preserving zero regions as file holes."""
+    with tempfile.TemporaryFile() as errors:
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors)
+        try:
+            archive_error = None
+            zeros = bytes(64 * 1024)
+            try:
+                with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
+                    for member in archive:
+                        path = Path(member.name)
+                        target = destination / path
+                        if (path.is_absolute() or '..' in path.parts or
+                                not target.resolve().is_relative_to(destination.resolve())):
+                            raise ValueError('Invalid readiness archive path')
+                        if member.isdir():
+                            target.mkdir(parents=True, exist_ok=True)
+                        elif member.isfile():
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            with archive.extractfile(member) as source, target.open('wb') as output:
+                                for block in iter(lambda: source.read(len(zeros)), b''):
+                                    if block == zeros[:len(block)]:
+                                        output.seek(len(block), os.SEEK_CUR)
+                                    else:
+                                        output.write(block)
+                                output.truncate(member.size)
+                            target.chmod(member.mode & 0o777)
+                            os.utime(target, (member.mtime, member.mtime))
+                        else:
+                            raise ValueError('Invalid readiness archive member')
+                # Drain padding after the tar end marker before awaiting Docker.
+                while process.stdout.read(len(zeros)):
+                    pass
+            except tarfile.TarError as error:
+                archive_error = error
+            process.stdout.close()
+            process.wait(timeout=10)
+            if process.returncode or archive_error:
+                errors.seek(0)
+                detail = errors.read().decode(errors='replace') or str(archive_error)
+                raise RuntimeError('Readiness checkpoint export failed: ' + detail[-2000:])
+        finally:
+            process.stdout.close()
+            if process.poll() is None:
+                process.kill()
+                process.wait()
 
 
 def package(directory, application, disk, kernel):
@@ -43,8 +93,17 @@ def package(directory, application, disk, kernel):
                       assets / 'checkpoints' / identifier / path)
     base = 'chimaera:ball-checkpoint-base-' + application.removeprefix('sha256:')
     subprocess.run(['docker', 'image', 'tag', application, base], check=True)
+    # Sending a sparse raw disk as a build-context file expands its holes.
+    # Changing permissions in a later image layer copies that disk again.
+    # A sparse archive keeps the context compact, sets readable modes before
+    # extraction, and adds the backing disk in a single image layer.
+    archive = context / 'readiness.tar.gz'
+    subprocess.run(['tar', '--format=pax', '--sparse', '--sparse-version=1.0',
+        '--mode=a+rX', '--owner=0', '--group=0',
+        '--numeric-owner', '-I', 'gzip -1', '-cf', str(archive), '-C', str(assets), '.'], check=True)
+    shutil.rmtree(assets)
     (context / 'Dockerfile').write_text(f'FROM {base}\nUSER root\n'
-        f'COPY readiness/ {LOCATION}/\nRUN chmod -R a+rX {LOCATION}\n')
+        f'ADD readiness.tar.gz {LOCATION}/\n')
     tag = 'chimaera:ball-ready-' + directory.name
     subprocess.run(['docker', 'buildx', 'build', '--load', '--provenance=false',
         '--platform', 'linux/amd64', '--progress', 'plain', '-t', tag, str(context)], check=True)
@@ -78,9 +137,10 @@ def unpack(directory, image, expected):
         command += ['--label', 'chimaera.experiment=' + operation]
     subprocess.run([*command, image], check=True)
     try:
-        subprocess.run(['docker', 'cp', name + ':' + LOCATION + '/.', str(destination)], check=True)
+        # Docker's copy API emits dense files even when the source was sparse.
+        sparse_copy(['docker', 'cp', name + ':' + LOCATION + '/.', '-'], destination)
     finally:
-        subprocess.run(['docker', 'rm', name], check=True)
+        subprocess.run(['docker', 'rm', '-f', name], capture_output=True)
     if digest(destination / 'checkpoints/index.json') != expected:
         raise ValueError('Readiness application image contains a different checkpoint index')
     index = json.loads((destination / 'checkpoints/index.json').read_text())

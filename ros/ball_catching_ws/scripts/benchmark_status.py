@@ -37,6 +37,7 @@ def guest_failure(path):
 def host_failure(path):
     return explicit_failure(path, (
         r'^\[[^\r\n]+\] Host bridge: .*\bsocket timeout\b[^\r\n]*\r?$',
+        r'^\[[^\r\n]+\] .*Assertion .+ failed\.\r?$',
         r'^\[[^\r\n]+\] .*\b(?:panic|fatal): .+\r?$',
         r'^\[[^\r\n]+\] Host bridge: .+\r?$'))
 

@@ -56,6 +56,7 @@ namespace ruby
 
 class Sequencer;
 class RubyPort;
+class RubySystem;
 /*!
  * Class for recording cache contents. Note that the last element of the
  * class is an array of length zero. It is used for creating variable
@@ -94,9 +95,10 @@ class CacheRecorder
 
     uint64_t getNumRecords() const;
 
-    // With the entire system drained, Read_Write records are the coherent
-    // owners. Copy their latest bytes to backing memory before serialization.
-    void writebackDirtyData(memory::PhysicalMemory &memory) const;
+    // Shared MESI lines can still be dirty relative to backing RAM. Resolve
+    // every recorded address through coherence before taking a cold snapshot.
+    void writebackCachedData(memory::PhysicalMemory &memory,
+                            RubySystem &ruby) const;
 
     /*!
      * Function for flushing the memory contents of the caches to the

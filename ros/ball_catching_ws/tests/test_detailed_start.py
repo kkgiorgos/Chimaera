@@ -80,6 +80,23 @@ def test_checkpoint_quiescence_is_charged_to_first_restored_interval(tmp_path):
     assert calls[-1] == 5000
 
 
+def test_restore_reports_clock_gap_before_pressure_or_first_interval(tmp_path):
+    scope, calls = lifecycle(tmp_path)
+    scope['restore'] = '/checkpoint'
+    scope['m5'].curTick = lambda: 17000
+    server = scope['BallTimingServer']()
+    server.restore_boundary_tick = 12000
+    assert server.handle_command('BENCHMARK_RESTORE') == 'RESTORE 12000 17000'
+    assert calls == []
+    server.pressure_started = True
+    with pytest.raises(RuntimeError, match='No pending restored host boundary'):
+        server.handle_command('BENCHMARK_RESTORE')
+    server.pressure_started = False
+    server.restore_boundary_tick = None
+    with pytest.raises(RuntimeError, match='No pending restored host boundary'):
+        server.handle_command('BENCHMARK_RESTORE')
+
+
 def test_restored_pressure_warmup_is_separate_from_measurement(tmp_path):
     scope, calls = lifecycle(tmp_path)
     scope['restore'] = '/checkpoint'

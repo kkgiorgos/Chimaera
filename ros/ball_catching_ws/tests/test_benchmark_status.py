@@ -56,6 +56,16 @@ def test_launch_validation_distinguishes_failed_and_incomplete_checks(tmp_path):
     assert benchmark_status.launch_failure(path) == 'Invalid ball launch: launch_pose_or_velocity_reset'
 
 
+def test_simulator_assertion_is_reported_before_the_cascading_bridge_disconnect(tmp_path):
+    log = tmp_path / 'launch.log'
+    failure = ("[gem5.opt-5] gem5.opt: src/cpu/simple/timing.cc:832: "
+        "void gem5::TimingSimpleCPU::completeIfetch(gem5::PacketPtr): "
+        "Assertion `_status == IcacheWaitResponse' failed.")
+    log.write_text(failure + '\n[gazebo_host_bridge-4] Host bridge: gem5 timing: '
+        'timing server disconnected before replying\n')
+    assert benchmark_status.host_failure(log) == failure
+
+
 def test_checkpoint_bridge_failure_stops_a_host_that_has_not_exited(tmp_path, monkeypatch):
     import types
     scene = types.ModuleType('ball_catching_sim.scene')

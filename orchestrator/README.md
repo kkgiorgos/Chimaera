@@ -186,7 +186,9 @@ time or joint positions/velocities fails the case. This is a host input replay,
 not a serialized snapshot of Gazebo's renderer or physics engine internals.
 The restored guest reconnects to a fresh bridge. Drained dirty cache data is
 preserved in RAM; MESI caches restart empty to avoid its unsupported flush and
-warm-cache reconstruction paths. Case pressure then runs for
+warm-cache reconstruction paths. Before enabling pressure, the host advances
+through the time consumed by guest checkpoint drain so both clocks catch up.
+Case pressure then runs for
 `fixed.pressure_warmup` (default **0.05 simulated seconds**, at most one second,
 rounded up to complete coupling intervals). The host resets measurement statistics
 at the throw boundary and launches without repeating the readiness gate under
@@ -234,13 +236,43 @@ predictable percentage or ETA. Failed preparations display their bridge/guest
 error, and collected preparation reports include checkpoint launch logs, guest
 serial, timing, and readiness records without copying checkpoint RAM.
 
-The guest stays off the transport while gem5 drains its checkpoint and only
-starts a new handshake after the restoring simulator releases it. A timing socket
+The guest polls the readfile restore marker while gem5 drains its checkpoint and
+only starts a new handshake after the restoring simulator releases it. The gate
+does not issue address-mode CPU quiesce operations, which can corrupt outstanding
+TimingSimpleCPU instruction-fetch scheduling. A timing socket
 timeout during capture is a preparation failure; increasing `startup_timeout_s`
 does not fix a transport barrier deadlock. After updating this protocol, align
 controller and worker sources, rebuild the controller, redeploy supervisors, and
 queue a new experiment so its guest bundle and images contain the fix. Retrying
 an old experiment retains its frozen source identity.
+
+Checkpoint protocol changes must first pass the bounded full-system regression:
+
+```bash
+python3 containers/ball-catching/checkpoint-smoke.py \
+  --skip-packaging \
+  --image sha256:<built-application-image-id> \
+  --disk /absolute/path/to/guest.img --kernel /absolute/path/to/kernel \
+  --output /absolute/path/to/new-smoke-directory
+```
+
+Run this on a KVM-capable x86 worker with Docker and the existing application
+image. It builds the current bridges in an isolated overlay, uses a small ROS
+readiness application, saves the real Linux guest, restores twice without
+`/dev/kvm`, and collects the preparation diagnostics. Each restore checks host state replay,
+pressure and launch barriers, physical launch validation, and a fresh response
+from preserved guest application state. Each simulation has a 180-second wall
+watchdog and a 30 ms detailed-time budget. Other phases have five-minute
+watchdogs; optional full-disk image packaging has ten minutes. Logs and
+`smoke-result.json` remain in the output directory. Containers
+are disposable; test images and imported assets remain available for inspection.
+Omit `--skip-packaging` to also test checkpoint image packaging/import and changed
+index rejection, with an initial restore before image export and two restores
+from the imported disk and packaged checkpoints.
+The backing disk and checkout are mounted read-only. Packaging uses a compressed
+sparse archive and one image layer to avoid duplicating the full disk in Docker.
+Import streams the image contents and recreates zero regions as sparse file
+holes, retaining the exact backing-disk hash without allocating its empty space.
 
 SDK image cache keys depend on the content of simulator, transport, bridge, stack
 profile and build inputs. Application image keys additionally depend on the robot

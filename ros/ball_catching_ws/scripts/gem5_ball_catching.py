@@ -196,6 +196,10 @@ class BallTimingServer(TimingServer):
         return {**super().exit_handlers(), ExitEvent.CHECKPOINT: lambda: True}
 
     def handle_command(self, line):
+        if line == 'BENCHMARK_RESTORE':
+            if not restore or self.restore_boundary_tick is None or self.pressure_started:
+                raise RuntimeError('No pending restored host boundary')
+            return f'RESTORE {self.restore_boundary_tick} {m5.curTick()}'
         if line == 'BENCHMARK_BEGIN':
             return self.begin_throw()
         if line == 'BENCHMARK_PRESSURE':

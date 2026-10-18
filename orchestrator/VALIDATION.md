@@ -245,3 +245,154 @@ source identity remains frozen; retrying it against changed sources is rejected.
 This fix changes exported runner scripts and supervisor reporting, so cached SDK
 and application images and the constructed guest disk remain reusable. No remote
 checkout, experiment state or deployment was modified during this investigation.
+
+## Address-mode checkpoint gate — 2026-10-18
+
+Experiment `cf1d063b1fad4c818e7a6e06db2b045a` on `ubuntu-george`, using
+revision `4397a81823631a668d949c7f00e9b6a3960777aa`, reached arm/camera readiness
+at 0.4285 simulated seconds. Its checkpoint stage was **Saving guest memory and
+device state**, but gem5 aborted before writing a completed checkpoint:
+
+```text
+src/cpu/simple/timing.cc:832: TimingSimpleCPU::completeIfetch:
+Assertion `_status == IcacheWaitResponse' failed.
+```
+
+The bridge's subsequent `timing server disconnected before replying` was a
+consequence of that assertion. The diagnostic parser now recognizes simulator
+assertions before selecting a cascading bridge disconnect.
+
+The guest restore wait previously called `m5_quiesce_ns_addr(1000)`. Address-mode
+m5ops execute inside a local memory access: quiesce suspends the CPU there, but
+the access completion continues instruction execution, and the scheduled wakeup
+can initiate another fetch while a response is pending. The capture gate now
+polls the readfile without quiescing the CPU. It still performs no transport I/O
+before restore and can drain at an instruction boundary.
+
+The extended `checkpoint_barrier.cc` workload and new
+`verify_checkpoint_barrier_fs.py` exercised the real Linux kernel/backing disk,
+four KVM boot CPUs, four detailed Timing CPUs, MESI and Ramulator. The test waits
+for the workbegin CPU switch to complete before checkpointing, then requires
+sixteen actual polling iterations before saving; this prevents a smoke test from
+passing before the problematic operation executes.
+
+In disposable containers on `ubuntu-george`, the old `--quiesce` gate reproduced
+an instruction-fetch scheduling assertion in `IcachePort::recvTimingResp`
+(`!tickEvent.scheduled()`). The polling gate passed and printed
+`CHECKPOINT_BARRIER_FS_GATE_ACTIVE` and `CHECKPOINT_BARRIER_FS_SAVED`.
+A separate restore container received **no `/dev/kvm` device**, instantiated only
+the detailed CPUs, verified the saved tick, and printed
+`CHECKPOINT_BARRIER_FS_RESTORED`. The restored guest also exported
+`CHECKPOINT_BARRIER_RESTORE_OK` through m5 writefile, avoiding serial transmission
+latency as a test oracle. Test records remain under
+`/tmp/chimaera-checkpoint-validation-20261018/full-system-20261018/`.
+
+The focused Python/native helper command above passed **212 tests**. The changed
+guest bridge passed a syntax check in the production Ubuntu/Humble image, and
+the instruction-mode SE checkpoint regression also passed. `git diff --check`
+passed. The worker checkout, backing disk and experiment state were mounted
+read-only or left untouched; no deployment was performed. This validates the
+address-mode Linux capture/restore gate, not a complete robot replay/throw campaign.
+
+This repair changes the compiled guest bridge and requires updated SDK and
+application images, supervisor deployment and a new experiment with matching
+controller/worker sources. Source-based image caching detects the changed bridge;
+old guest bundles and readiness checkpoints must not be reused.
+
+## Bounded Linux/ROS checkpoint lifecycle — 2026-10-18
+
+`containers/ball-catching/checkpoint-smoke.py` builds the current production
+bridges and a small real ROS application in an isolated overlay. The application
+publishes readiness after receiving a request and stores a sequence counter in
+guest memory. Capture must return sequence 1. Each independent restore receives
+a different request and must return sequence 2; neither a fresh boot nor a
+replayed response can satisfy that check. Linux, four Timing CPUs, MESI,
+Ramulator, bridge transport, Gazebo host replay and the physical launch gateway
+are production components. Readiness is supplied by the small ROS fixture;
+camera rendering and the full robot controller are omitted.
+
+Each simulation is limited to 30 ms of actual detailed ticks and has a
+180-second wall watchdog. `--skip-packaging` tests capture, two independent
+KVM-free restores and preparation report collection. The complete mode also
+tests a restore before image export, the production checkpoint image packaging
+and import paths, changed-index rejection, and two restores using imported assets.
+Scoring a full catch remains outside this checkpoint regression; its host bridge
+stops after the short budget, before the synthetic application's throw deadline.
+
+The combined fixture exposed two additional correctness problems that the earlier
+static Linux gate workload did not cover:
+
+- With the original functional writeback, restore aborted on the first heap-backed
+  bridge payload: `fatal: readBlob(0x3b4187c0, ...) failed`. Copying only
+  `RubyRequestType_ST` records misses modified data downgraded to MESI shared
+  state. The writeback now resolves every recorded address through Ruby's
+  coherent functional read path and copies each unique cache line into backing
+  RAM before saving a cold-cache snapshot. Existing checkpoints cannot recover
+  bytes omitted by the old writeback.
+- Checkpoint drain advances guest time past the recorded host boundary. Starting
+  pressure immediately allowed the configured 1 ms hold to finish while gem5
+  remained paused. The host now catches up before enabling pressure. The fixture
+  checks actual gem5 warmup ticks before measurement, in addition to launch and
+  preserved-state communication.
+
+The full-size disk also exposed packaging/import space amplification. Packaging
+now uses a compressed sparse PAX archive and a single Docker layer, setting modes
+in archive headers. The older GNU sparse header is rejected by Docker and is
+covered by the regression. Import streams Docker's tar output and recreates zero
+regions as sparse file holes, verifying the original full disk hash afterward.
+Tests cover densely allocated zero regions, export failure, traversal and links.
+
+The fixed simulator compiled on `ubuntu-george` using retained SCons objects in a
+disposable Docker build. The candidate application image is
+`sha256:9e460d6f1f6a23b9ef2df7913be818adfdc793d5cae33b31efa425ef5d33ba1a`.
+An immediate restore from its fresh checkpoint passed with **18.834 ms capture**
+and **29.166 ms restored execution**. Capture took **90.9 seconds** including
+integrity checks; the restore phase took **75.9 seconds**, with **48.1 seconds**
+inside co-simulation. It reproduced 27 native host intervals, aligned the host in
+11 intervals, verified a physical launch, returned the fresh sequence-2 response,
+and measured **1.5 ms of actual pressure warmup**. The restore container had no
+`/dev/kvm` device.
+
+The fresh short command completed successfully in **274.6 seconds (4 min 35 s)**:
+
+| Phase | Wall time | Actual detailed time |
+| --- | ---: | ---: |
+| Build current bridges and fixture | 37.9 s | — |
+| Boot, capture and verify | 87.3 s | 15.847 ms |
+| Independent restore, request 2 | 74.3 s | 29.153 ms |
+| Independent restore, request 3 | 75.0 s | 29.153 ms |
+| Collect preparation report | 0.06 s | — |
+
+Both restores received no KVM device, returned the expected sequence-2 state,
+verified the physical launch, and measured 1.5 ms of real pressure warmup. The
+production controller's SSH collection path also fetched this report successfully
+in **0.52 seconds**, including checkpoint metadata, launch logs and guest serial.
+No checkpoint RAM or backing disk was included in the diagnostic download.
+
+The complete image workflow also passed: **294.3 s packaging**, **37.2 s sparse
+import**, changed-index rejection, and independent packaged restores in **76.5 s**
+and **75.9 s**. Both ran 29.166 ms of detailed time and passed the same state,
+warmup and physical launch checks. The resulting readiness image is
+`sha256:da70b3570ebd8c16490e8160326e445fe9d9275bb88e36389a197172685d2733`, with
+index SHA-256 `c80a542ef04ae9096826db64727f4aecaebb915d26de0f76681e4ca5240d596c`.
+This workflow reused its fresh capture after correcting the test's final-tick
+reporting: restored execution uses `finalTick` in `stats.txt`, since the restore
+entry point does not print the boot path's final-tick log line. The separate
+short command above passed from a new empty output directory without resuming.
+
+Worker records are under
+`/home/kkgiorgos/Chimaera/.chimaera-orchestrator/checkpoint-smoke/`:
+`smoke-20261018-5` contains complete packaging/import results;
+`smoke-20261018-6` contains the short command's passing `smoke-result.json`.
+Small summaries and real SSH-collected reports were retained locally under
+`/tmp/chimaera-checkpoint-smoke-collected-20261018/`. Obsolete invalid test images
+and duplicate imported test disks were removed; compiler caches and experiment
+assets were preserved.
+
+The focused regression suite passed **219 tests**. The changed gem5 binary and
+production ROS bridges compiled successfully; syntax checks and
+`git diff --check` passed. These fixes are validated in isolated containers and
+have not been deployed to the controller, supervisor or production SDK images.
+Deployment must include the simulator and both bridges, followed by newly
+generated readiness checkpoints. Earlier readiness checkpoints must be regenerated
+with the coherent writeback fix.

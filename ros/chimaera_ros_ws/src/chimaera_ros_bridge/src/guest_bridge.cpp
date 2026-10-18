@@ -103,13 +103,16 @@ int main(int argc, char ** argv)
           checkpoint_control = false;
           controller.reconnect();
           m5_checkpoint_addr(0, 0);
+          // An address-mode quiesce suspends the CPU inside a local memory
+          // access. Its wakeup can race TimingSimpleCPU's outstanding fetch
+          // response. Poll instead; draining stops the CPU at a safe boundary.
           chimaera_ros_bridge::wait_for_checkpoint_restore(
             [] {
               char data[96]{};
               const auto size = m5_read_file_addr(data, sizeof(data) - 1, 0);
               return std::string(data, size);
             },
-            [] { m5_quiesce_ns_addr(1000); }, [] { return rclcpp::ok(); });
+            [] {}, [] { return rclcpp::ok(); });
         }
       }
     }

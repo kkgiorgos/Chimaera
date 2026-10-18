@@ -239,7 +239,7 @@ RubySystem::memWriteback()
                  "Functional checkpoint writeback requires MESI_Two_Level");
         fatal_if(!DrainManager::instance().isDrained(),
                  "Functional checkpoint writeback requires a drained system");
-        m_cache_recorder->writebackDirtyData(params().system->getPhysMem());
+        m_cache_recorder->writebackCachedData(params().system->getPhysMem(), *this);
         m_cooldown_enabled = false;
         return;
     }
