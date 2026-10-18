@@ -143,6 +143,36 @@ def snapshot(path, case=None):
     return state
 
 
+def preparation_snapshot(path):
+    """Follow preparation and checkpoint records without touching live sockets."""
+    path = Path(path)
+    state = read_json(path / 'preparation.json')
+    progress = read_json(path / 'checkpoints/progress.json')
+    if state.get('phase') == 'Creating readiness checkpoints' or not state:
+        identifier = progress.get('checkpoint')
+        if identifier and re.fullmatch(r'[0-9a-f]{64}', identifier):
+            attempt = path / 'checkpoints' / identifier
+        else:
+            # Older preparations have no progress.json; retain their diagnostics.
+            attempts = list((path / 'checkpoints').glob('*/execution.json'))
+            attempt = max(attempts, key=lambda p: p.stat().st_mtime).parent if attempts else None
+        if attempt:
+            state = snapshot(attempt)
+            state.update(read_json(attempt / 'checkpoint-stage.json'))
+            if (attempt / 'checkpoint.json').is_file():
+                state['phase'] = 'Readiness checkpoint saved'
+            elif (attempt / 'checkpoint-ready').is_file() and not (attempt / 'checkpoint-stage.json').exists():
+                state['phase'] = 'Waiting for guest checkpoint barrier'
+            elif state['phase'] == 'Ready; waiting for launch':
+                state['phase'] = 'Ready; waiting for checkpoint barrier'
+            if progress:
+                state.update(checkpoint_current=progress.get('current'), checkpoint_total=progress.get('total'))
+            if progress.get('status') == 'failed' or state.get('status') == 'infrastructure_failure':
+                state.update(phase='Readiness checkpoint failed',
+                             reason=progress.get('error') or state.get('reason'))
+    return state
+
+
 def display(state):
     lines = [f"{state['cpu_type'].upper()} · {state['case']} · {state['status']}", state['phase']]
     if state.get('attempt'):

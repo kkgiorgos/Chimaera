@@ -10,7 +10,7 @@ import sys
 
 SCRIPTS = Path(__file__).resolve().parents[2] / 'ros/ball_catching_ws/scripts'
 sys.path.insert(0, str(SCRIPTS))
-from run_memory_suite import digest
+from run_memory_suite import digest, write_json
 
 
 def common(inputs, output):
@@ -28,20 +28,28 @@ def prepare(inputs, output, calibration_from=None, checkpoint_create=False, read
     """Calibrate/package, then create or validate shared readiness checkpoints."""
     if checkpoint_create and readiness_from:
         raise ValueError('Cannot create and import readiness together')
+    output.mkdir(parents=True, exist_ok=True)
     command = common(inputs, output)
     shared = ['--calibration-from', str(calibration_from)] if calibration_from else []
+    def stage(phase):
+        write_json(output / 'preparation.json', dict(phase=phase))
+    stage('Validating shared memory calibration' if calibration_from else 'Calibrating memory')
     subprocess.run(command + ['--calibrate-only', *shared], check=True)
     data = json.loads((inputs / 'experiment.json').read_text())
     if 'stream' in data['patterns']:
+        stage('Validating fractional aggressor rates')
         subprocess.run([sys.executable, str(SCRIPTS / 'check_aggressor_rates.py'),
             '--config', str(inputs / 'experiment.json'), '--gem5-root', '/opt/chimaera/gem5',
             '--calibration', str(output / 'calibration/stream/calibration.json'),
             '--output', str(output / 'rate-validation')], check=True)
     bundle = ['--bundle-from', str(readiness_from / 'guest.tar.gz')] if readiness_from else []
+    stage('Freezing guest application bundle')
     subprocess.run(command + ['--prepare-only', '--resume', *bundle], check=True)
     if checkpoint_create:
+        stage('Creating readiness checkpoints')
         subprocess.run(command + ['--checkpoint-create', '--resume'], check=True)
     if readiness_from:
+        stage('Validating imported readiness checkpoints')
         from readiness_checkpoint import groups, provenance, validate
         manifest = json.loads((output / 'experiment_manifest.json').read_text())
         configuration = manifest['configuration']
@@ -49,6 +57,7 @@ def prepare(inputs, output, calibration_from=None, checkpoint_create=False, read
                               '/assets/guest.img', output / 'guest.tar.gz')
         for point in groups(configuration, manifest['points']).values():
             validate(readiness_from / 'checkpoints', configuration, point, identity)
+    stage('Prepared inputs ready')
 
 
 def run_case(inputs, output, case):

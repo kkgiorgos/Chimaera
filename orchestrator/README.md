@@ -224,6 +224,24 @@ timing sample. Before timing data arrives it shows **Awaiting sample**. Stale
 active samples are labeled **last sample**, and finished cases retain their last
 recorded speed.
 
+Preparation also shows its current calibration, bundle, or checkpoint stage and
+total elapsed wall time. During readiness it reports the current checkpoint out of
+the total, simulated time, completed exchanges, simulation speed, arm readiness,
+fresh camera readiness, and extra warmup when configured. After readiness it shows
+the guest barrier and memory/device serialization stages. Stale timing samples
+remain labeled **last sample** while checkpoint saving proceeds; readiness has no
+predictable percentage or ETA. Failed preparations display their bridge/guest
+error, and collected preparation reports include checkpoint launch logs, guest
+serial, timing, and readiness records without copying checkpoint RAM.
+
+The guest stays off the transport while gem5 drains its checkpoint and only
+starts a new handshake after the restoring simulator releases it. A timing socket
+timeout during capture is a preparation failure; increasing `startup_timeout_s`
+does not fix a transport barrier deadlock. After updating this protocol, align
+controller and worker sources, rebuild the controller, redeploy supervisors, and
+queue a new experiment so its guest bundle and images contain the fix. Retrying
+an old experiment retains its frozen source identity.
+
 SDK image cache keys depend on the content of simulator, transport, bridge, stack
 profile and build inputs. Application image keys additionally depend on the robot
 application sources and the exact SDK image ID. Host editor caches (`.cache`, `.vscode`), simulation output
@@ -281,6 +299,12 @@ a new ETA.
   excludes preparation/collection/reporting, and remains unknown when data is
   insufficient. First-time readiness and boot do not have invented percentages.
 - A finished container frees its worker slot while results are still transferring.
+- Supervisors automatically remove completed, failed, and stopped preparation and
+  case containers after saving worker stdout/stderr. Results, preparation reports,
+  and saved logs remain available for collection and viewing. Failed log capture
+  or container removal is retried on later supervisor polls, including after a
+  restart; existing terminal tasks are cleaned up too. Running containers are
+  never forcibly removed by this cleanup.
 - The log viewer offers worker stdout/stderr, ROS/Gazebo launch output, guest serial,
   and gem5 statistics. Collected case logs also work without the remote machine.
 

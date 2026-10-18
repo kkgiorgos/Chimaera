@@ -526,6 +526,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
                 if failure:
                     raise RuntimeError(failure + '; inspect launch_validation.json and ground_truth.csv')
                 if now >= next_guest_check and not (directory / 'result.json').exists():
+                    failure = host_failure(directory / 'launch.log')
+                    if failure:
+                        raise RuntimeError('Co-simulation failed: ' + failure)
                     failure = guest_failure(roi / 'board.pc.com_1.device')
                     if failure:
                         raise RuntimeError(f'Guest application failed: {failure}; inspect guest serial')
@@ -740,13 +743,21 @@ def main():
             for point in selected.values():
                 validate(root, data, point, checkpoint_identity)
             return 0
-        for identifier, point in selected.items():
+        for index, (identifier, point) in enumerate(selected.items(), 1):
             directory = root / identifier
             baseline = dict(point, pattern='none', pressure=0)
+            root.mkdir(parents=True, exist_ok=True)
+            progress = dict(status='running', checkpoint=identifier, current=index, total=len(selected))
+            write_json(root / 'progress.json', progress)
             print('Preparing aggressor-free readiness checkpoint ' + identifier, flush=True)
-            gem5_trial(directory, output, data, baseline, args, calibration, bundle,
-                       checkpoint_prepare=directory)
+            try:
+                gem5_trial(directory, output, data, baseline, args, calibration, bundle,
+                           checkpoint_prepare=directory)
+            except Exception as error:
+                write_json(root / 'progress.json', dict(progress, status='failed', error=str(error)))
+                raise
         freeze(root, checkpoint_identity, selected)
+        write_json(root / 'progress.json', dict(progress, status='completed'))
         print('Readiness checkpoints ready: ' + str(root), flush=True)
         return 0
     failed = False

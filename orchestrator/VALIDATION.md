@@ -163,3 +163,55 @@ qualify a complete robot guest readiness/restore/throw campaign on the cluster.
 Host replay reconstructs Gazebo from recorded input; it does not serialize its
 renderer/physics internals. Fresh experiments are required after deployment;
 in-flight throws are not resumable.
+
+## Preparation visibility and checkpoint drain barrier — 2026-10-18
+
+Inspected the failed preparation on `ubuntu-george` for experiment
+`a8499008407c4e759dca3a63d2eebadb`. Its readiness records reach arm and fresh-camera
+readiness at 0.417 simulated seconds. The last timing sample is exchange 833 at
+2389.34 wall seconds. `checkpoint-ready` and the saved host state exist, but no
+completed guest checkpoint exists. The final guest packet is a new `CHIMCTR2`
+handshake; the capture host is still serving message batches. The bridge reports
+`gem5 timing: socket timeout; simulator state is unknown` after its 900-second
+command deadline, followed by gem5's cascading connection-reset panic. This is
+separate from the configured 43,200-second attempt limit. The preparation container
+exited with code 1 and was not OOM-killed.
+
+The guest now waits on the checkpoint readfile marker after issuing its m5
+checkpoint operation. It performs no transport I/O if gem5 resumes it during
+draining. Restore replaces that marker with the simulation origin before the
+guest resumes and starts its new handshake. The dashboard receives preparation
+stages, elapsed time, checkpoint counts, timing/speed, and arm/camera readiness.
+Checkpoint failures retain their error and small diagnostic records for collection.
+
+An isolated, non-networked container on `ubuntu-george`, using its existing
+application image, passed a syntax check of the changed guest bridge. The new
+`checkpoint_barrier.cc` workload and `verify_checkpoint_barrier.py` ran against
+the real gem5 Timing CPU, MESI and Ramulator configuration. Capture printed
+`CHECKPOINT_BARRIER_SAVED`; a separate restore invocation printed
+`CHECKPOINT_BARRIER_RESTORE_OK` and `CHECKPOINT_BARRIER_VERIFIED`. Test inputs and
+outputs were confined to `/tmp/chimaera-checkpoint-validation-20261018`; the worker
+checkout was mounted read-only. No deployment or experiment data was changed.
+
+The web production build and TypeScript check passed. **193 focused tests passed**:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+PYTHONPATH=ros/ball_catching_ws/scripts:orchestrator/backend \
+python3 -m pytest -q orchestrator/tests containers/tests \
+  containers/ball-catching/tests \
+  ros/ball_catching_ws/tests/test_detailed_start.py \
+  ros/ball_catching_ws/tests/test_readiness_checkpoint.py \
+  ros/ball_catching_ws/tests/test_checkpoint_replay.py \
+  ros/ball_catching_ws/tests/test_progress_monitor.py \
+  ros/ball_catching_ws/tests/test_benchmark_status.py
+```
+
+These checks cover
+producer/consumer workflows, checkpoint integrity, native barrier/replay tests,
+readiness progress through controller persistence, failure diagnostics and bounded
+shutdown on bridge failure. The broader `test_memory_benchmark.py` invocation on
+the local ARM host could not complete because ROS `ament_index_python`, the
+installed application package and PyYAML are unavailable there (43 passed, 17
+dependency failures). A full Linux guest readiness/restore/throw campaign remains
+unvalidated; the isolated native regression does not replace that campaign.

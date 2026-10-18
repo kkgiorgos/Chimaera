@@ -13,7 +13,9 @@ export interface Attempt {
   collection_status?: string; collection_error?: string;
   memory_budget_bytes?: number; memory_peak_bytes?: number; memory_warning?: string;
   progress?: { phase?: string; average_speed?: number; simulated_seconds?: number;
-    throw_percent?: number; outcome?: string; last_update_age_seconds?: number };
+    throw_percent?: number; outcome?: string; last_update_age_seconds?: number;
+    completed_exchanges?: number; elapsed_seconds?: number; checkpoint_current?: number; checkpoint_total?: number;
+    readiness?: { arm: boolean; perception: boolean; warmup_elapsed?: number; warmup_required?: number } };
 }
 export interface Case {
   id: string; status: string; attempts: Attempt[]; eta_seconds?: number | null; eta_basis?: string;
@@ -24,7 +26,7 @@ export interface Experiment {
   id: string; name: string; status: string; machines: string[]; cases: Case[]; created: number;
   config: Record<string, unknown>; eta_seconds?: number | null; eta_basis?: string;
   results_deleted?: boolean; stop_pending?: string[];
-  preparations: Record<string, { status: string; task?: string; phase?: string; error?: string; transfer?: { phase: string; image_kind: string; image_index: number; image_count: number; bytes_sent: number; bytes_per_second: number; eta_seconds?: number | null; eta_basis?: string; elapsed_seconds: number; updated: number; source: string }; collection_status?: string; collection_error?: string }>;
+  preparations: Record<string, { status: string; task?: string; phase?: string; progress?: Attempt['progress']; error?: string; transfer?: { phase: string; image_kind: string; image_index: number; image_count: number; bytes_sent: number; bytes_per_second: number; eta_seconds?: number | null; eta_basis?: string; elapsed_seconds: number; updated: number; source: string }; collection_status?: string; collection_error?: string }>;
   calibration_machine?: string;
   calibration?: { records: Record<string, { sustainable_gbps: number }> };
 }

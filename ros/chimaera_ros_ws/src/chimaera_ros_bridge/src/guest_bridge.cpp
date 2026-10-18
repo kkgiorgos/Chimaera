@@ -3,6 +3,7 @@
 
 #include <chimaera/gem5_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/checkpoint_barrier.hpp>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
@@ -102,6 +103,13 @@ int main(int argc, char ** argv)
           checkpoint_control = false;
           controller.reconnect();
           m5_checkpoint_addr(0, 0);
+          chimaera_ros_bridge::wait_for_checkpoint_restore(
+            [] {
+              char data[96]{};
+              const auto size = m5_read_file_addr(data, sizeof(data) - 1, 0);
+              return std::string(data, size);
+            },
+            [] { m5_quiesce_ns_addr(1000); }, [] { return rclcpp::ok(); });
         }
       }
     }

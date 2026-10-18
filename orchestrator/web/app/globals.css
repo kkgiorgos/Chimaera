@@ -104,6 +104,8 @@ main { min-width: 0; padding: 0 36px 50px; max-width: 1800px; width: 100%; margi
 .machine-footer { border-top: 1px solid rgb(var(--ctp-surface0)); padding: 9px 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; color: rgb(var(--ctp-subtext)); }
 .machine-footer button { font-size: 10px; }
 .preparation { border-top: 1px solid rgb(var(--ctp-surface0)); padding: 10px 15px; font-size: 11px; display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+.preparation-progress { flex-basis: 100%; color: rgb(var(--ctp-subtext)); }
+.preparation-progress small { display: block; margin-top: 3px; }
 .machine-error { color: rgb(var(--ctp-red)); font-size: 11px; padding: 10px 15px; overflow-wrap: anywhere; max-height: 90px; overflow: auto; }
 .run-panel { border: 1px solid rgb(var(--ctp-surface1)); border-radius: 8px; overflow: hidden; }
 .run-heading { display: flex; justify-content: space-between; align-items: center; padding: 21px 22px; gap: 16px; }

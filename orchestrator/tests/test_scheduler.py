@@ -107,6 +107,19 @@ def test_memory_budget_warning_is_persisted_and_notified_once(controller):
     assert len([e for e in controller.store.all('events') if e['level'] == 'warning']) == 1
 
 
+def test_preparation_readiness_metrics_reach_persisted_dashboard_state(controller):
+    experiment(controller)
+    progress = dict(phase='Waiting for arm readiness', elapsed_seconds=2400,
+        simulated_seconds=.4165, average_speed=.00017,
+        readiness=dict(arm=False, perception=True), checkpoint_current=1, checkpoint_total=1)
+    task = dict(id='e1-prepare', experiment='e1', kind='prepare', status='running',
+        phase=progress['phase'], progress=progress, started=1)
+    controller.ingest(controller.machine('m0'), dict(tasks=[task]))
+    prep = controller.experiment('e1')['preparations']['m0']
+    assert prep['progress'] == progress
+    assert prep['phase'] == progress['phase']
+
+
 def test_dynamic_dispatch_fills_all_hosts(controller):
     value = experiment(controller)
     controller.schedule(value)

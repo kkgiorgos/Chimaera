@@ -95,6 +95,39 @@ def test_missing_preparation_output_does_not_break_supervisor_snapshot(tmp_path)
     assert (tmp_path / 'missing/output/preparation-report/failure.json').exists()
 
 
+def test_readiness_progress_and_failure_diagnostics_survive_collection(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    agent = Agent(root, tmp_path / 'data')
+    output = agent.directory('e')
+    checkpoint = output / 'inputs/prepared/checkpoints' / ('a' * 64)
+    checkpoint.mkdir(parents=True)
+    (output / 'stage.json').write_text('{"phase":"Calibrating and creating readiness checkpoints"}')
+    (checkpoint / 'execution.json').write_text('{}')
+    (checkpoint / 'timing.csv').write_text('step,sim_seconds,elapsed_wall_seconds\n1,0.0005,2\n')
+    (checkpoint / 'readiness.csv').write_text(
+        'time,arm_ready,perception_ready,warmup_elapsed,warmup_required\n0.0005,0,1,0,0\n')
+    task = dict(id='e-prepare', experiment='e', kind='prepare', status='running',
+        container='prepare', output=str(output), started=100)
+    agent.store.put('tasks', task['id'], task)
+    with patch.object(agent, 'reconcile'), patch('agent.run', return_value=''), patch('agent.time.time', return_value=105):
+        sampled = agent.snapshot()['tasks'][0]
+    assert sampled['phase'] == 'Waiting for arm readiness'
+    assert sampled['progress']['elapsed_seconds'] == 5
+    assert sampled['progress']['simulated_seconds'] == .0005
+    (checkpoint / 'launch.log').write_text('[gazebo_host_bridge-4] Host bridge: socket timeout\n')
+    (checkpoint / 'cpt').mkdir()
+    (checkpoint / 'cpt/ram').write_bytes(b'excluded checkpoint memory')
+    state = json.dumps([dict(State=dict(Running=False, ExitCode=1, OOMKilled=False))])
+    with patch('agent.run', return_value=state), patch('agent.subprocess.run'):
+        failed = agent.snapshot()['tasks'][0]
+    assert failed['status'] == 'failed' and failed['phase'] == 'Preparation failed'
+    assert 'socket timeout' in failed['error']
+    report = output / 'preparation-report'
+    assert json.loads((report / 'failure.json').read_text())['error'] == failed['error']
+    assert (report / 'checkpoints' / checkpoint.name / 'launch.log').exists()
+    assert not list(report.rglob('ram'))
+
+
 def test_retry_preparation_tolerates_already_removed_container(tmp_path):
     agent = Agent(tmp_path, tmp_path / 'data')
     agent.store.put('tasks', 'e-prepare', dict(id='e-prepare', status='failed', container='removed'))
@@ -160,7 +193,7 @@ def test_individual_stop_kills_only_selected_container_and_keeps_logs(tmp_path):
             kind='case', status='running', container='chimaera-' + key,
             output=str(agent.directory('e') / 'attempts' / key)))
     with patch('agent.run', side_effect=[json.dumps([dict(State=dict(Running=True))]), b'',
-            json.dumps([dict(State=dict(Running=False))])]) as docker, \
+            json.dumps([dict(State=dict(Running=False))]), b'']) as docker, \
          patch('agent.subprocess.run') as logs:
         stopped = agent.rpc('stop_case', experiment='e', case='case-a', attempt='a')
     assert stopped['status'] == 'stopped'

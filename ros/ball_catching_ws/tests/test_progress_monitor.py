@@ -5,7 +5,55 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from watch_memory_suite import display, snapshot
+from watch_memory_suite import display, preparation_snapshot, snapshot
+
+
+def test_preparation_follows_checkpoint_readiness_and_reports_barrier_failure(tmp_path):
+    identifier = 'a' * 64
+    attempt = tmp_path / 'checkpoints' / identifier
+    attempt.mkdir(parents=True)
+    (tmp_path / 'preparation.json').write_text('{"phase":"Creating readiness checkpoints"}')
+    progress = dict(status='running', checkpoint=identifier, current=1, total=2)
+    (tmp_path / 'checkpoints/progress.json').write_text(json.dumps(progress))
+    (attempt / 'execution.json').write_text('{}')
+    (attempt / 'timing.csv').write_text('step,sim_seconds,elapsed_wall_seconds\n1,0.0005,2\n')
+    (attempt / 'readiness.csv').write_text(
+        'time,arm_ready,perception_ready,warmup_elapsed,warmup_required\n0.0005,0,1,0,0\n')
+    state = preparation_snapshot(tmp_path)
+    assert state['phase'] == 'Waiting for arm readiness'
+    assert state['readiness']['perception'] and not state['readiness']['arm']
+    assert state['average_speed'] == .00025
+    assert (state['checkpoint_current'], state['checkpoint_total']) == (1, 2)
+    (attempt / 'checkpoint-ready').touch()
+    assert preparation_snapshot(tmp_path)['phase'] == 'Waiting for guest checkpoint barrier'
+    (attempt / 'checkpoint-stage.json').write_text('{"phase":"Saving guest memory and device state"}')
+    assert preparation_snapshot(tmp_path)['phase'] == 'Saving guest memory and device state'
+    (attempt / 'checkpoint.json').write_text('{}')
+    assert preparation_snapshot(tmp_path)['phase'] == 'Readiness checkpoint saved'
+    (tmp_path / 'checkpoints/progress.json').write_text(json.dumps(dict(progress,
+        status='failed', error='Host bridge: socket timeout')))
+    assert preparation_snapshot(tmp_path)['phase'] == 'Readiness checkpoint failed'
+    assert preparation_snapshot(tmp_path)['reason'] == 'Host bridge: socket timeout'
+    assert 'throw_percent' not in state and 'outcome' not in state
+
+
+def test_preparation_stage_is_not_hidden_by_completed_checkpoint_records(tmp_path):
+    assert preparation_snapshot(tmp_path) == {}
+    (tmp_path / 'preparation.json').write_text('{"phase":"Validating fractional aggressor rates"}')
+    assert preparation_snapshot(tmp_path)['phase'] == 'Validating fractional aggressor rates'
+
+
+def test_legacy_preparation_reports_bridge_timeout_instead_of_cascade_panic(tmp_path):
+    attempt = tmp_path / 'checkpoints' / ('b' * 64)
+    attempt.mkdir(parents=True)
+    (attempt / 'execution.json').write_text('{}')
+    (attempt / 'checkpoint-ready').touch()
+    (attempt / 'launch.log').write_text(
+        '[gem5.opt-5] src/chimaera/util.cc:47: panic: read: Connection reset by peer\n'
+        '[gazebo_host_bridge-4] Host bridge: gem5 timing: socket timeout; simulator state is unknown\n')
+    state = preparation_snapshot(tmp_path)
+    assert state['phase'] == 'Readiness checkpoint failed'
+    assert 'socket timeout' in state['reason']
 
 
 def test_monitor_follows_active_case_and_then_the_latest_attempt(tmp_path):

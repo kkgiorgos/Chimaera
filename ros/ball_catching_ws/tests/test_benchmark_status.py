@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -53,3 +54,38 @@ def test_launch_validation_distinguishes_failed_and_incomplete_checks(tmp_path):
     assert benchmark_status.launch_failure(path) is None
     path.write_text('{"valid":false,"reason":"launch_pose_or_velocity_reset"}')
     assert benchmark_status.launch_failure(path) == 'Invalid ball launch: launch_pose_or_velocity_reset'
+
+
+def test_checkpoint_bridge_failure_stops_a_host_that_has_not_exited(tmp_path, monkeypatch):
+    import types
+    scene = types.ModuleType('ball_catching_sim.scene')
+    scene.generate = lambda *args, **kwargs: (None, tmp_path / 'robot.urdf', None, {})
+    monkeypatch.setitem(sys.modules, 'ball_catching_sim', types.ModuleType('ball_catching_sim'))
+    monkeypatch.setitem(sys.modules, 'ball_catching_sim.scene', scene)
+    directory = tmp_path / 'checkpoint'
+    stopped = []
+
+    class RunningHost:
+        def __init__(self, *args, **kwargs):
+            (directory / 'launch.log').write_text(
+                '[gazebo_host_bridge-4] Host bridge: gem5 timing: socket timeout; simulator state is unknown\n')
+
+        def poll(self):
+            return None
+
+    fixed = dict(duration=1, warmup=0, physics_step=.0005, joint_hz=1000,
+        camera_position=[-2, 0, 2], camera_width=480, camera_height=360,
+        cup_radius=.12, cup_depth=.14, wall_timeout_s=43200)
+    memory = tmp_path / 'memory.json'
+    memory.write_text('{}')
+    data = dict(fixed=fixed, hardware={}, aggressor={}, ramulator_config=str(memory))
+    monkeypatch.setattr(runner, 'session', lambda *args: {'bridge': {}})
+    monkeypatch.setattr(runner.subprocess, 'Popen', RunningHost)
+    monkeypatch.setattr(runner, 'stop', lambda process: stopped.append(process))
+    args = SimpleNamespace(image='guest.img', kernel='kernel', gem5_root='gem5')
+    point = dict(pattern='none', pressure=0, rates={'camera_hz': 30}, throw={})
+    with pytest.raises(RuntimeError, match='socket timeout'):
+        runner.gem5_trial(directory, tmp_path, data, point, args, {}, tmp_path / 'guest.tar.gz',
+                          checkpoint_prepare=directory)
+    assert len(stopped) == 1
+    assert not (directory / 'checkpoint.json').exists()

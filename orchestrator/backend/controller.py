@@ -559,7 +559,8 @@ class Controller:
                         continue
                     prior = experiment['preparations'].get(machine['id'], {})
                     experiment['preparations'][machine['id']] = dict(prior, status=task['status'], collected=prior.get('collected', False),
-                        task=task['id'], started=task.get('started'), phase=task.get('phase'), error=task.get('error'))
+                        task=task['id'], started=task.get('started'), phase=task.get('phase'),
+                        progress=task.get('progress'), error=task.get('error'))
                     if task['status'] == 'completed' and task.get('ready'):
                         experiment['preparations'][machine['id']]['status'] = 'ready'
                         if not experiment['calibration']:

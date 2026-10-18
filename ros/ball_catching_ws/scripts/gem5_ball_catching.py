@@ -168,6 +168,9 @@ class BallTimingServer(TimingServer):
         if not capture or restore or not self.roi_started or self.detailed_started:
             raise RuntimeError('Not a readiness checkpoint preparation session')
         boundary = m5.curTick()
+        directory = Path(capture)
+        stage = directory / 'checkpoint-stage.json'
+        stage.write_text(json.dumps({'phase': 'Waiting for guest checkpoint barrier'}) + '\n')
         Path(str(board.readfile)).write_text('CHIMAERA_CHECKPOINT\n')
         self.checkpoint_pending = True
         # A bounded guest-only interval lets the bridge finish its current
@@ -180,12 +183,13 @@ class BallTimingServer(TimingServer):
         else:
             raise RuntimeError('Guest did not reach the checkpoint transport barrier')
         self.checkpoint_pending = False
-        directory = Path(capture)
+        stage.write_text(json.dumps({'phase': 'Saving guest memory and device state'}) + '\n')
         m5.checkpoint(str(directory / 'cpt'))
         origin = json.loads((Path(m5.options.outdir) / 'roi_time_origin.json').read_text())
         (directory / 'checkpoint.json').write_text(json.dumps(dict(
             version=1, hardware=hardware, boundary_tick=boundary, saved_tick=m5.curTick(),
             time_origin_ns=origin['nanoseconds'], aggressor_enabled=False), indent=2) + '\n')
+        stage.write_text(json.dumps({'phase': 'Readiness checkpoint saved'}) + '\n')
         return f'CHECKPOINT {m5.curTick()}'
 
     def exit_handlers(self):

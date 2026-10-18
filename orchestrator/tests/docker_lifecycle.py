@@ -6,6 +6,7 @@ Run inside the supervisor image with /repo read-only, the Docker socket, and
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import time
 import uuid
@@ -52,9 +53,14 @@ a=p/'case-000-attempt-001'; a.mkdir()
         assert task['status'] == 'completed', task
         log = (Path(task['output']) / 'worker.log').read_text()
         assert 'worker stdout' in log and 'worker stderr' in log
+        assert task['container_removed'], task
+        assert subprocess.run(['docker', 'inspect', task['container']], capture_output=True).returncode != 0
+        assert 'worker stdout' in agent.logs(attempt)
         second = agent.start(experiment, 'case-000', uuid.uuid4().hex, 1, '2g')
         agent.stop(experiment, generation=0)
         assert agent.store.get('tasks', second['id'])['status'] == 'stopped'
+        assert agent.store.get('tasks', second['id'])['container_removed']
+        assert subprocess.run(['docker', 'inspect', second['container']], capture_output=True).returncode != 0
         try:
             agent.start(experiment, 'case-000', uuid.uuid4().hex, 1, '2g')
         except ValueError:
@@ -66,7 +72,7 @@ a=p/'case-000-attempt-001'; a.mkdir()
         agent.cleanup(experiment)
     print(json.dumps(dict(detached_completion=True, supervisor_reopen=True,
         duplicate_prevention=True, stdout_and_stderr=True, immediate_stop=True,
-        stop_barrier=True, cleanup=True)))
+        stop_barrier=True, automatic_container_cleanup=True, cleanup=True)))
 
 
 if __name__ == '__main__':

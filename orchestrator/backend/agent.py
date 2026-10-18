@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import urllib.request
 import uuid
 
-from common import Store, atomic_json, identifier, run, case_log
+from common import Store, atomic_json, identifier, run, case_log, tail_file
 
 ROOT = Path(os.environ.get('CHIMAERA_REPO', '/repo'))
 DATA = ROOT / '.chimaera-orchestrator'
@@ -171,24 +171,25 @@ class Agent:
             if task['status'] == 'accepted':
                 self.ensure_started(task)
             if task['status'] != 'running':
+                if task['status'] in {'completed', 'failed', 'stopped'}:
+                    self.cleanup_task_container(task)
                 continue
             try:
                 state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
             except RuntimeError as error:
-                task.update(status='failed', error='Container missing: ' + str(error), finished=time.time())
+                if 'no such' not in str(error).lower():
+                    raise
+                task.update(status='failed', error='Container missing: ' + str(error),
+                            finished=time.time(), container_removed=True)
                 self.store.put('tasks', task['id'], task)
                 continue
             if state['Running']:
                 continue
             output = Path(task['output'])
-            log = output / 'worker.log'
             task.update(status='completed' if state['ExitCode'] == 0 else 'failed',
                         exit_code=state['ExitCode'], oom=state.get('OOMKilled', False), finished=time.time())
             try:
-                output.mkdir(parents=True, exist_ok=True)
-                with log.open('wb') as stream:
-                    subprocess.run(['docker', 'logs', task['container']], stdout=stream,
-                                   stderr=subprocess.STDOUT, timeout=30, check=True)
+                self.save_worker_log(task)
             except (OSError, subprocess.SubprocessError) as error:
                 task['log_error'] = str(error)
             if task['kind'] == 'case' and task['status'] == 'completed':
@@ -200,6 +201,9 @@ class Agent:
                 except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:
                     task.update(status='failed', error='Case exited without a completed result: ' + str(error))
             if task['kind'] == 'prepare':
+                progress = self.preparation_progress(task)
+                if task['status'] == 'failed' and progress.get('reason'):
+                    task['error'] = progress['reason']
                 if task['status'] == 'completed':
                     try:
                         ready = json.loads((output / 'ready.json').read_text())
@@ -209,6 +213,56 @@ class Agent:
                         task.update(status='failed', error='Preparation exited without valid ready.json: ' + str(error))
                 self.preparation_report(task)
             self.store.put('tasks', task['id'], task)
+            self.cleanup_task_container(task)
+
+    def save_worker_log(self, task):
+        output = Path(task['output'])
+        output.mkdir(parents=True, exist_ok=True)
+        temporary = output / 'worker.log.tmp'
+        try:
+            with temporary.open('wb') as stream:
+                subprocess.run(['docker', 'logs', task['container']], stdout=stream,
+                               stderr=subprocess.STDOUT, timeout=30, check=True)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(output / 'worker.log')
+        finally:
+            temporary.unlink(missing_ok=True)
+        task['worker_log_saved'] = True
+        task.pop('log_error', None)
+
+    def cleanup_task_container(self, task):
+        """Keep durable logs before removing a terminal task's container; retry on polls."""
+        if task.get('container_removed') or task['status'] not in {'completed', 'failed', 'stopped'}:
+            return
+        try:
+            if not task.get('worker_log_saved'):
+                self.save_worker_log(task)
+                if task['kind'] == 'prepare':
+                    self.preparation_report(task)
+                # Persist before rm so recovery never depends on a removed container.
+                self.store.put('tasks', task['id'], task)
+            try:
+                # Never force removal: an unexpectedly running container is preserved.
+                run(['docker', 'rm', task['container']], timeout=30)
+            except RuntimeError as error:
+                if 'no such' not in str(error).lower():
+                    raise
+            task['container_removed'] = True
+            task.pop('container_cleanup_error', None)
+        except (RuntimeError, OSError, subprocess.SubprocessError) as error:
+            task['container_cleanup_error'] = str(error)
+        self.store.put('tasks', task['id'], task)
+
+    def preparation_progress(self, task):
+        scripts = str(self.root / 'ros/ball_catching_ws/scripts')
+        if scripts not in sys.path:
+            sys.path.insert(0, scripts)
+        from watch_memory_suite import preparation_snapshot
+        try:
+            return preparation_snapshot(Path(task['output']) / 'inputs/prepared')
+        except (OSError, ValueError, KeyError, TypeError):
+            return dict(phase='Waiting for preparation progress records')
 
     def preparation_report(self, task):
         output = Path(task['output'])
@@ -216,12 +270,26 @@ class Agent:
             report = output / 'preparation-report'
             report.mkdir(parents=True, exist_ok=True)
             for name in ('worker.log', 'request.json', 'ready.json', 'stage.json', 'experiment.json',
-                         'inputs/inputs.json', 'inputs/runner.json', 'inputs/plan.json'):
+                         'inputs/inputs.json', 'inputs/runner.json', 'inputs/plan.json',
+                         'inputs/prepared/preparation.json', 'inputs/prepared/checkpoints/progress.json'):
                 source = output / name
                 if source.is_file():
                     destination = report / name
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(source, destination)
+            # Keep small readiness diagnostics with the collected report. RAM,
+            # disks and replay streams stay on the worker and in the final image.
+            for directory in (output / 'inputs/prepared/checkpoints').glob('*'):
+                if not directory.is_dir():
+                    continue
+                for name in ('launch.log', 'timing.csv', 'readiness.csv', 'checkpoint-stage.json',
+                             'checkpoint.json', 'execution.json', 'checkpoint-host-state',
+                             'checkpoint-ready', 'gem5/board.pc.com_1.device', 'gem5/cpu_roi.json'):
+                    source = directory / name
+                    if source.is_file():
+                        destination = report / 'checkpoints' / directory.name / name
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(source, destination)
             if task['status'] in ('failed', 'stopped'):
                 atomic_json(report / 'failure.json', task)
         except OSError as error:
@@ -252,6 +320,17 @@ class Agent:
                     task['phase'] = json.loads(path.read_text()).get('phase') if path.exists() else 'Starting preparation'
                 except (OSError, ValueError) as error:
                     task['phase'] = 'Cannot read preparation progress: ' + str(error)
+                progress = self.preparation_progress(task)
+                if task.get('phase') in ('Calibrating and creating readiness checkpoints',
+                        'Validating shared calibration and readiness checkpoints') and progress.get('phase'):
+                    task['phase'] = progress['phase']
+                if task.get('started') is not None:
+                    progress['elapsed_seconds'] = max(0, task.get('finished', time.time()) - task['started'])
+                task['progress'] = progress
+                if task['status'] == 'failed':
+                    task['phase'] = 'Preparation failed'
+                    if progress.get('reason'):
+                        task['error'] = progress['reason']
                 report = Path(task['output']) / 'preparation-report'
                 if task['status'] in ('failed', 'stopped') and not report.exists():
                     self.preparation_report(task)
@@ -294,7 +373,7 @@ class Agent:
             (directory / 'worker.log').write_text('Stopped before the worker was launched.\n')
             task = dict(id=attempt, experiment=experiment, case=case, kind='case',
                 container='chimaera-' + attempt, output=str(directory),
-                status='stopped', finished=time.time())
+                status='stopped', finished=time.time(), worker_log_saved=True, container_removed=True)
         elif task['status'] in {'accepted', 'running'}:
             try:
                 state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
@@ -319,14 +398,15 @@ class Agent:
                 if state['Running']:
                     raise RuntimeError('Worker is still running after stop')
             task.update(status='stopped', finished=time.time())
+            if state is None:
+                task['container_removed'] = True
             directory.mkdir(parents=True, exist_ok=True)
             try:
-                with (directory / 'worker.log').open('wb') as stream:
-                    subprocess.run(['docker', 'logs', task['container']], stdout=stream,
-                                   stderr=subprocess.STDOUT, timeout=30, check=True)
+                self.save_worker_log(task)
             except (OSError, subprocess.SubprocessError) as error:
                 task['log_error'] = str(error)
         self.store.put('tasks', attempt, task)
+        self.cleanup_task_container(task)
         return task
 
     def stop(self, experiment, generation=0):
@@ -340,11 +420,18 @@ class Agent:
             subprocess.run(['docker', 'kill', *names], capture_output=True, timeout=30)
         for task in self.store.all('tasks'):
             if task['experiment'] == experiment and task['status'] in ('accepted', 'running'):
+                try:
+                    state = json.loads(run(['docker', 'inspect', task['container']], text=True, timeout=10))[0]['State']
+                except RuntimeError as error:
+                    if 'no such' not in str(error).lower():
+                        raise
+                    task['container_removed'] = True
+                else:
+                    if state['Running']:
+                        raise RuntimeError('Worker is still running after stop')
                 task.update(status='stopped', finished=time.time())
                 try:
-                    with (Path(task['output']) / 'worker.log').open('wb') as stream:
-                        subprocess.run(['docker', 'logs', task['container']], stdout=stream,
-                                       stderr=subprocess.STDOUT, timeout=30)
+                    self.save_worker_log(task)
                 except (OSError, subprocess.SubprocessError) as error:
                     task['log_error'] = str(error)
                 self.store.put('tasks', task['id'], task)
@@ -358,6 +445,9 @@ class Agent:
             return case_log(record['output'], stream)
         if record.get('error') and record['status'] == 'failed':
             return record['error']
+        log = Path(record['output']) / 'worker.log'
+        if record['status'] in {'completed', 'failed', 'stopped'} and log.is_file():
+            return '\n'.join(tail_file(log).splitlines()[-250:])
         result = subprocess.run(['docker', 'logs', '--tail', '250', record['container']],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=15, check=True)
         return result.stdout.decode(errors='replace')[-100000:]
