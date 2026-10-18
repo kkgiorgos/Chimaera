@@ -659,7 +659,11 @@ def main():
         wanted = {point['id'] for point in points}
         points = [point for point in manifest['points'] if point['id'] in wanted]
     else:
-        if any(output.iterdir()):
+        # The container worker publishes its initial stage before calibration.
+        # It is metadata, not a prior suite; simulation output still requires
+        # an existing manifest and the usual explicit resume validation.
+        if any(not (args.calibrate_only and path.name == 'preparation.json' and path.is_file())
+               for path in output.iterdir()):
             parser.error('Output must be empty or new')
         manifest = dict(schema_version=1, configuration_sha256=identity, configuration=data,
                         mode=mode, points=all_points)

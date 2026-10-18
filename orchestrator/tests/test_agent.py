@@ -95,6 +95,32 @@ def test_missing_preparation_output_does_not_break_supervisor_snapshot(tmp_path)
     assert (tmp_path / 'missing/output/preparation-report/failure.json').exists()
 
 
+def test_pre_checkpoint_cli_failure_is_visible_in_dashboard_and_collected_report(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    agent = Agent(root, tmp_path / 'data')
+    output = agent.directory('e')
+    output.mkdir(parents=True)
+    agent.store.put('tasks', 'e-prepare', dict(id='e-prepare', experiment='e', kind='prepare',
+        status='running', container='prepare', output=str(output)))
+    log = ('usage: run_memory_suite.py [-h]\n'
+        'run_memory_suite.py: error: Output must be empty or new\n'
+        'worker.py: error: Command returned non-zero exit status 2\n'
+        'setup.py: error: Worker failed\n')
+    state = json.dumps([dict(State=dict(Running=False, ExitCode=1, OOMKilled=False))])
+    def save_log(task):
+        (output / 'worker.log').write_text(log)
+        task['worker_log_saved'] = True
+    with patch('agent.run', return_value=state), patch.object(agent, 'save_worker_log', save_log):
+        failed = agent.snapshot()['tasks'][0]
+    expected = 'run_memory_suite.py: error: Output must be empty or new'
+    assert failed['error'] == expected
+    assert json.loads((output / 'preparation-report/failure.json').read_text())['error'] == expected
+    # Recover the cause for old failures whose saved task has no error field.
+    failed.pop('error')
+    agent.store.put('tasks', failed['id'], failed)
+    assert agent.snapshot()['tasks'][0]['error'] == expected
+
+
 def test_readiness_progress_and_failure_diagnostics_survive_collection(tmp_path):
     root = Path(__file__).resolve().parents[2]
     agent = Agent(root, tmp_path / 'data')

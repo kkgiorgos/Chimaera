@@ -89,6 +89,66 @@ def test_producer_prepares_readiness_once_after_packaging(tmp_path, monkeypatch)
     assert all('--case' not in command for command in commands)
 
 
+@pytest.mark.parametrize('shared', [False, True])
+@pytest.mark.parametrize('existing', [None, 'unexpected.txt', 'calibration'])
+def test_preparation_progress_passes_real_suite_initialization(tmp_path, monkeypatch, shared, existing):
+    import report
+    import run_memory_suite as suite
+
+    inputs = inputs_record(tmp_path)
+    config_path = ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+    data = json.loads(config_path.read_text())
+    data['ramulator_config'] = str((config_path.parent / data['ramulator_config']).resolve())
+    (inputs / 'experiment.json').write_text(json.dumps(data))
+    artifacts = tmp_path / 'gem5'
+    for name in ('build/X86/gem5.opt', 'resources/x86-ubuntu-22.04-ros-humble.img',
+                 'resources/x86-linux-kernel-5.15.180'):
+        path = artifacts / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'artifact')
+    output = tmp_path / 'prepared'
+    output.mkdir()
+    if existing == 'calibration':
+        (output / existing).mkdir()
+    elif existing:
+        (output / existing).write_text('previous output')
+    calibrated = []
+    def calibrate(directory, config, gem5, source):
+        calibrated.append(source)
+        assert json.loads((directory / 'preparation.json').read_text())['phase'] == (
+            'Validating shared memory calibration' if shared else 'Calibrating memory')
+        return {'stream': {'sustainable_gbps': 40}}
+    monkeypatch.setattr(suite, 'calibrate', calibrate)
+    monkeypatch.setattr(suite, 'execution_fingerprint', lambda: 'installed-artifacts')
+    monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
+    def execute(command, **kwargs):
+        if '--calibrate-only' in command:
+            argv = command[1:].copy()
+            argv[argv.index('--gem5-root') + 1] = str(artifacts)
+            argv[argv.index('--image') + 1] = str(artifacts / 'resources/x86-ubuntu-22.04-ros-humble.img')
+            argv[argv.index('--kernel') + 1] = str(artifacts / 'resources/x86-linux-kernel-5.15.180')
+            with monkeypatch.context() as context:
+                context.setattr(sys, 'argv', argv)
+                assert suite.main() == 0
+        else:
+            assert (output / 'experiment_manifest.json').is_file()
+        return subprocess.CompletedProcess(command, 0)
+    monkeypatch.setattr(worker.subprocess, 'run', execute)
+    source = tmp_path / 'shared-calibration' if shared else None
+    if existing:
+        with pytest.raises(SystemExit) as error:
+            worker.prepare(inputs, output, calibration_from=source)
+        assert error.value.code == 2
+        assert not calibrated
+        assert not (output / 'experiment_manifest.json').exists()
+    else:
+        worker.prepare(inputs, output, calibration_from=source)
+        assert calibrated == [source]
+        manifest = json.loads((output / 'experiment_manifest.json').read_text())
+        assert manifest['calibration']['stream']['sustainable_gbps'] == 40
+        assert json.loads((output / 'preparation.json').read_text())['phase'] == 'Prepared inputs ready'
+
+
 def test_missing_required_checkpoint_never_falls_back_to_kvm(tmp_path, monkeypatch):
     inputs = inputs_record(tmp_path)
     monkeypatch.setenv('CHIMAERA_CHECKPOINT_ROOT', str(tmp_path / 'missing'))

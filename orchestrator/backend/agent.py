@@ -202,8 +202,10 @@ class Agent:
                     task.update(status='failed', error='Case exited without a completed result: ' + str(error))
             if task['kind'] == 'prepare':
                 progress = self.preparation_progress(task)
-                if task['status'] == 'failed' and progress.get('reason'):
-                    task['error'] = progress['reason']
+                if task['status'] == 'failed':
+                    error = progress.get('reason') or self.preparation_log_error(task)
+                    if error:
+                        task['error'] = error
                 if task['status'] == 'completed':
                     try:
                         ready = json.loads((output / 'ready.json').read_text())
@@ -263,6 +265,16 @@ class Agent:
             return preparation_snapshot(Path(task['output']) / 'inputs/prepared')
         except (OSError, ValueError, KeyError, TypeError):
             return dict(phase='Waiting for preparation progress records')
+
+    def preparation_log_error(self, task):
+        try:
+            log = tail_file(Path(task['output']) / 'worker.log')
+        except OSError:
+            return None
+        # The innermost CLI reports its cause before wrappers report the
+        # CalledProcessError. Retain that cause for pre-checkpoint failures too.
+        errors = re.findall(r'^[\w.-]+\.py: error: [^\r\n]+', log, re.MULTILINE)
+        return errors[0] if errors else None
 
     def preparation_report(self, task):
         output = Path(task['output'])
@@ -329,8 +341,9 @@ class Agent:
                 task['progress'] = progress
                 if task['status'] == 'failed':
                     task['phase'] = 'Preparation failed'
-                    if progress.get('reason'):
-                        task['error'] = progress['reason']
+                    error = progress.get('reason') or task.get('error') or self.preparation_log_error(task)
+                    if error:
+                        task['error'] = error
                 report = Path(task['output']) / 'preparation-report'
                 if task['status'] in ('failed', 'stopped') and not report.exists():
                     self.preparation_report(task)

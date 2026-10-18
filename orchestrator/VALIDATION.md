@@ -215,3 +215,33 @@ the local ARM host could not complete because ROS `ament_index_python`, the
 installed application package and PyYAML are unavailable there (43 passed, 17
 dependency failures). A full Linux guest readiness/restore/throw campaign remains
 unvalidated; the isolated native regression does not replace that campaign.
+
+## Preparation startup regression — 2026-10-18
+
+Experiment `3707bc5991b14bf5bd63e9457ba69952` failed on `ubuntu-george`
+at revision `951d307c9f2b16520ef2df1bb4ba16a7d4413ee3`. The SDK/application build
+and guest disk assembly succeeded. The first suite invocation, `--calibrate-only`,
+then exited with `run_memory_suite.py: error: Output must be empty or new`.
+The prepared directory contained only `preparation.json`: the new progress writer
+had created it before the suite's strict fresh-output validation. Calibration and
+checkpoint creation never began; the container exited with code 1 without an OOM.
+
+Fresh calibration now permits that single progress file. Unexpected files,
+calibration directories and existing suites remain subject to their original
+rejection/resume checks. New producer and consumer regression cases invoke the
+real suite entry point from the preparation worker, mocking calibration and later
+ROS operations. They reproduced both startup failures before the fix and now
+verify initialization alongside rejection of stale files and calibration output.
+The supervisor also extracts the first CLI cause from saved worker logs when no
+checkpoint error is present, exposing early failures in the dashboard and reports.
+
+The focused command from the preceding validation record passed **211 tests**,
+including the new startup and early-error reporting regressions. `git diff --check`
+also passed. No full simulation was run for this startup-only repair.
+
+Recovery requires matching updated source contents on the controller and workers,
+redeploying supervisors and queuing a new experiment. The failed experiment's
+source identity remains frozen; retrying it against changed sources is rejected.
+This fix changes exported runner scripts and supervisor reporting, so cached SDK
+and application images and the constructed guest disk remain reusable. No remote
+checkout, experiment state or deployment was modified during this investigation.
