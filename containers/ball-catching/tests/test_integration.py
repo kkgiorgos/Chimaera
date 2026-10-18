@@ -1,4 +1,5 @@
 """Exercise portable exports and isolated worker/report handoff without booting gem5."""
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -155,6 +156,55 @@ def test_missing_required_checkpoint_never_falls_back_to_kvm(tmp_path, monkeypat
     with pytest.raises(ValueError, match='Required readiness checkpoints are missing'):
         worker.run_case(inputs, tmp_path / 'out', 'case-000')
     assert not (tmp_path / 'out').exists()
+
+
+@pytest.mark.parametrize('cached_bundle', [False, True])
+def test_imported_bundle_prepares_routes_for_case_start(tmp_path, monkeypatch, cached_bundle):
+    import types
+    import report
+    import run_memory_suite as suite
+
+    inputs = inputs_record(tmp_path)
+    config = ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+    artifacts = tmp_path / 'gem5'
+    for name in ('build/X86/gem5.opt', 'resources/x86-ubuntu-22.04-ros-humble.img',
+                 'resources/x86-linux-kernel-5.15.180'):
+        path = artifacts / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'artifact')
+    source = tmp_path / 'producer-guest.tar.gz'
+    source.write_bytes(b'exact producer bundle')
+    prepared = inputs / 'prepared'
+    prepared.mkdir()
+    if cached_bundle:
+        (prepared / 'guest.tar.gz').write_bytes(source.read_bytes())
+        # A prior calibration creates the manifest before staging the bundle.
+        data = suite.load_config(config)
+        (prepared / 'experiment_manifest.json').write_text(json.dumps(dict(
+            configuration_sha256=hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest(),
+            configuration=data, mode='gem5', points=suite.plan(data))))
+    package_index = types.ModuleType('ament_index_python.packages')
+    package_index.get_package_prefix = lambda package: str(tmp_path / package)
+    monkeypatch.setitem(sys.modules, 'ament_index_python.packages', package_index)
+    monkeypatch.setattr(report, 'create_dashboard', lambda *args: None)
+    monkeypatch.setattr(suite, 'execution_fingerprint', lambda: 'installed-artifacts')
+    def unexpected_bundle_build(*args):
+        pytest.fail('An imported bundle must not be rebuilt')
+    monkeypatch.setattr(suite, 'prepare_bundle', unexpected_bundle_build)
+    monkeypatch.setattr(sys, 'argv', ['run_memory_suite.py', '--config', str(config),
+        '--output', str(prepared), '--gem5-root', str(artifacts), '--prepare-only',
+        '--bundle-from', str(source), '--source-revision', 'snapshot',
+        *(['--resume'] if cached_bundle else [])])
+    assert suite.main() == 0
+    assert json.loads((prepared / 'routes.json').read_text()) == suite.routes()
+    assert (prepared / 'guest.tar.gz').read_bytes() == source.read_bytes()
+    (prepared / 'calibration').mkdir()
+    calls = []
+    monkeypatch.setattr(worker.subprocess, 'call', lambda command: calls.append(command) or 0)
+    output = tmp_path / 'case-output'
+    assert worker.run_case(inputs, output, 'case-000') == 0
+    assert json.loads((output / 'routes.json').read_text()) == suite.routes()
+    assert calls[0][-3:] == ['--resume', '--case', 'case-000']
 
 
 def test_worker_reuses_bundle_and_shared_calibration_then_resumes_one_case(tmp_path, monkeypatch):

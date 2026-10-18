@@ -681,6 +681,9 @@ def main():
                 raise ValueError('Missing artifact: ' + str(path))
         calibration = manifest.get('calibration', {}) if args.prepare_only else calibrate(output, data, gem5, args.calibration_from)
         if not args.calibrate_only:
+            # Host execution needs routes even when the exact guest bundle is
+            # imported or already cached, bypassing prepare_bundle().
+            write_json(output / 'routes.json', routes())
             bundle = output / 'guest.tar.gz'
             if not bundle.exists():
                 if args.bundle_from:
