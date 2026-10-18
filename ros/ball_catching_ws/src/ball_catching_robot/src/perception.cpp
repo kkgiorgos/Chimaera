@@ -143,7 +143,8 @@ private:
     }
     const auto estimationStarted = processingClock_.now();
     auto candidate = filter_;
-    const auto estimate = candidate.observe(detection->point, capture);
+    const auto estimate =
+      candidate.observe(detection->point, capture, stereo_.observationNoise(detection->point));
     const auto estimationSeconds = processingClock_.elapsed(estimationStarted);
     const auto publicationStarted = processingClock_.now();
     if (!fresh_image(key, imageTime("estimated", key), imageAgeNs_)) {

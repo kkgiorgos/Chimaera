@@ -137,6 +137,95 @@ TEST(Filter, ExactBallisticVelocityAndPrediction)
   EXPECT_LT((*filter.predict(.35) - (p + v * .35 + .5 * gravity * .35 * .35)).norm(), 1e-10);
   EXPECT_FALSE(filter.observe(p, .2));
 }
+TEST(Filter, StereoQuantizationPreservesAchievableLoftIntercept)
+{
+  // First nine detections from the missed, unloaded loft-3 checkpoint trial
+  // ce4e4b3c98c94915ba4410ec29d095b4 / case-000. Only visual observations
+  // enter the filter; the launch velocity is used below as a test oracle.
+  const std::vector<Vec3> observations{
+    {1.7480091379843832, .04375, 3.08125},
+    {1.6715191555765387, .04591836734693877, 3.144897959183673},
+    {1.6715191555765387, .04591836734693877, 3.22219387755102},
+    {1.639686137531708, .04682078194699553, 3.275867396236899},
+    {1.5980887724650081, .0465, 3.32},
+    {1.5801878332985155, .04701492537313433, 3.361194029850746},
+    {1.4597007427548152, .046153846153846156, 3.35},
+    {1.4597007427548152, .046153846153846156, 3.378846153846154},
+    {1.3944233702500077, .048113207547169815, 3.3669811320754715}};
+  Stereo stereo(480. / (2 * std::tan(1.35 / 2)), 240., 180., .3, Vec3(-2., .15, 2.));
+  BallFilter filter;
+  std::optional<Vec6> state;
+  for (size_t i = 0; i < observations.size(); ++i)
+    state =
+      filter.observe(observations[i], .4955 + .033 * i, stereo.observationNoise(observations[i]));
+  ASSERT_TRUE(state);
+  EXPECT_NEAR((*state)[3], -3. / std::sqrt(5.), .15);
+
+  // The same search time, inferred radius and feedback as the failed trial.
+  // Keep the existing joint limits, cup tilt and braking constraints intact.
+  Arm arm(robot());
+  const auto home = uprightHome();
+  const double start = .8085, age = start - .7595, radius = .030553017972351902;
+  const Vec3 position = state->head<3>() + state->tail<3>() * age + .5 * gravity * age * age;
+  const Vec3 velocity = state->tail<3>() + gravity * age;
+  const double height = arm.pose(home).p.z() - .15;
+  const double flight =
+    (velocity.z() +
+     std::sqrt(velocity.z() * velocity.z() + 2 * 9.81 * (position.z() - height - radius - .005))) /
+    9.81;
+  Vec3 point = position + velocity * flight + .5 * gravity * flight * flight;
+  point.z() = height;
+  Vec7 feedback;
+  feedback << 0., .005741797915, 0., -.1269895667, 0., .4806253381, .7853981634;
+  auto target = arm.inverse(point, arm.pose(neutral()).M, feedback, 120);
+  if (!target) target = arm.inverse(point, arm.pose(neutral()).M, neutral(), 120);
+  ASSERT_TRUE(target);
+  const auto motion = cupCatchTrajectory(
+    arm, start, flight, {home, Vec7::Zero(), Vec7::Zero()}, *target, velocity + gravity * flight,
+    1.5, .4);
+  ASSERT_TRUE(motion);
+  for (const auto & segment : *motion) EXPECT_TRUE(segment.feasible(arm));
+}
+TEST(Filter, InvalidObservationCovarianceDoesNotAdvanceTheFilter)
+{
+  BallFilter filter;
+  Eigen::Matrix3d noise = Eigen::Matrix3d::Identity();
+  noise(0, 0) = -1.;
+  EXPECT_FALSE(filter.observe(Vec3(1., 0., 2.), .1, noise));
+  noise.setZero();
+  EXPECT_FALSE(filter.observe(Vec3(1., 0., 2.), .1, noise));
+  noise.setIdentity();
+  noise(0, 1) = .5;
+  EXPECT_FALSE(filter.observe(Vec3(1., 0., 2.), .1, noise));
+  noise.setIdentity();
+  noise(0, 0) = NAN;
+  EXPECT_FALSE(filter.observe(Vec3(1., 0., 2.), .1, noise));
+  std::optional<Vec6> state;
+  for (int i = 0; i < 5; ++i)
+    state = filter.observe(Vec3(1., 0., 2.) + .5 * gravity * i * i * .0001, i * .01);
+  EXPECT_TRUE(state);
+}
+TEST(Filter, InitialCovarianceComesFromTheVisualFit)
+{
+  BallFilter filter;
+  Eigen::Matrix3d noise;
+  noise << .0004, -.00001, .0001, -.00001, .00002, -.000002, .0001, -.000002, .00005;
+  const Vec3 p(1.8, .04, 3.), v(-3. / std::sqrt(5.), 0., 6. / std::sqrt(5.));
+  constexpr double step = .033;
+  std::optional<Vec6> state;
+  for (int i = 0; i < 5; ++i) {
+    const double t = i * step;
+    state = filter.observe(p + v * t + .5 * gravity * t * t, t, noise);
+  }
+  ASSERT_TRUE(state);
+  EXPECT_LT((state->tail<3>() - v - gravity * (4 * step)).norm(), 1e-9);
+  // Closed-form covariance for five equally spaced observations, expressed at
+  // the final observation: Var(p)=0.6 R, Var(v)=R/sum((t-mean(t))^2).
+  const auto & covariance = filter.covariance();
+  EXPECT_LT((covariance.topLeftCorner<3, 3>() - .6 * noise).norm(), 1e-12);
+  EXPECT_LT((covariance.bottomRightCorner<3, 3>() - noise / (10 * step * step)).norm(), 1e-12);
+  EXPECT_LT((covariance.topRightCorner<3, 3>() - noise / (5 * step)).norm(), 1e-12);
+}
 TEST(Motion, NonzeroTerminalVelocityAndContinuousBraking)
 {
   const MotionState start{Vec7::Zero(), Vec7::Zero(), Vec7::Zero()};

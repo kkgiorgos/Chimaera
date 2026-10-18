@@ -1287,3 +1287,15 @@ Preparation/reporting and actual worker handoff are checked separately in Docker
 The final prepared suite remains entirely pending; no full benchmark is started
 by the agent. Run/monitor/report and image-transfer commands are in the container
 README. Full coupled validation remains user-run on the larger system.
+
+### Checkpoint-era visual estimator diagnosis, 2026-10-18
+
+The live orchestrated sweep exposed repeatable 3 m/s baseline misses despite
+unchanged CPU/cache/LPDDR5 settings. The ball filter ignored stereo measurement
+uncertainty and initialized covariance independently of its visual fit. Correct
+covariance handling restores feasible plans in the five inspected 3 m/s miss
+recordings; three separate native repetitions caught the ball, and all 25 robot
+C++ checks passed. No new gem5 run was started or frozen cohort changed. See
+[the diagnosis and validation record](ball-catching-estimator-debug.md) for
+evidence, the separate 5 m/s acquisition limitation and full-system validation
+limits.

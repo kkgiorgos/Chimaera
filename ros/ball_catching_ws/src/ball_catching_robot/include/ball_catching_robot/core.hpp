@@ -92,11 +92,19 @@ class BallFilter
 {
 public:
   std::optional<Vec3> predict(double time) const;
-  std::optional<Vec6> observe(const Vec3 & point, double time);
+  std::optional<Vec6> observe(
+    const Vec3 & point, double time,
+    const Eigen::Matrix3d & observationNoise = .000025 * Eigen::Matrix3d::Identity());
   const Mat6 & covariance() const { return covariance_; }
 
 private:
-  std::vector<std::pair<double, Vec3>> history_;
+  struct Observation
+  {
+    double time;
+    Vec3 point;
+    Eigen::Matrix3d noise;
+  };
+  std::vector<Observation> history_;
   std::optional<double> time_;
   std::optional<Vec6> state_;
   Mat6 covariance_ = Mat6::Zero();

@@ -89,30 +89,39 @@ std::optional<Vec3> BallFilter::predict(double time) const
   const double dt = time - *time_;
   return state_->head<3>() + state_->tail<3>() * dt + .5 * gravity * dt * dt;
 }
-std::optional<Vec6> BallFilter::observe(const Vec3 & point, double time)
+std::optional<Vec6> BallFilter::observe(
+  const Vec3 & point, double time, const Eigen::Matrix3d & observationNoise)
 {
-  if (!point.allFinite() || !std::isfinite(time) || (time_ && time <= *time_)) return {};
+  if (
+    !point.allFinite() || !std::isfinite(time) || (time_ && time <= *time_) ||
+    !observationNoise.allFinite() || !observationNoise.isApprox(observationNoise.transpose()) ||
+    observationNoise.llt().info() != Eigen::Success)
+    return {};
   if (time_ && time - *time_ > .15) {
     history_.clear();
     state_.reset();
   }
   if (!state_) {
-    history_.emplace_back(time, point);
+    history_.push_back({time, point, observationNoise});
     time_ = time;
     if (history_.size() < 5) return {};
-    Eigen::MatrixXd a(history_.size(), 2), b(history_.size(), 3);
-    for (size_t i = 0; i < history_.size(); ++i) {
-      const double t = history_[i].first - time;
-      a(i, 0) = 1;
-      a(i, 1) = t;
-      b.row(i) = (history_[i].second - .5 * gravity * t * t).transpose();
+    // Fit a ballistic state at the latest capture time. Derive its covariance
+    // from the same measurements: position and velocity errors are correlated,
+    // especially when the initial stereo detections span only four frames.
+    Mat6 information = Mat6::Zero();
+    Vec6 weighted = Vec6::Zero();
+    for (const auto & observation : history_) {
+      const double t = observation.time - time;
+      Eigen::Matrix<double, 3, 6> a;
+      a << Eigen::Matrix3d::Identity(), t * Eigen::Matrix3d::Identity();
+      const Vec3 point = observation.point - .5 * gravity * t * t;
+      const auto noise = observation.noise.ldlt();
+      information += a.transpose() * noise.solve(a);
+      weighted += a.transpose() * noise.solve(point);
     }
-    const Eigen::Matrix<double, 2, 3> fit = a.colPivHouseholderQr().solve(b);
-    Vec6 initial;
-    initial << fit.row(0).transpose(), fit.row(1).transpose();
-    state_ = initial;
-    covariance_.setZero();
-    covariance_.diagonal() << .0001, .0001, .0001, .1, .1, .1;
+    const auto fit = information.ldlt();
+    state_ = fit.solve(weighted);
+    covariance_ = fit.solve(Mat6::Identity());
   } else {
     const double dt = time - *time_;
     Mat6 transition = Mat6::Identity();
@@ -125,12 +134,14 @@ std::optional<Vec6> BallFilter::observe(const Vec3 & point, double time)
     const Vec3 innovation = point - predicted.head<3>();
     if (innovation.norm() > .25) {
       state_.reset();
-      history_ = {{time, point}};
+      history_ = {{time, point, observationNoise}};
       time_ = time;
       return {};
     }
-    const Eigen::Matrix3d residual =
-      covariance.topLeftCorner<3, 3>() + .000025 * Eigen::Matrix3d::Identity();
+    // Stereo depth uncertainty grows with distance and is correlated with the
+    // other axes. A fixed 5 mm error overweights quantized depth measurements
+    // and turns their frame-to-frame jumps into large velocity errors.
+    const Eigen::Matrix3d residual = covariance.topLeftCorner<3, 3>() + observationNoise;
     const Eigen::Matrix<double, 6, 3> gain =
       residual.ldlt().solve(covariance.topRows<3>()).transpose();
     state_ = predicted + gain * innovation;
