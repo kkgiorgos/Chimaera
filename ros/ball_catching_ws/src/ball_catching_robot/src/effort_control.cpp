@@ -55,7 +55,7 @@ private:
         if (!candidate.feasible(arm_)) return;
         candidates.push_back(candidate);
       }
-      trajectories_ = candidates;
+      trajectories_.replace(candidates, now().seconds());
     } catch (const std::invalid_argument &) {
       return;
     }
@@ -66,11 +66,7 @@ private:
     const double time = stamp.seconds();
     if (!feedback_.valid || time - feedback_.time < 0 || time - feedback_.time >= .05) return;
     const auto started = processingClock_.now();
-    MotionState desired{home_, Vec7::Zero(), Vec7::Zero()};
-    for (const auto & trajectory : trajectories_) {
-      desired = trajectory.sample(time);
-      if (time <= trajectory.start + trajectory.duration) break;
-    }
+    const MotionState desired = trajectories_.sample(time, {home_, Vec7::Zero(), Vec7::Zero()});
     const Vec7 correction =
       desired.ddq + 144 * (desired.q - feedback_.q) + 24 * (desired.dq - feedback_.dq);
     Vec7 effort = arm_.forces(feedback_.q, feedback_.dq) + arm_.mass(feedback_.q) * correction;
@@ -120,7 +116,7 @@ private:
   Feedback feedback_;
   double lastLog_{-1}, lastControl_{-1};
   Vec7 integral_ = Vec7::Zero();
-  std::vector<Quintic> trajectories_;
+  TrajectorySchedule trajectories_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr commands_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr ready_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joints_;

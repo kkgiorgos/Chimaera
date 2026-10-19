@@ -147,6 +147,12 @@ does not remove running sibling workers.
 
 ## Configure and run
 
+For the planner timing correction, import
+[`experiments/planner_timing_baseline.json`](experiments/planner_timing_baseline.json)
+to run a single unloaded 3 m/s case. Follow the
+[build and checkpoint instructions](../docs/ball-catching-planner-timing.md#test-through-the-orchestrator)
+before queueing it.
+
 Choose **New experiment**. Monaco opens the current
 `memory_contention_patterns.json` template with the matching Catppuccin theme.
 Import/export JSON, edit it, select workers and an image preparation/calibration

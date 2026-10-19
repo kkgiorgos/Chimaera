@@ -50,6 +50,30 @@ bool Quintic::feasible(const Arm &arm) const {
   }
   return true;
 }
+void TrajectorySchedule::replace(const std::vector<Quintic> & segments, double now)
+{
+  if (segments.empty()) throw std::invalid_argument("Empty trajectory replacement");
+  while (!commands_.empty() && commands_.back().front().start >= segments.front().start)
+    commands_.pop_back();
+  while (commands_.size() > 1 && commands_[1].front().start <= now)
+    commands_.erase(commands_.begin());
+  commands_.push_back(segments);
+}
+MotionState TrajectorySchedule::sample(double time, const MotionState & fallback) const
+{
+  MotionState state = fallback;
+  const std::vector<Quintic> * segments = nullptr;
+  for (const auto & command : commands_) {
+    if (time < command.front().start) break;
+    segments = &command;
+  }
+  if (!segments) return state;
+  for (const auto & segment : *segments) {
+    state = segment.sample(time);
+    if (time <= segment.start + segment.duration) break;
+  }
+  return state;
+}
 std::optional<std::vector<Quintic>> cupCatchTrajectory(
   const Arm & arm, double start, double flightTime, const MotionState & initial,
   const Vec7 & target, const Vec3 & incomingVelocity, double matchingSpeed, double brakeTime)

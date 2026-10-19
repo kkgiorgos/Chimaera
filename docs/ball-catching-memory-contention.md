@@ -1299,3 +1299,16 @@ C++ checks passed. No new gem5 run was started or frozen cohort changed. See
 [the diagnosis and validation record](ball-catching-estimator-debug.md) for
 evidence, the separate 5 m/s acquisition limitation and full-system validation
 limits.
+
+### Planner timing follow-up, 2026-10-19
+
+An actual successful gem5 catch on pop-os has matching hardware, physical settings
+and normalized robot URDF, while its software provenance and startup differ.
+The newest corrected-filter baseline still misses: a 98 ms failed planner search
+blocks newer observations with feasible intercepts. The planner now bounds IK
+work, retains a feasible partial result under a time budget and schedules commands
+ahead with continuous handoff. Its useful-input gem5 kernel probe returns a
+feasible result in 28.259 ms versus 39.507 ms for the non-interruptible search;
+27 C++ checks, 132 workflow/dashboard checks and three native catches pass.
+This is not a completed coupled catch validation. See
+[the full diagnosis, successful-run comparison and validation limits](ball-catching-planner-timing.md).

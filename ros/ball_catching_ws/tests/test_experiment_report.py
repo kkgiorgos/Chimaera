@@ -119,10 +119,19 @@ def test_missing_guest_logs_are_distinct_from_recorded_zero_counts(tmp_path, rec
     summary = load_trial(tmp_path)['summary']
     if recorded:
         assert summary['perception_counts'] == dict(pairs=0, detected=0, tracked=0)
-        assert summary['planning_counts'] == dict(updates=0, planned=0, infeasible=0)
+        assert summary['planning_counts'] == dict(updates=0, planned=0, infeasible=0, deadline_missed=0)
     else:
         assert summary['perception_counts'] is None
         assert summary['planning_counts'] is None
+
+
+def test_expired_plan_is_reported_separately_from_infeasibility(tmp_path):
+    write_trial(tmp_path, success=False)
+    (tmp_path / 'interception.jsonl').write_text(json.dumps(dict(
+        time=1.02, status='planning_deadline_missed', planning_wall_seconds=.04)) + '\n')
+    summary = load_trial(tmp_path)['summary']
+    assert summary['planning_counts'] == dict(updates=1, planned=0, infeasible=0, deadline_missed=1)
+    assert summary['first_plan_lead_ms'] is None
 
 
 def test_dashboard_embeds_cup_report_and_assets(tmp_path):

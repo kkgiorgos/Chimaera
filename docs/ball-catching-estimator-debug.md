@@ -1,5 +1,10 @@
 # Ball-catching estimator diagnosis, 2026-10-18
 
+Follow-up: the corrected filter still missed a later coupled baseline because
+long planner callbacks masked useful observations. The native/instantaneous
+checks below did not establish full-system reliability. See
+[the successful pop-os comparison and planner timing diagnosis](ball-catching-planner-timing.md).
+
 The missed 3 m/s loft is achievable. The live experiment
 `ce4e4b3c98c94915ba4410ec29d095b4` exposed an existing visual-estimation defect:
 stereo uncertainty was calculated but never used by the ball filter, and the

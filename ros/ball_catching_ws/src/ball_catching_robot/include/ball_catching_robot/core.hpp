@@ -1,5 +1,6 @@
 #pragma once
 #include <Eigen/Core>
+#include <functional>
 #include <kdl/frames.hpp>
 #include <memory>
 #include <opencv2/core.hpp>
@@ -24,8 +25,8 @@ public:
   ~Arm();
   KDL::Frame pose(const Vec7 & q) const;
   std::optional<Vec7> inverse(
-    const Vec3 & position, const KDL::Rotation & rotation, const Vec7 & seed,
-    int iterations = 35) const;
+    const Vec3 & position, const KDL::Rotation & rotation, const Vec7 & seed, int iterations = 35,
+    int * iterationsUsed = nullptr) const;
   Vec7 forces(const Vec7 & q, const Vec7 & dq) const;
   Mat7 mass(const Vec7 & q) const;
   Eigen::Matrix<double, 6, 7> jacobian(const Vec7 & q) const;
@@ -58,11 +59,48 @@ private:
   Eigen::Matrix<double, 6, 7> coefficients_;
 };
 
+// Keep following the active command until a replacement's future start time.
+class TrajectorySchedule
+{
+public:
+  void replace(const std::vector<Quintic> & segments, double now);
+  MotionState sample(double time, const MotionState & fallback) const;
+  bool empty() const { return commands_.empty(); }
+
+private:
+  std::vector<std::vector<Quintic>> commands_;
+};
+
 // Follow the visually estimated incoming velocity, then brake with continuous
 // joint position, velocity and acceleration while keeping the cup upright.
 std::optional<std::vector<Quintic>> cupCatchTrajectory(
   const Arm & arm, double start, double flightTime, const MotionState & initial,
   const Vec7 & target, const Vec3 & incomingVelocity, double matchingSpeed, double brakeTime);
+
+struct InterceptPlan
+{
+  std::vector<Quintic> segments;
+  Vec3 point = Vec3::Zero(), velocity = Vec3::Zero();
+  int inverseSolutions{0}, inverseCalls{0}, inverseIterations{0}, candidates{0};
+  bool interrupted{false};
+};
+
+// Pure search shared by the ROS node and recorded-input/timing regression tests.
+// Ball position, velocity and desired arm state are expressed at start.
+class CupInterceptPlanner
+{
+public:
+  explicit CupInterceptPlanner(const Arm & arm);
+  InterceptPlan search(
+    double start, const MotionState & initial, const Vec7 & feedback, const Vec3 & position,
+    const Vec3 & velocity, double radius, const std::function<bool()> & shouldStop = {}) const;
+
+private:
+  const Arm & arm_;
+  Vec7 seed_;
+  KDL::Rotation rotation_;
+  double height_;
+};
 
 struct Circle
 {

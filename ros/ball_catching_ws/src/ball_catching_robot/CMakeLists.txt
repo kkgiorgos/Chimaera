@@ -14,7 +14,7 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSONC REQUIRED IMPORTED_TARGET json-c)
 
-add_library(catching_core STATIC src/model.cpp src/motion.cpp src/vision.cpp)
+add_library(catching_core STATIC src/model.cpp src/motion.cpp src/vision.cpp src/intercept_search.cpp)
 target_compile_features(catching_core PUBLIC cxx_std_17)
 target_compile_options(catching_core PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(catching_core PUBLIC include ${orocos_kdl_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS})
@@ -51,6 +51,7 @@ if(BUILD_TESTING)
   target_compile_definitions(runtime_test PRIVATE FAKE_GEM5_CLOCK="$<TARGET_FILE:fake_gem5_clock>")
   target_compile_definitions(core_test PRIVATE TEST_URDF="${CMAKE_CURRENT_BINARY_DIR}/test_robot.urdf"
     PYTHON_REFERENCE="${CMAKE_CURRENT_SOURCE_DIR}/test/python_reference.json"
+    PLANNER_REFERENCE="${CMAKE_CURRENT_SOURCE_DIR}/test/planner_reference.json"
     FAKE_GEM5_CLOCK="$<TARGET_FILE:fake_gem5_clock>")
 endif()
 ament_package()

@@ -89,11 +89,15 @@ KDL::Frame Arm::pose(const Vec7 &q) const {
   if (impl_->fk->JntToCart(joints(q), result) < 0) throw std::runtime_error("FK failed");
   return result;
 }
-std::optional<Vec7> Arm::inverse(const Vec3 &position, const KDL::Rotation &rotation,
-                                const Vec7 &seed, int iterations) const {
+std::optional<Vec7> Arm::inverse(
+  const Vec3 & position, const KDL::Rotation & rotation, const Vec7 & seed, int iterations,
+  int * iterationsUsed) const
+{
+  if (iterationsUsed) *iterationsUsed = 0;
   const KDL::Frame target(rotation, KDL::Vector(position.x(), position.y(), position.z()));
   Vec7 q = seed;
   for (int k = 0; k < iterations; ++k) {
+    if (iterationsUsed) ++*iterationsUsed;
     const auto error = KDL::diff(pose(q), target);
     Vec6 delta;
     for (int i = 0; i < 6; ++i) delta[i] = error[i];

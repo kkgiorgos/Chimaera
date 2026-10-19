@@ -174,7 +174,8 @@ def load_trial(directory):
                                           tracked=len(tracked))
                        if (directory / 'perception.jsonl').exists() else None,
                    planning_counts=dict(updates=len(plans), planned=len(actual_plans),
-                                        infeasible=sum(r.get('status') == 'no_feasible_intercept' for r in plans))
+                                        infeasible=sum(r.get('status') == 'no_feasible_intercept' for r in plans),
+                                        deadline_missed=sum(r.get('status') == 'planning_deadline_missed' for r in plans))
                        if (directory / 'interception.jsonl').exists() else None,
                    home_error_at_launch_degrees=math.degrees(home_error) if home_error is not None else None,
                    braking_start_seconds=braking['braking_start_time']-launch if braking else None,

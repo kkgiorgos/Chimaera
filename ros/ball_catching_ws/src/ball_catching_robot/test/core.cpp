@@ -238,6 +238,78 @@ TEST(Motion, NonzeroTerminalVelocityAndContinuousBraking)
   EXPECT_LT((brake.sample(1.).dq - end.dq).norm(), 1e-10);
   EXPECT_LT(brake.sample(1.4).dq.norm(), 1e-10);
 }
+TEST(Planning, BoundsFailedWorkAndRecoversObservationHiddenByLongSearch)
+{
+  auto * reference = json_object_from_file(PLANNER_REFERENCE);
+  ASSERT_NE(reference, nullptr);
+  Arm arm(robot());
+  CupInterceptPlanner planner(arm);
+  auto * rows = member(reference, "rows");
+  for (size_t i = 0; i < json_object_array_length(rows); ++i) {
+    auto * row = json_object_array_get_idx(rows, i);
+    const double time = json_object_get_double(member(row, "time"));
+    const double captured = json_object_get_double(member(row, "capture_time"));
+    const double start = time + 1. / 30.;
+    const double age = start - captured;
+    const auto state = vector<6>(member(row, "state"));
+    const Vec3 position = state.head<3>() + state.tail<3>() * age + .5 * gravity * age * age;
+    const Vec3 velocity = state.tail<3>() + gravity * age;
+    EXPECT_LT(json_object_get_double(member(row, "completed_time")), time);
+    const auto plan = planner.search(
+      start, {uprightHome(), Vec7::Zero(), Vec7::Zero()}, vector<7>(member(row, "feedback")),
+      position, velocity, json_object_get_double(member(row, "radius")));
+    EXPECT_EQ(!plan.segments.empty(), json_object_get_boolean(member(row, "feasible")) != 0);
+    EXPECT_LE(plan.inverseCalls, 18);
+    EXPECT_LE(plan.inverseIterations, plan.inverseCalls * 35);
+    if (i == 0) EXPECT_EQ(plan.inverseIterations, 490);  // Previously 1,680.
+    if (i == 0) {
+      const auto cancelled = planner.search(
+        start, {uprightHome(), Vec7::Zero(), Vec7::Zero()}, vector<7>(member(row, "feedback")),
+        position, velocity, json_object_get_double(member(row, "radius")), [] { return true; });
+      EXPECT_TRUE(cancelled.interrupted);
+      EXPECT_TRUE(cancelled.segments.empty());
+      EXPECT_EQ(cancelled.inverseIterations, 0);
+    }
+    if (i == 1) {
+      EXPECT_LT(
+        time, json_object_get_double(member(reference, "recorded_first_search_completed_time")));
+      ASSERT_FALSE(plan.segments.empty());
+      EXPECT_DOUBLE_EQ(plan.segments.front().start, start);
+      for (const auto & segment : plan.segments) EXPECT_TRUE(segment.feasible(arm));
+      int polls = 0;
+      const auto partial = planner.search(
+        start, {uprightHome(), Vec7::Zero(), Vec7::Zero()}, vector<7>(member(row, "feedback")),
+        position, velocity, json_object_get_double(member(row, "radius")),
+        [&] { return ++polls >= 10; });
+      EXPECT_TRUE(partial.interrupted);
+      ASSERT_FALSE(partial.segments.empty());
+      EXPECT_LT(partial.inverseIterations, plan.inverseIterations);
+      for (const auto & segment : partial.segments) EXPECT_TRUE(segment.feasible(arm));
+    }
+  }
+  json_object_put(reference);
+}
+TEST(Motion, FutureReplacementPreservesActiveMotionUntilItsTimestamp)
+{
+  const MotionState home{Vec7::Zero(), Vec7::Zero(), Vec7::Zero()};
+  TrajectorySchedule schedule;
+  EXPECT_TRUE(schedule.empty());
+  Quintic first(1., 1., home, Vec7::Ones());
+  schedule.replace({first}, .9);
+  EXPECT_LT(schedule.sample(.99, home).q.norm(), 1e-12);
+  const auto join = first.sample(1.5);
+  Quintic second(1.5, 1., join, Vec7::Constant(2.));
+  schedule.replace({second}, 1.2);
+  EXPECT_LT((schedule.sample(1.3, home).q - first.sample(1.3).q).norm(), 1e-12);
+  EXPECT_LT((schedule.sample(1.5, home).dq - join.dq).norm(), 1e-12);
+  EXPECT_LT((schedule.sample(1.7, home).q - second.sample(1.7).q).norm(), 1e-12);
+  // A further future update must not erase the preceding scheduled interval.
+  Quintic third(1.8, 1., second.sample(1.8), Vec7::Constant(3.));
+  schedule.replace({third}, 1.3);
+  EXPECT_LT((schedule.sample(1.7, home).q - second.sample(1.7).q).norm(), 1e-12);
+  EXPECT_LT((schedule.sample(1.9, home).q - third.sample(1.9).q).norm(), 1e-12);
+  EXPECT_THROW(schedule.replace({}, 2.), std::invalid_argument);
+}
 TEST(Motion, CupFollowsIncomingBallAndBrakesUprightWithinLimits)
 {
   Arm arm(robot());

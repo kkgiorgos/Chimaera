@@ -1,6 +1,5 @@
 #include <Eigen/Dense>
 #include <geometry_msgs/msg/vector3_stamped.hpp>
-#include <limits>
 #include <nav_msgs/msg/odometry.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 
@@ -14,6 +13,7 @@ public:
   Intercept()
   : Node("ball_intercept"),
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
+    planner_(arm_),
     record_(declare_parameter<std::string>("output", ""), "interception", this),
     processingClock_(*this)
   {
@@ -21,9 +21,6 @@ public:
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())));
     arm_.validateHome(home);
     home_ = home;
-    const auto pose = arm_.pose(home);
-    rotation_ = arm_.pose(inverseSeed_).M;
-    height_ = pose.p.z();
     commands_ =
       create_publisher<trajectory_msgs::msg::JointTrajectory>("/robot/joint_trajectory", 1);
     joints_ = create_subscription<sensor_msgs::msg::JointState>(
@@ -50,7 +47,8 @@ public:
     planInterval_ = declare_parameter("plan_interval", .06);
     if (!std::isfinite(hz) || hz <= 0 || !std::isfinite(planInterval_) || planInterval_ < 0)
       throw std::invalid_argument("Invalid planner frequency or search interval");
-    timer_ = timer(*this, 1. / hz, [this] { plan(); });
+    planningBudget_ = 1. / hz;
+    timer_ = timer(*this, planningBudget_, [this] { plan(); });
   }
 
 private:
@@ -81,68 +79,57 @@ private:
       return;
     }
     const auto started = processingClock_.now();
-    lastPlan_ = time;
-    const MotionState initial = desired(time);
-    std::vector<Quintic> best;
-    Vec3 bestPoint, bestVelocity;
-    int inverseSolutions = 0;
-    double score = std::numeric_limits<double>::infinity();
-    for (double height :
-         {height_, height_ + .05, height_ - .05, height_ + .10, height_ - .10, height_ + .15,
-          height_ - .15, height_ + .20, height_ - .20}) {
-      const double discriminant =
-        velocity.z() * velocity.z() + 2 * 9.81 * (position.z() - height - *radius_ - .005);
-      if (discriminant < 0) continue;
-      const double dt = (velocity.z() + std::sqrt(discriminant)) / 9.81;
-      if (dt <= .07 || dt >= 1.2) continue;
-      Vec3 point = position + velocity * dt + .5 * gravity * dt * dt;
-      point.z() = height;
-      const double distance = point.head<2>().norm();
-      if (distance <= .12 || distance >= 1.10 || height <= .20 || height >= 1.30) continue;
-      auto target = arm_.inverse(point, rotation_, feedback_.q, 120);
-      // A nearly straight arm is an IK singularity. A second numerical seed
-      // selects a bent-elbow solution without changing the physical start pose.
-      if (!target) target = arm_.inverse(point, rotation_, inverseSeed_, 120);
-      if (!target) continue;
-      ++inverseSolutions;
-      const Vec3 incoming = velocity + gravity * dt;
-      for (double matchingSpeed : {1.5, 1., .7, .35, .2, .1}) {
-        for (double brakeTime : {.25, .4, .6}) {
-          const auto candidate = cupCatchTrajectory(
-            arm_, time, dt, initial, *target, incoming, matchingSpeed, brakeTime);
-          if (!candidate) continue;
-          const auto catchState = candidate->front().sample(time + dt);
-          const Vec3 cupVelocity = (arm_.jacobian(*target) * catchState.dq).head<3>();
-          const double cost =
-            (*target - initial.q).norm() + .10 * dt + .8 * (incoming - cupVelocity).norm();
-          if (cost < score) {
-            score = cost;
-            best = *candidate;
-            bestPoint = point;
-            bestVelocity = cupVelocity;
-          }
-        }
-      }
-    }
-    if (best.empty()) {
+    // Search for a trajectory that begins after one planner period. Computation
+    // must finish before this timestamp; publishing a trajectory starting at the
+    // old callback time would skip its initial motion on a slow simulated CPU.
+    const double executionTime = time + planningBudget_;
+    const Vec3 executionPosition =
+      position + velocity * planningBudget_ + .5 * gravity * planningBudget_ * planningBudget_;
+    const Vec3 executionVelocity = velocity + gravity * planningBudget_;
+    // Reserve the remaining fifth of the period for the end of the current
+    // bounded IK/candidate check, command publication and controller handoff.
+    const auto shouldStop = [&] {
+      const auto current = processingClock_.now();
+      return !started || !current || *current < *started ||
+             static_cast<double>(*current - *started) * 1e-9 >= .8 * planningBudget_;
+    };
+    const auto result = planner_.search(
+      executionTime, desired(executionTime), feedback_.q, executionPosition, executionVelocity,
+      *radius_, shouldStop);
+    const auto & best = result.segments;
+    const auto duration = processingClock_.elapsed(started);
+    const auto elapsed = std::get_if<double>(&duration);
+    if (best.empty() || !elapsed || *elapsed >= planningBudget_) {
       record_.write(
         {{"time", time},
          {"capture_time", ball_->time},
-         {"status", "no_feasible_intercept"},
-         {"inverse_solutions", static_cast<double>(inverseSolutions)},
+         {"status", best.empty() && !result.interrupted ? "no_feasible_intercept"
+                                                        : "planning_deadline_missed"},
+         {"inverse_solutions", static_cast<double>(result.inverseSolutions)},
+         {"inverse_calls", static_cast<double>(result.inverseCalls)},
+         {"inverse_iterations", static_cast<double>(result.inverseIterations)},
+         {"planning_budget_seconds", planningBudget_},
          {"planning_wall_seconds", processingClock_.elapsed(started)}});
       return;
     }
     publish(best);
+    // The 60 ms command-update limit applies to published plans. A failed
+    // search must leave the next 30 Hz tick free to try a newer observation.
+    lastPlan_ = time;
     cupInterceptTime_ = best.back().start;
     record_.write(
       {{"time", time},
        {"capture_time", ball_->time},
        {"status", "planned"},
-       {"target", values(bestPoint)},
+       {"target", values(result.point)},
        {"target_joints", values(best.front().sample(cupInterceptTime_).q)},
        {"intercept_time", cupInterceptTime_},
-       {"cup_velocity", values(bestVelocity)},
+       {"trajectory_start_time", executionTime},
+       {"inverse_calls", static_cast<double>(result.inverseCalls)},
+       {"inverse_iterations", static_cast<double>(result.inverseIterations)},
+       {"planning_budget_seconds", planningBudget_},
+       {"search_interrupted", result.interrupted ? 1. : 0.},
+       {"cup_velocity", values(result.velocity)},
        {"braking_start_time", best.back().start},
        {"braking_end_time", best.back().start + best.back().duration},
        {"planning_wall_seconds", processingClock_.elapsed(started)}});
@@ -166,31 +153,22 @@ private:
         segment.sample(segment.start + segment.duration),
         segment.start + segment.duration - segments.front().start);
     commands_->publish(msg);
-    trajectories_ = segments;
+    trajectories_.replace(segments, now().seconds());
   }
   MotionState desired(double time) const
   {
-    MotionState s{home_, Vec7::Zero(), Vec7::Zero()};
-    for (const auto & segment : trajectories_) {
-      s = segment.sample(time);
-      if (time <= segment.start + segment.duration) break;
-    }
-    return s;
+    return trajectories_.sample(time, {home_, Vec7::Zero(), Vec7::Zero()});
   }
   Arm arm_;
+  CupInterceptPlanner planner_;
   Recorder record_;
   ProcessingClock processingClock_;
   Feedback feedback_;
   Vec7 home_;
-  // A bent numerical seed avoids the singularity at the physical vertical home.
-  const Vec7 inverseSeed_ = (Vec7() << 0., -.7853981633974483, 0., -2.356194490192345, 0.,
-                             1.5707963267948966, .7853981633974483)
-                              .finished();
-  KDL::Rotation rotation_;
-  double height_, lastPlan_{-1}, holdUntil_{-1}, planInterval_{.06};
+  double lastPlan_{-1}, holdUntil_{-1}, planInterval_{.06}, planningBudget_{1. / 30.};
   std::optional<Ball> ball_;
   std::optional<double> radius_;
-  std::vector<Quintic> trajectories_;
+  TrajectorySchedule trajectories_;
   double cupInterceptTime_{-1};
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr commands_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joints_;
