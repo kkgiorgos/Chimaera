@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import { Activity, ArrowDownToLine, Bell, Check, ChevronRight, CirclePause, Clock3,
-  FileJson, Layers3, Moon, Play, Plus, RotateCcw, Server, Settings2, Square, Sun,
+  FileJson, HardDrive, Layers3, Moon, Play, Plus, RotateCcw, Server, Settings2, Square, Sun,
   Terminal, Trash2, X } from 'lucide-react';
 import Storage from '@/components/storage';
 import { useTheme } from '@/components/theme-provider';
@@ -75,7 +75,7 @@ export default function Dashboard() {
   const [editing, setEditing] = useState(false);
   const [editorConfig, setEditorConfig] = useState<Record<string, unknown> | undefined>();
   const [log, setLog] = useState<{ machine: string; task: string; title: string } | null>(null);
-  const [confirmation, setConfirmation] = useState<{ title: string; description: string; action: () => void } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ title: string; description: string; actionLabel?: string; action: () => void } | null>(null);
   const knownErrors = useRef(new Set<string>());
 
   const refresh = useCallback(async () => {
@@ -131,7 +131,7 @@ export default function Dashboard() {
         <button className={view === 'fleet' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('fleet')}><Server size={18} />Machines<span>{machines.length}</span></button>
         <button className={view === 'experiments' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('experiments')}><Layers3 size={18} />Experiments<span>{state?.experiments.length || 0}</span></button>
         <button className={view === 'notifications' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('notifications')}><Bell size={18} />Notifications</button>
-        <button className={view === 'storage' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('storage')}><Layers3 size={18} />Storage</button>
+        <button className={view === 'storage' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('storage')}><HardDrive size={18} />Storage</button>
       </nav>
       <div className="queue-nav"><div className="section-title"><h3>Experiment queue</h3><button className="icon-button" onClick={() => openEditor()} aria-label="New experiment"><Plus size={16} /></button></div>
         {!state?.experiments.length && <p className="muted small">Create an experiment to start assigning cases.</p>}
@@ -221,7 +221,7 @@ export default function Dashboard() {
     {machine && <MachineDialog key={machine.id || 'new'} machine={machine} close={() => setMachine(null)} save={async value => { if (await command('machine', value)) setMachine(null); }} />}
     {editing && <ExperimentDialog initial={editorConfig} machines={machines} close={() => setEditing(false)} save={async body => { if (await command('experiment', body)) { setEditing(false); setView('fleet'); setSelected(''); } }} />}
     {log && <LogDialog {...log} close={() => setLog(null)} />}
-    {confirmation && <Dialog title={confirmation.title} close={() => setConfirmation(null)}><p className="dialog-description">{confirmation.description}</p><div className="dialog-actions"><button className="button" onClick={() => setConfirmation(null)}>Cancel</button><button className="button danger-button" onClick={() => { confirmation.action(); setConfirmation(null); }}>Confirm</button></div></Dialog>}
+    {confirmation && <Dialog title={confirmation.title} close={() => setConfirmation(null)}><p className="dialog-description">{confirmation.description}</p><div className="dialog-actions"><button className="button" onClick={() => setConfirmation(null)}>Cancel</button><button className="button danger-button" onClick={() => { confirmation.action(); setConfirmation(null); }}>{confirmation.actionLabel || 'Confirm'}</button></div></Dialog>}
   </div>;
 }
 
