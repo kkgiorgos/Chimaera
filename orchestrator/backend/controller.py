@@ -228,7 +228,12 @@ class Controller:
             machine = self.machine(body['id'])
             if any(e['status'] in ACTIVE and machine['id'] in e['machines'] for e in self.store.all('experiments')):
                 raise ValueError('Stop the experiment before cleaning unused machine assets')
-            machine.update(cleaning=True, cleanup_error=None)
+            if machine.get('cleaning'):
+                raise ValueError('Asset cleanup is already running')
+            asset_ids = body.get('asset_ids')
+            if asset_ids is not None and (not isinstance(asset_ids, list) or not asset_ids or any(not isinstance(i, str) for i in asset_ids)):
+                raise ValueError('Choose at least one asset')
+            machine.update(cleaning=True, cleanup_error=None, cleanup_asset_ids=asset_ids)
             self.store.put('machines', machine['id'], machine)
         elif kind == 'experiment':
             key = command['id']
@@ -344,7 +349,10 @@ class Controller:
                     preparations = experiment['preparations'].values()
                     if not body.get('discard_uncollected') and (experiment.get('results_deleted') or any(not a.get('collected') for a in attempts) or any(not p.get('collected') for p in preparations)):
                         raise ValueError('Collect every attempt before remote cleanup')
-                    for machine_id in experiment['preparations']:
+                    machine_ids = [body['machine']] if body.get('machine') else list(experiment['preparations'])
+                    if any(m not in experiment['preparations'] for m in machine_ids):
+                        raise ValueError('Machine has no preparation for this experiment')
+                    for machine_id in machine_ids:
                         machine = self.machine(machine_id)
                         self.submit('clean-' + machine_id, 'cleanup', (experiment['id'], machine_id),
                             lambda m=machine: self.remote.call(m, 'cleanup', experiment=experiment['id']))
@@ -391,7 +399,9 @@ class Controller:
         for machine in self.store.all('machines'):
             if machine.get('cleaning'):
                 self.submit('clean-assets-' + machine['id'], 'clean_assets', machine['id'],
-                    lambda m=machine: self.remote.call(m, 'clean_assets', keep_paths=[m.get('disk'), m.get('kernel')]))
+                    lambda m=machine: self.remote.call(m, 'clean_assets',
+                        keep_paths=[m.get('disk'), m.get('kernel')],
+                        **({'asset_ids': m['cleanup_asset_ids']} if m.get('cleanup_asset_ids') is not None else {})))
             if machine.get('deploying'):
                 self.submit('deploy-' + machine['id'], 'deploy', machine['id'], lambda m=machine: self.remote.deploy(m))
             if machine.get('deployed') and time.time() - self.last_poll.get(machine['id'], 0) >= 5:

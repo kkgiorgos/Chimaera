@@ -536,3 +536,30 @@ docker run --rm \
   chimaera-supervisor:orchestrator-check \
   python3 /repo/orchestrator/tests/docker_lifecycle.py
 ```
+
+## Reviewing and reclaiming storage
+
+Open **Storage** in the dashboard sidebar and choose the dashboard server or a
+worker machine. **Refresh usage** scans on demand and shows filesystem free space,
+experiment file sizes, and managed Docker image and guest disk caches on workers.
+Guest disks are sparse: the displayed size is allocated disk space rather than
+their virtual capacity. Docker image sizes include shared layers, so removing an
+image may reclaim less than its displayed size.
+
+Select unused cached assets and choose **Remove selected**. Saved experiment
+dependencies, configured guest disks and kernels, and container dependencies are
+protected. Removal checks dependencies again and refuses stale or protected
+selections. Stop experiments on that machine before removing caches.
+
+To release assets retained by an old experiment, first use **Remove remote
+copies** for that experiment on the selected machine. This discards remote inputs,
+checkpoints, logs and uncollected output while retaining collected dashboard
+results. Refresh usage afterwards, then remove caches that are now unused.
+**Delete files** on the dashboard server removes collected results and staging
+files while keeping experiment history. Download any results to keep first.
+
+Rebuild/restart the dashboard services and redeploy existing machine supervisors
+to enable the new storage inspection RPC. Storage inspection itself is read-only;
+it does not prune Docker or remove files. Files outside managed experiments and
+caches (for example manual checkpoint smoke-test directories) remain outside the
+removal controls.

@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Activity, ArrowDownToLine, Bell, Check, ChevronRight, CirclePause, Clock3,
   FileJson, Layers3, Moon, Play, Plus, RotateCcw, Server, Settings2, Square, Sun,
   Terminal, Trash2, X } from 'lucide-react';
+import Storage from '@/components/storage';
 import { useTheme } from '@/components/theme-provider';
 import type { Attempt, Case, Machine, State } from '@/lib/types';
 
@@ -69,7 +70,7 @@ export default function Dashboard() {
   const [connectionError, setConnectionError] = useState('');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState('');
-  const [view, setView] = useState<'fleet' | 'experiments' | 'notifications'>('fleet');
+  const [view, setView] = useState<'fleet' | 'experiments' | 'notifications' | 'storage'>('fleet');
   const [machine, setMachine] = useState<Machine | null>(null);
   const [editing, setEditing] = useState(false);
   const [editorConfig, setEditorConfig] = useState<Record<string, unknown> | undefined>();
@@ -130,6 +131,7 @@ export default function Dashboard() {
         <button className={view === 'fleet' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('fleet')}><Server size={18} />Machines<span>{machines.length}</span></button>
         <button className={view === 'experiments' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('experiments')}><Layers3 size={18} />Experiments<span>{state?.experiments.length || 0}</span></button>
         <button className={view === 'notifications' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('notifications')}><Bell size={18} />Notifications</button>
+        <button className={view === 'storage' ? 'nav-item selected' : 'nav-item'} onClick={() => setView('storage')}><Layers3 size={18} />Storage</button>
       </nav>
       <div className="queue-nav"><div className="section-title"><h3>Experiment queue</h3><button className="icon-button" onClick={() => openEditor()} aria-label="New experiment"><Plus size={16} /></button></div>
         {!state?.experiments.length && <p className="muted small">Create an experiment to start assigning cases.</p>}
@@ -145,13 +147,13 @@ export default function Dashboard() {
     </aside>
 
     <main>
-      <header className="topbar"><span>Ball catching <ChevronRight size={14} /><strong>{view === 'fleet' ? 'Machines & workers' : view === 'experiments' ? 'Experiments' : 'Notifications'}</strong></span>
+      <header className="topbar"><span>Ball catching <ChevronRight size={14} /><strong>{view === 'fleet' ? 'Machines & workers' : view === 'experiments' ? 'Experiments' : view === 'storage' ? 'Storage' : 'Notifications'}</strong></span>
         <span className="muted small"><Clock3 size={14} />{state ? `Updated ${new Date(state.time * 1000).toLocaleTimeString()}` : 'Waiting for scheduler'}</span>
       </header>
       {connectionError && <div className="banner danger"><Activity size={18} /><span>{connectionError} Displayed data may be stale.</span></div>}
       {error && <div className="banner danger" role="alert"><span>{error}</span><button className="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><X size={16} /></button></div>}
 
-      {view === 'notifications' ? <NotificationSettings state={state} save={body => command('settings', body)} /> : <>
+      {view === 'storage' ? <Storage state={state} command={command} confirm={setConfirmation} /> : view === 'notifications' ? <NotificationSettings state={state} save={body => command('settings', body)} /> : <>
         <div className="page-heading"><div><h1>{view === 'fleet' ? 'Machines & workers' : 'Experiments'}</h1><p>{view === 'fleet' ? 'One case queue. All your available machines.' : 'Configure, queue, and revisit memory-contention runs.'}</p></div>
           <div className="actions">{view === 'fleet' && <button className="button" onClick={newMachine}><Plus size={16} />Add machine</button>}<button className="button primary" onClick={() => openEditor()}><Plus size={16} />New experiment</button></div>
         </div>

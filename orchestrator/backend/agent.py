@@ -41,7 +41,7 @@ class Agent:
         self.lock = threading.RLock()
 
     def rpc(self, method, **params):
-        if method not in {'snapshot', 'prepare', 'start', 'stop', 'stop_case', 'logs', 'cleanup', 'clean_assets', 'remember_image', 'asset_destination', 'reset_prepare'}:
+        if method not in {'snapshot', 'prepare', 'start', 'stop', 'stop_case', 'logs', 'cleanup', 'clean_assets', 'storage', 'remember_image', 'asset_destination', 'reset_prepare'}:
             raise ValueError('Unknown supervisor operation')
         with self.lock:
             return getattr(self, method)(**params)
@@ -482,11 +482,17 @@ class Agent:
             shutil.rmtree(directory)
         return True
 
-    def clean_assets(self, keep_paths=()):
+    def storage(self, keep_paths=()):
+        from assets import allocated_bytes, asset_inventory, filesystem_usage
+        return dict(filesystem=filesystem_usage(self.data), assets=asset_inventory(self.data, keep_paths),
+                    experiments=[dict(id=p.name, bytes=allocated_bytes(p))
+                                 for p in (self.data / 'experiments').glob('*') if p.is_dir() and not p.is_symlink()])
+
+    def clean_assets(self, keep_paths=(), asset_ids=None):
         from assets import clean_unused
         if any(t['status'] in ('accepted', 'running') for t in self.store.all('tasks')):
             raise ValueError('Wait for machine tasks to stop before cleaning unused assets')
-        return clean_unused(self.data, keep_paths)
+        return clean_unused(self.data, keep_paths, asset_ids)
 
     def remember_image(self, image):
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):

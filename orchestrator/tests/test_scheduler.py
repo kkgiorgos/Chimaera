@@ -877,3 +877,34 @@ def test_stopped_case_keeps_status_if_result_collection_fails(controller):
     case = controller.experiment('e1')['cases'][0]
     assert case['status'] == 'stopped'
     assert case['attempts'][0]['collection_status'] == 'failed'
+
+
+def test_remote_cleanup_can_target_one_machine(controller):
+    value = experiment(controller)
+    value['status'] = 'stopped'
+    controller.save(value)
+    controller.apply(dict(kind='cleanup', body=dict(id='e1', machine='m1', discard_uncollected=True)))
+    finish_jobs(controller)
+    calls = [c for c in controller.remote.calls if c[1] == 'cleanup']
+    assert calls == [('m1', 'cleanup', dict(experiment='e1'))]
+
+
+def test_remote_cleanup_rejects_unknown_machine(controller):
+    value = experiment(controller)
+    value['status'] = 'stopped'
+    controller.save(value)
+    with pytest.raises(ValueError, match='no preparation'):
+        controller.apply(dict(kind='cleanup', body=dict(id='e1', machine='unknown', discard_uncollected=True)))
+    assert not controller.jobs
+
+
+def test_selected_asset_cleanup_passes_selection_and_blocks_duplicate(controller):
+    controller.apply(dict(kind='clean_assets', body=dict(id='m0', asset_ids=['ball-catching-unused.img'])))
+    with pytest.raises(ValueError, match='already running'):
+        controller.apply(dict(kind='clean_assets', body=dict(id='m0')))
+    controller.tick()
+    # Only inspect the submitted operation: fake SSH does not implement cleanup results.
+    for kind, context, future in list(controller.jobs.values()):
+        future.result(timeout=3)
+    calls = [c for c in controller.remote.calls if c[1] == 'clean_assets']
+    assert calls[0][2]['asset_ids'] == ['ball-catching-unused.img']

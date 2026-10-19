@@ -72,6 +72,15 @@ def serve(controller, port=8080):
                     state = controller.state()
                     state['notifications_configured'] = bool(os.environ.get('DISCORD_WEBHOOK_URL'))
                     self.respond(state)
+                elif parts == ['storage']:
+                    from assets import allocated_bytes, filesystem_usage
+                    self.respond(dict(filesystem=filesystem_usage(controller.data), assets=[],
+                        experiments=[dict(id=e['id'], bytes=sum(allocated_bytes(controller.data / category / e['id'])
+                            for category in ('results', 'assets', 'collections')))
+                            for e in controller.store.all('experiments')]))
+                elif len(parts) == 2 and parts[0] == 'storage':
+                    machine = controller.machine(parts[1])
+                    self.respond(controller.remote.call(machine, 'storage', keep_paths=[machine.get('disk'), machine.get('kernel')]))
                 elif parts == ['defaults']:
                     source = controller.root / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
                     config = json.loads(source.read_text())

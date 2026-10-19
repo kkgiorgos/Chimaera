@@ -97,3 +97,97 @@ def test_cleanup_removes_transfer_tag_with_other_tags_for_unused_image(tmp_path)
         assert clean_unused(tmp_path)['images'] == 1
     assert docker.call_args_list[-1].args[0] == ['docker', 'image', 'rm',
         *sorted('chimaera:' + tag for tag in tags)]
+
+
+def test_inventory_is_read_only_and_reports_allocated_disk_and_image_sizes(tmp_path):
+    from assets import asset_inventory
+    disk = tmp_path / 'assets/ball-catching-unused.img'
+    disk.parent.mkdir()
+    with disk.open('wb') as stream:
+        stream.truncate(1024 ** 3)
+    image = 'sha256:' + 'a' * 64
+    listing = json.dumps(dict(Repository='chimaera', Tag='ball-unused', ID=image, Size='1.5GB'))
+    stale = disk.parent / ('image-' + 'b' * 64 + '.json')
+    atomic_json(stale, dict(image_id='sha256:' + 'b' * 64))
+    with patch('assets.run', side_effect=['', listing]) as docker:
+        items = asset_inventory(tmp_path)
+    assert items[0]['bytes'] == 1500000000
+    assert items[1]['bytes'] == disk.stat().st_blocks * 512
+    assert items[1]['bytes'] < disk.stat().st_size
+    assert not any(item['protected'] for item in items)
+    assert stale.exists()
+    assert docker.call_count == 2
+
+
+def test_selected_cleanup_removes_only_requested_disk(tmp_path):
+    assets = tmp_path / 'assets'
+    assets.mkdir()
+    for name in ('chosen', 'retained'):
+        (assets / f'ball-catching-{name}.img').write_bytes(b'guest')
+    with patch('assets.run', side_effect=['', '']):
+        result = clean_unused(tmp_path, asset_ids=['ball-catching-chosen.img'])
+    assert result['disks'] == 1
+    assert not (assets / 'ball-catching-chosen.img').exists()
+    assert (assets / 'ball-catching-retained.img').exists()
+
+
+@pytest.mark.parametrize('selection', [[], ['../../outside'], ['ball-catching-protected.img'],
+                                       ['ball-catching-unused.img', 'missing']])
+def test_selected_cleanup_revalidates_all_assets_before_deleting(tmp_path, selection):
+    assets = tmp_path / 'assets'
+    assets.mkdir()
+    protected = assets / 'ball-catching-protected.img'
+    protected.write_bytes(b'guest')
+    unused = assets / 'ball-catching-unused.img'
+    unused.write_bytes(b'guest')
+    with patch('assets.run', side_effect=['', '']):
+        with pytest.raises(ValueError):
+            clean_unused(tmp_path, keep_paths=[protected], asset_ids=selection)
+    assert protected.exists() and unused.exists()
+
+
+def test_allocated_bytes_ignores_symlink_targets_and_counts_hardlinks_once(tmp_path):
+    import os
+    from assets import allocated_bytes
+    directory = tmp_path / 'experiment'
+    directory.mkdir()
+    file = directory / 'data'
+    file.write_bytes(b'content')
+    os.link(file, directory / 'hardlink')
+    external = tmp_path / 'external'
+    external.mkdir()
+    (external / 'large').write_bytes(b'x' * 16384)
+    (directory / 'link').symlink_to(external, target_is_directory=True)
+    assert allocated_bytes(directory) == file.stat().st_blocks * 512
+
+
+def test_agent_storage_and_selected_cleanup_use_rpc_contract(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    disk = agent.data / 'assets/ball-catching-unused.img'
+    disk.parent.mkdir()
+    disk.write_bytes(b'guest')
+    with patch('assets.run', side_effect=['', '', '', '']):
+        result = agent.rpc('storage')
+        assert result['filesystem']['free'] > 0
+        assert result['assets'][0]['id'] == disk.name
+        assert agent.rpc('clean_assets', asset_ids=[disk.name])['disks'] == 1
+
+
+def test_selected_image_cleanup_keeps_other_images(tmp_path):
+    images = ['sha256:' + c * 64 for c in 'ab']
+    listing = '\n'.join(json.dumps(dict(Repository='chimaera', Tag='ball-' + str(i), ID=image))
+                        for i, image in enumerate(images))
+    with patch('assets.run', side_effect=['', listing, '']) as docker:
+        result = clean_unused(tmp_path, asset_ids=[images[1]])
+    assert result['images'] == 1
+    assert docker.call_args_list[-1].args[0] == ['docker', 'image', 'rm', 'chimaera:ball-1']
+
+
+def test_allocated_bytes_does_not_follow_root_symlink(tmp_path):
+    from assets import allocated_bytes
+    target = tmp_path / 'target'
+    target.mkdir()
+    (target / 'data').write_bytes(b'large' * 4096)
+    link = tmp_path / 'link'
+    link.symlink_to(target, target_is_directory=True)
+    assert allocated_bytes(link) == 0
