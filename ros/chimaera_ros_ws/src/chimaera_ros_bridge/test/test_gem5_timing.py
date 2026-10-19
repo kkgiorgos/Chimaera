@@ -159,6 +159,61 @@ class TimingTest(unittest.TestCase):
             self.server.run(simulator)
         self.server.serve.assert_not_called()
 
+    def test_guest_fail_drains_uart_and_preserves_original_failure(self):
+        simulator = Mock()
+        simulator.get_last_exit_event_cause.return_value = 'm5_fail instruction encountered'
+        simulator.get_last_exit_event_code.return_value = 1
+        def fail():
+            self.server.finished = True
+        self.server._run_once = Mock(side_effect=fail)
+        self.server.serve = Mock()
+        with self.assertRaisesRegex(RuntimeError, 'm5_fail instruction encountered.*code 1'):
+            self.server.run(simulator)
+        simulator.set_max_ticks.assert_called_once_with(1_000_000_000_000)
+        simulator.run.assert_called_once_with()
+        self.server.serve.assert_not_called()
+
+    def test_single_boot_waits_for_teardown_then_rearms_workbegin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            readfile, script = Path(directory)/'readfile', Path(directory)/'next.sh'
+            script.write_text('#!/bin/bash\n/start-next\n')
+            ready = Mock()
+            self.server = self.module.ReusableTimingServer(
+                readfile=readfile, case_script=script, on_ready=ready)
+            self.server.roi_started = True
+            simulator = self.simulator([(Event.WORKEND, 30), (Event.EXIT, 10),
+                                        (Event.WORKBEGIN, 10), (Event.MAX_TICK, 100)])
+            with self.assertRaisesRegex(ValueError, 'not stopped'):
+                self.server.handle_command('START_CASE')
+            self.assertEqual(self.server.handle_command('END_CASE'), 'ENDING')
+            self.assertEqual(readfile.read_text(), 'CHIMAERA_END_CASE\n')
+            self.assertEqual(self.server.handle_command('STEP_TICKS 100'), 'OK 0 30')
+            self.assertEqual(self.server.handle_command('CASE_STATUS'), 'IDLE')
+            self.assertFalse(self.server.finished)
+            # Idle cannot accidentally run the next guest before host listeners exist.
+            self.assertEqual(self.server.handle_command('STEP_TICKS 100'), 'OK 30 30')
+            self.assertEqual(self.server.handle_command('START_CASE'), 'READY 50')
+            self.assertEqual(readfile.read_text(), script.read_text())
+            self.assertIs(self.server.simulator, simulator)
+            ready.assert_called_once_with()
+            self.m5.stats.reset.assert_called_once_with()
+            self.assertEqual(self.server.handle_command('STEP_TICKS 100'), 'OK 50 150')
+            self.assertEqual(self.server.handle_command('CASE_STATUS'), 'ACTIVE')
+
+    def test_unrequested_guest_workend_still_finishes_reusable_vm(self):
+        self.server = self.module.ReusableTimingServer(readfile='/unused', case_script='/unused')
+        self.server.roi_started = True
+        self.simulator([(Event.WORKEND, 10)])
+        self.assertEqual(self.server.handle_command('STEP_TICKS 100'), 'DONE 10')
+
+    def test_readfile_failure_reports_stage_and_stops_before_launch(self):
+        script = self.module.guest_start_script('/should-not-run', preamble='false\n')
+        result = subprocess.run(['bash'], input=script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('CHIMAERA_STARTUP readfile', result.stderr)
+        self.assertIn('CHIMAERA_STARTUP failed status=1 line=', result.stderr)
+        self.assertNotIn('CHIMAERA_STARTUP launch', result.stderr)
+
     def test_injected_files_preserve_executability_and_use_privileged_writes(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / 'guest_bridge'

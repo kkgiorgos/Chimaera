@@ -58,7 +58,10 @@ def check(binary):
                 stream.seek(8)
                 stream.write(struct.pack('<Q',0))
             simulation_time, advance_at = 0, time.monotonic()+.1
-            while len(received)<5:
+            # A tap receiving one best-effort image does not mean the separate
+            # endpoint received that fragmented sample. Exercise the full
+            # source window before checking the endpoint's buffered receipts.
+            while len(received)<5 or simulation_time<90000000:
                 rclpy.spin_once(node,timeout_sec=.05)
                 # Best-effort images may drop individual fragmented samples.
                 # Release further normal samples rather than assuming lossless DDS.

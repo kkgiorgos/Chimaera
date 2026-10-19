@@ -10,6 +10,7 @@ Run all commands from the repository root.
 
 | Workflow | Guide |
 | --- | --- |
+| Run the message-latency workbench and backend on a LAN | [Latency Docker backend](latency/README.md) |
 | Develop wall-follow with Gazebo | [Local application development](wall-follow/README.md#local-application-development) |
 | Prepare, run, and report a wall-follow suite | [Automated benchmark suites](wall-follow/README.md#automated-benchmark-suites) |
 | Prepare ball-catching memory interference experiments | [Ball-catching Docker suite](ball-catching/README.md) |

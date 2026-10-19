@@ -116,6 +116,8 @@ int main(int argc, char ** argv)
     const auto timeout = config->declare_parameter<int64_t>("timeout_s", 300);
     const auto max_sim = config->declare_parameter<int64_t>("max_sim_ns", 15000000000);
     const auto done = config->declare_parameter<std::string>("done_file", "");
+    const auto reuse_guest = config->declare_parameter<bool>("reuse_guest", false);
+    const auto start_case = config->declare_parameter<bool>("start_case", false);
     if (
       (mode != "native_free" && mode != "native_stepped" && mode != "chimaera") || interval <= 0 ||
       interval > 3600000000LL || poll <= 0 || poll >= interval || physics_step <= 0 ||
@@ -154,6 +156,12 @@ int main(int argc, char ** argv)
       try {
         wait_file(config->declare_parameter<std::string>("host_ready", ""), deadline);
         bridge->wait_for_local_routes(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
+        if (start_case) {
+          std::cout << "Latency startup: restarting guest session" << std::endl;
+          if (timing.command("START_CASE").rfind("READY ", 0) != 0)
+            throw std::runtime_error("Guest failed to reach the next workbegin barrier");
+          std::cout << "Latency startup: next guest ready" << std::endl;
+        }
         timing.wait_until_ready(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
         std::istringstream origin(timing.command("STATUS"));
         std::string state;
@@ -172,9 +180,20 @@ int main(int argc, char ** argv)
         (void)timing.stop();
         throw;
       }
-      const auto result = timing.stop();
-      if (result.state == chimaera::ControllerState::failed)
-        throw std::runtime_error(result.message);
+      if (reuse_guest) {
+        if (timing.command("END_CASE") != "ENDING")
+          throw std::runtime_error("Guest refused the case teardown barrier");
+        while (timing.command("CASE_STATUS") != "IDLE") {
+          if (!rclcpp::ok() || Clock::now() >= deadline)
+            throw std::runtime_error("Guest case teardown timed out");
+          const auto result = timing.step(std::chrono::microseconds(interval));
+          if (!result.ok()) throw std::runtime_error(result.message);
+        }
+      } else {
+        const auto result = timing.stop();
+        if (result.state == chimaera::ControllerState::failed)
+          throw std::runtime_error(result.message);
+      }
     } else {
       NativeWorld gazebo(world);
       gazebo.ready(deadline);

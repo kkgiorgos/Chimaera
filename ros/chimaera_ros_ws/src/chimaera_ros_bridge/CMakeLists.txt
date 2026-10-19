@@ -143,6 +143,10 @@ if(BUILD_TESTING)
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_latency_traffic.py)
   set_tests_properties(latency_traffic_test PROPERTIES ENVIRONMENT
     "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
+  add_test(NAME latency_sessions_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
+    -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_latency_sessions.py)
+  set_tests_properties(latency_sessions_test PROPERTIES ENVIRONMENT
+    "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
   if(BUILD_LATENCY_BENCHMARK)
     add_test(NAME latency_message_test COMMAND ${Python3_EXECUTABLE}
       ${CMAKE_CURRENT_SOURCE_DIR}/test/latency_message_integration.py $<TARGET_FILE:latency_endpoint>)

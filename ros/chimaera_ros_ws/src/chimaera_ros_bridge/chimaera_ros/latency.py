@@ -1,5 +1,6 @@
 """Synthetic, directional, simulation-time ROS latency experiments."""
 import argparse
+import base64
 import csv
 import datetime
 import hashlib
@@ -11,6 +12,7 @@ import os
 from pathlib import Path
 import platform
 import signal
+import shlex
 import struct
 import subprocess
 import sys
@@ -23,6 +25,8 @@ from .runner import prefix, stage
 from .manifest import load
 from .latency_workloads import BALL_DEFAULT, ball_routes, image_age, traffic
 from .latency_budget import wall_budget
+from .latency_session import SweepSessions, ordered_cases, validate_bundle
+from .latency_startup import startup_status, log_tail
 
 MODES = ('native_free', 'native_stepped', 'chimaera')
 UNSET = 2**64 - 1
@@ -76,10 +80,11 @@ def guest_session(cpu_type='kvm', config=None):
         guest=dict(domain_id=42,
             setup=['/opt/ros/humble/setup.bash', GUEST_ROOT + '/app/share/chimaera_ros_bridge/local_setup.bash'],
             processes=[dict(name='latency_endpoint', command=[
-                'ros2', 'run', 'chimaera_ros_bridge', 'latency_endpoint', '--ros-args',
+                GUEST_ROOT + '/app/lib/chimaera_ros_bridge/latency_endpoint', '--ros-args',
                 '--params-file', '/tmp/chimaera-latency.yaml'])]),
         bridge=dict(m5ops='address' if cpu_type == 'kvm' else 'instruction',
                     wait_for_application=True, simulation_time_from_readfile=True,
+                    application_ready_file='/tmp/chimaera-latency-endpoint-ready',
                     max_serialized_bytes=16781312,
                     max_image_age_ns=image_age(config) if config and config.get('workload')=='ball_catching' else 0),
         deploy=dict(guest_root=GUEST_ROOT, install_trees=[]))
@@ -112,7 +117,7 @@ def validate(config):
 
 def stage_guest(output, package, bundle=None):
     capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
-    if not capabilities.is_file() or json.loads(capabilities.read_text()).get('version') != 3:
+    if not capabilities.is_file() or json.loads(capabilities.read_text()).get('version') != 4:
         raise ValueError('Rebuild the benchmark runtime before staging the current message protocol')
     output = output.resolve()
     # Build the same three routes once. Run-specific routes/QoS are injected at
@@ -127,7 +132,7 @@ def stage_guest(output, package, bundle=None):
         guest=dict(domain_id=42,
             setup=['/opt/ros/humble/setup.bash', GUEST_ROOT + '/app/share/chimaera_ros_bridge/local_setup.bash'],
             processes=[dict(name='latency_endpoint', command=[
-                'ros2', 'run', 'chimaera_ros_bridge', 'latency_endpoint', '--ros-args',
+                GUEST_ROOT + '/app/lib/chimaera_ros_bridge/latency_endpoint', '--ros-args',
                 '--params-file', '/tmp/chimaera-latency.yaml'])]),
         bridge=dict(m5ops='address', wait_for_application=True,
                     simulation_time_from_readfile=True, max_serialized_bytes=16777344),
@@ -142,7 +147,7 @@ def stage_guest(output, package, bundle=None):
     startup = result / 'guest_start'
     startup.write_text(startup.read_text().replace('run session.json --side guest',
         'run /tmp/chimaera-latency-session.json --side guest'))
-    write_json(result / 'latency-runtime.json', dict(version=3, cpu_types=['kvm', 'timing', 'o3'],
+    write_json(result / 'latency-runtime.json', dict(version=4, cpu_types=['kvm', 'timing', 'o3'],
         workloads=['synthetic', 'ball_catching']))
     if bundle:
         def archive_entry(member):
@@ -156,8 +161,13 @@ def stage_guest(output, package, bundle=None):
 
 
 def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
-             environment=None, cancelled=None):
+             environment=None, cancelled=None, reuse=None):
     validate(config)
+    if reuse is not None:
+        if config['mode'] != 'chimaera':
+            raise ValueError('Guest reuse requires Chimaera mode')
+        if reuse.process is None:
+            validate_bundle(bundle)
     cpu_type = config.get('cpu_type', 'kvm')
     if cpu_type not in ('kvm', 'timing', 'o3'):
         raise ValueError('Unsupported gem5 CPU model')
@@ -203,7 +213,16 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
             handle.write(struct.pack('<QQ', 0x434c42434c4f434b, UNSET))
     (output / 'world.sdf').write_text(world(physics, config['physics_step_ns']))
     write_json(output / 'routes.json', routes(config['reliability'], config['depth'], config))
-    write_json(output / 'guest-session.json', guest_session(cpu_type, config))
+    guest = guest_session(cpu_type, config)
+    if reuse is not None:
+        guest['guest']['env'] = dict(CHIMAERA_LATENCY_REUSE='1')
+        if reuse.process is not None and cpu_type != 'kvm':
+            guest['guest']['env']['CHIMAERA_LATENCY_DETAILED_START'] = '1'
+        config['boot_session'] = str(reuse.directory or output)
+        config['boot_reused'] = reuse.process is not None
+        config['single_boot'] = True
+        write_json(manifest, config)
+    write_json(output / 'guest-session.json', guest)
     common = dict(payload_bytes=config['payload_bytes'], rate_hz=float(config['rate_hz']),
                   warmup_ns=round(config['warmup'] * 1e9),
                   duration_ns=round(config['duration'] * 1e9), drain_ns=round(config['drain'] * 1e9),
@@ -226,8 +245,11 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
             ('_addr' if cpu_type == 'kvm' else '') + '.so',
         clock_file=str(physics) if config['mode'] != 'chimaera' else '',
         physics_clock_file=str(physics) if config['mode'] != 'chimaera' else '',
-        ready_file=str(output / 'guest-ready') if config['mode'] != 'chimaera' else ''))
+        ready_file=str(output / 'guest-ready') if config['mode'] != 'chimaera'
+                   else '/tmp/chimaera-latency-endpoint-ready'))
     parameters(output / 'driver.yaml', dict(mode=config['mode'],
+        reuse_guest=reuse is not None,
+        start_case=reuse is not None and reuse.process is not None,
         interval_us=config['interval_us'], poll_us=config['poll_us'],
         physics_step_ns=config['physics_step_ns'], timeout_s=config['timeout'],
         max_sim_ns=round((config['warmup'] + config['duration'] + config['drain'] + 30) * 1e9),
@@ -253,9 +275,26 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
             commands[-1][1].extend(['--' + key.replace('_', '-'), str(config.get(key, default))])
         if bundle:
             commands[-1][1].extend(['--guest-bundle', str(bundle)])
+        if reuse is not None:
+            supervisor = output / 'guest-supervisor'
+            supervisor.write_text('#!/bin/bash\nset -e\nexport PYTHONPATH='
+                + shlex.quote(GUEST_ROOT + '/runtime')
+                + '\nexec python3 -m chimaera_ros.latency_guest '
+                + shlex.quote(GUEST_ROOT) + ' ' + shlex.quote(cpu_type) + '\n')
+            supervisor.chmod(0o755)
+            command = commands[-1][1]
+            index = command.index('--guest-command')
+            command[index + 1] = '/tmp/chimaera-latency-supervisor'
+            command.extend(['--guest-file', '/tmp/chimaera-latency-supervisor=' + str(supervisor),
+                            '--case-script', str((reuse.directory or output) / 'next-case.sh')])
     else:
         commands.append(('guest', [str(executable / 'latency_endpoint'), '--ros-args', '--params-file', str(output / 'guest.yaml')]))
     commands.append(('driver', [str(executable / 'latency_driver'), '--ros-args', '--params-file', str(output / 'driver.yaml')]))
+    if reuse is not None and reuse.process is not None:
+        (output / 'gem5').symlink_to(os.path.relpath(reuse.directory / 'gem5', output), target_is_directory=True)
+        (output / 'gem5.log').symlink_to(os.path.relpath(reuse.directory / 'gem5.log', output))
+        commands = [(name, ['reuse-session', str(reuse.directory), 'START_CASE'] if name == 'gem5' else command)
+                    for name, command in commands]
     write_json(output / 'commands.json', commands)
     env = dict(base_env, ROS_DOMAIN_ID='41', ROS_LOCALHOST_ONLY='1',
                ROS_LOG_DIR=str(output / 'ros-logs'),
@@ -266,10 +305,31 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     started = time.monotonic()
     try:
         for name, command in commands:
+            if name == 'gem5' and reuse is not None and reuse.process is not None:
+                if reuse.process.poll() is not None:
+                    raise RuntimeError('Reusable gem5 process exited; inspect ' + str(reuse.directory / 'gem5.log'))
+                # Inject new traffic/QoS/session files through the existing
+                # readfile mechanism. The original guest bundle stays loaded.
+                # The guest supervisor runs as root in the ephemeral image.
+                script = ('#!/bin/bash\nset -e\nrm -f /tmp/chimaera-sim-time-origin.ns '
+                          '/tmp/chimaera-latency-endpoint-ready\n')
+                for destination, source in [('/tmp/chimaera-latency.yaml', 'guest.yaml'),
+                        ('/tmp/chimaera-latency-session.json', 'guest-session.json'),
+                        ('/tmp/chimaera-latency-routes.json', 'routes.json')]:
+                    encoded = base64.b64encode((output / source).read_bytes()).decode()
+                    script += f'printf %s {encoded} | base64 -d > {destination}\n'
+                script += shlex.quote(GUEST_ROOT + '/guest_start') + '\n'
+                (reuse.directory / 'next-case.sh').write_text(script)
+                continue
             log = (output / (name + '.log')).open('w')
             logs.append(log)
-            processes.append((name, subprocess.Popen(command, env=env, stdout=log,
-                stderr=subprocess.STDOUT, start_new_session=True)))
+            process = subprocess.Popen(command, env=env, stdout=log,
+                stderr=subprocess.STDOUT, start_new_session=True)
+            if name == 'gem5' and reuse is not None:
+                logs.pop()
+                reuse.process, reuse.log, reuse.directory = process, log, output
+            else:
+                processes.append((name, process))
         driver = processes[-1][1]
         while driver.poll() is None:
             if cancelled and cancelled():
@@ -282,6 +342,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
                     if name == 'gem5' and process.returncode == 0 and (output / 'complete').exists():
                         continue
                     raise RuntimeError(f'{name} exited ({process.returncode}); see {name}.log')
+            if reuse is not None and reuse.process.poll() is not None:
+                raise RuntimeError('Reusable gem5 process exited; inspect ' + str(reuse.directory / 'gem5.log'))
             time.sleep(.05)
         if driver.returncode != 0 or not (output / 'complete').exists():
             raise RuntimeError(driver_failure(output, config, time.monotonic()-started))
@@ -310,6 +372,11 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         for log in logs:
             log.close()
         config['wall_seconds'] = time.monotonic() - started
+        if config['mode'] == 'chimaera':
+            origin = output / 'gem5/latency_clock_origin.json'
+            if origin.is_file():
+                (output / 'clock-origin.json').write_bytes(origin.read_bytes())
+            write_json(output / 'startup.json', startup_status(output))
         write_json(manifest, config)
     try:
         write_json(output / 'summary.json', summarize(output))
@@ -322,9 +389,18 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
 
 def driver_failure(output, config, elapsed):
     log = output/'driver.log'
-    lines = log.read_text(errors='replace').splitlines() if log.is_file() else []
+    lines = log_tail(log).splitlines()
     reason = next((line.partition('Latency driver: ')[2] for line in reversed(lines)
                    if 'Latency driver: ' in line), 'Driver failed or event export incomplete')
+    if config['mode'] == 'chimaera':
+        startup = startup_status(output)
+        if startup['phase'] != 'cosimulation':
+            evidence = '; '.join(startup['serial_evidence'])
+            prefix = (f"Startup exceeded its {config['timeout']} s wall timeout"
+                      if elapsed >= config['timeout']-1 else 'Startup failed')
+            return (f"{prefix} during {startup['phase']}: {startup['description']}. "
+                    + (f"Serial log includes: {evidence}. " if evidence else '')
+                    + f"{reason}; see {startup['serial_log']} and gem5.log")
     if elapsed >= config['timeout']-1:
         filename = 'logical-clock.bin' if config['mode']=='chimaera' else 'physics-clock.bin'
         try:
@@ -556,6 +632,7 @@ def main():
     serving.add_argument('--data-root', type=Path)
     serving.add_argument('--runtime-prefix', type=Path)
     serving.add_argument('--port', type=int, default=8787)
+    serving.add_argument('--host', default='127.0.0.1', help='Workbench bind address')
     experiment = sub.add_parser('experiment', help='Run an exported workbench experiment JSON')
     experiment.add_argument('configuration', type=Path)
     experiment.add_argument('--output', type=Path, required=True)
@@ -593,12 +670,14 @@ def main():
         command.add_argument('--l1-assoc', type=int, default=8)
         command.add_argument('--l2-assoc', type=int, default=16)
         if action == 'sweep':
+            command.add_argument('--fresh-boots', action='store_true',
+                                 help='Boot a separate guest for every case')
             command.add_argument('--repeats', type=int, default=3)
     args = parser.parse_args()
     try:
         if args.action == 'serve':
             from .latency_dashboard import serve
-            serve(args.repo_root, args.data_root, args.runtime_prefix, args.port)
+            serve(args.repo_root, args.data_root, args.runtime_prefix, args.port, args.host)
             return
         if args.action == 'report':
             report = make_report(args.directory.resolve())
@@ -617,8 +696,10 @@ def main():
             plan = plan_sweep(json.loads(args.configuration.read_text()))
             args.output.mkdir(parents=True, exist_ok=False)
             write_json(args.output/'experiment.json', plan['config'])
-            for case in plan['cases']:
-                run_case(args.output/case['id'], case['config'], package, gem5_root, image, kernel, bundle)
+            with SweepSessions(plan['config']['single_boot']) as sessions:
+                for case in ordered_cases(plan['cases'], sessions.enabled):
+                    run_case(args.output/case['id'], case['config'], package, gem5_root, image, kernel, bundle,
+                             reuse=sessions.for_case(case['config']))
             make_report(args.output)
             return
         config = {key: getattr(args, key) for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout',
@@ -632,6 +713,7 @@ def main():
                 raise ValueError('repeats must be positive')
             args.output.mkdir(parents=True, exist_ok=False)
             index = 0
+            cases = []
             for body, rate, repeat in itertools.product(args.payload_bytes, args.rate_hz, range(1, args.repeats + 1)):
                 for mode in args.modes:
                     pairs = [(args.interval_us[0], args.poll_us[0])] if mode == 'native_free' else (
@@ -640,8 +722,12 @@ def main():
                     for interval, poll in pairs:
                         for cpu in args.cpu_type if mode == 'chimaera' else ['kvm']:
                             index += 1
-                            run_case(args.output / f'case_{index:04d}', dict(config, mode=mode, payload_bytes=body,
-                                rate_hz=rate, repeat=repeat, interval_us=interval, poll_us=poll, cpu_type=cpu), package, gem5_root, image, kernel, bundle)
+                            cases.append(dict(id=f'case_{index:04d}', config=dict(config, mode=mode, payload_bytes=body,
+                                rate_hz=rate, repeat=repeat, interval_us=interval, poll_us=poll, cpu_type=cpu)))
+            with SweepSessions(not args.fresh_boots) as sessions:
+                for case in ordered_cases(cases, sessions.enabled):
+                    run_case(args.output/case['id'], case['config'], package, gem5_root, image, kernel, bundle,
+                             reuse=sessions.for_case(case['config']))
             make_report(args.output)
     except (ValueError, RuntimeError, OSError) as error:
         parser.exit(1, f'{error}\n')

@@ -255,6 +255,10 @@ each outgoing route, a subscriber for each incoming route). Both examples enable
 this so ROS launch/imports and DDS discovery finish on the boot CPU before the
 experiment switches to detailed CPUs and resets ROI statistics. This checks topic
 endpoints, not application-internal readiness or completion of every callback.
+An optional `bridge.application_ready_file` adds an application-owned file barrier
+after route discovery when `wait_for_application` is enabled. The message-latency
+benchmark uses this to wait for its endpoint's own DDS discovery before workbegin;
+it clears the guest file before each case.
 Startup is bounded by `startup_timeout_s` and stops on cancellation. The default
 is false for sessions with intentionally optional or later-created routes. Guest
 callbacks run after each poll; host callbacks run at interval boundaries. This does
