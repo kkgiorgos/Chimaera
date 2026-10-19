@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "name": "Ball-catching traffic",
+  "modes": [
+    "native_free",
+    "native_stepped",
+    "chimaera"
+  ],
+  "workload": "ball_catching",
+  "ball_catching": {
+    "camera_width": 640,
+    "camera_height": 480,
+    "camera_hz": 90.0,
+    "joint_hz": 250.0,
+    "control_hz": 250.0,
+    "image_age_periods": 2.0
+  },
+  "payload_bytes": [
+    921600
+  ],
+  "rate_hz": [
+    90.0
+  ],
+  "interval_us": [
+    50000,
+    20000,
+    5000
+  ],
+  "poll_us": [
+    10000,
+    1000
+  ],
+  "duration": 1.5,
+  "warmup": 0.1,
+  "drain": 0.5,
+  "physics_step_ns": 1000000,
+  "reliability": "reliable",
+  "depth": 128,
+  "timeout": 600,
+  "repeats": 1,
+  "gem5_configs": [
+    {
+      "cpu_type": "kvm",
+      "num_cores": 1,
+      "cpu_clock": "3GHz",
+      "l1d_size": "16KiB",
+      "l1i_size": "16KiB",
+      "l2_size": "256KiB",
+      "l1_assoc": 8,
+      "l2_assoc": 16,
+      "name": "KVM 1-core"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 m5out-controller/*
 results/*
 .chimaera-orchestrator/
+.chimaera-latency/
 orchestrator/.env
 /.ssh/
 orchestrator/web/node_modules/

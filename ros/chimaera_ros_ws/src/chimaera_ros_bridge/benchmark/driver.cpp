@@ -131,7 +131,9 @@ int main(int argc, char ** argv)
           {rclcpp::Parameter("config_file", config->declare_parameter<std::string>("routes", "")),
            rclcpp::Parameter(
              "max_serialized_bytes",
-             config->declare_parameter<int64_t>("max_serialized_bytes", 65536))}));
+             config->declare_parameter<int64_t>("max_serialized_bytes", 65536)),
+           rclcpp::Parameter(
+             "max_image_age_ns", config->declare_parameter<int64_t>("max_image_age_ns", 0))}));
       rclcpp::executors::SingleThreadedExecutor executor;
       executor.add_node(bridge);
       bridge->pump = [&executor] { executor.spin_some(); };

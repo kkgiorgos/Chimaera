@@ -1,4 +1,4 @@
-"""Synthetic latency experiment: two x86 KVM cores, 3 GHz, ROS Humble guest."""
+"""Synthetic latency experiment with KVM boot and configurable x86 ROI CPUs."""
 import argparse
 import base64
 import json
@@ -11,6 +11,7 @@ from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import
 from gem5.components.memory.single_channel import SingleChannelDDR3_1600
 from gem5.components.processors.cpu_types import CPUTypes
 from gem5.components.processors.simple_processor import SimpleProcessor
+from gem5.components.processors.simple_switchable_processor import SimpleSwitchableProcessor
 from gem5.isas import ISA
 from gem5.resources.resource import DiskImageResource, KernelResource
 from gem5.simulate.simulator import Simulator
@@ -23,17 +24,32 @@ parser.add_argument('--gem5-root', required=True)
 parser.add_argument('--image', required=True)
 parser.add_argument('--kernel', required=True)
 parser.add_argument('--guest-bundle')
+parser.add_argument('--cpu-type', choices=('kvm', 'timing', 'o3'), default='kvm')
+parser.add_argument('--cpu-clock', default='3GHz')
+parser.add_argument('--num-cores', type=int, default=2)
+parser.add_argument('--l1d-size', default='16KiB')
+parser.add_argument('--l1i-size', default='16KiB')
+parser.add_argument('--l2-size', default='256KiB')
+parser.add_argument('--l1-assoc', type=int, default=8)
+parser.add_argument('--l2-assoc', type=int, default=16)
 add_chimaera_arguments(parser, guest_command='/opt/chimaera/latency/guest_start')
 args = parser.parse_args()
 configure_ticks()
 requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL, kvm_required=True)
-processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=2)
+if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
+    parser.error('Core counts and cache associativity must be positive')
+processor = (SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=args.num_cores)
+    if args.cpu_type == 'kvm' else SimpleSwitchableProcessor(
+        starting_core_type=CPUTypes.KVM,
+        switch_core_type={'timing': CPUTypes.TIMING, 'o3': CPUTypes.O3}[args.cpu_type],
+        isa=ISA.X86, num_cores=args.num_cores))
 for core in processor.get_cores():
     core.get_simobject().usePerf = False
-board = X86Board(clk_freq='3GHz', processor=processor,
+board = X86Board(clk_freq=args.cpu_clock, processor=processor,
     memory=SingleChannelDDR3_1600(size='3GiB'),
-    cache_hierarchy=MESITwoLevelCacheHierarchy(l1d_size='16KiB', l1d_assoc=8,
-        l1i_size='16KiB', l1i_assoc=8, l2_size='256KiB', l2_assoc=16, num_l2_banks=1))
+    cache_hierarchy=MESITwoLevelCacheHierarchy(l1d_size=args.l1d_size, l1d_assoc=args.l1_assoc,
+        l1i_size=args.l1i_size, l1i_assoc=args.l1_assoc, l2_size=args.l2_size,
+        l2_assoc=args.l2_assoc, num_l2_banks=1))
 preamble = 'rm -f /tmp/chimaera-sim-time-origin.ns\n'
 if args.guest_bundle:
     encoded = base64.b64encode(Path(args.guest_bundle).read_bytes()).decode('ascii')
@@ -49,10 +65,14 @@ board.set_kernel_disk_workload(
 
 
 def prepare_clock():
+    if args.cpu_type != 'kvm':
+        processor.switch()
     origin = m5.curTick() // 1000
     Path(str(board.readfile)).write_text(f'CHIMAERA_TIME_ORIGIN_NS {origin}\n')
     (Path(m5.options.outdir) / 'latency_clock_origin.json').write_text(
-        json.dumps(dict(origin_ns=origin, cpu='kvm', num_cores=2, cpu_clock='3GHz')) + '\n')
+        json.dumps(dict(origin_ns=origin, cpu=args.cpu_type, num_cores=args.num_cores,
+                        cpu_clock=args.cpu_clock,
+                        active_cpus=[core.get_simobject().type for core in processor.get_cores()])) + '\n')
 
 
 timing = TimingServer(on_ready=prepare_clock)

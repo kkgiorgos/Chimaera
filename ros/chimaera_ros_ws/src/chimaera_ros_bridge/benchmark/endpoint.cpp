@@ -7,13 +7,21 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/serialization.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/u_int64_multi_array.hpp>
 #include <std_msgs/msg/u_int8_multi_array.hpp>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "shared_clock.hpp"
@@ -25,8 +33,25 @@ using Records = std_msgs::msg::UInt64MultiArray;
 // All integers on ROS data routes have an explicit little-endian encoding.
 constexpr size_t header_bytes = 40;
 constexpr uint64_t packet_magic = 0x3141544144424c43ULL;
-constexpr size_t event_fields = 7;
+constexpr size_t event_fields = 8;
 using Event = std::array<uint64_t, event_fields>;
+const std::array<std::string, 6> stream_names = {"synthetic",    "left_image",     "right_image",
+                                                 "joint_states", "effort_command", "clock"};
+
+struct Stream
+{
+  double rate{};
+  uint64_t sequence{}, bytes{};
+  std::function<uint64_t(uint64_t)> publish;
+};
+template <typename Message>
+auto & stamp(Message & message)
+{
+  if constexpr (std::is_same_v<std::remove_const_t<Message>, rosgraph_msgs::msg::Clock>)
+    return message.clock;
+  else
+    return message.header.stamp;
+}
 
 void encode(std::vector<uint8_t> & bytes, size_t field, uint64_t value)
 {
@@ -65,6 +90,7 @@ public:
     }
     const auto physics_file = declare_parameter<std::string>("physics_clock_file", "");
     if (!physics_file.empty()) physics_ = std::make_unique<SharedClock>(physics_file);
+    ball_ = declare_parameter<std::string>("workload", "synthetic") == "ball_catching";
     const auto payload = declare_parameter<int64_t>("payload_bytes", 64);
     rate_ = declare_parameter<double>("rate_hz", 20.0);
     const auto warmup = declare_parameter<int64_t>("warmup_ns", 500000000);
@@ -84,8 +110,8 @@ public:
     if (side_ == "host") {
       output_.open(output);
       if (!output_) throw std::runtime_error("Cannot open events output");
-      output_
-        << "side,event,sequence,scheduled_ns,publish_ns,callback_ns,physics_ns,payload_bytes\n";
+      output_ << "side,event,sequence,scheduled_ns,publish_ns,callback_ns,physics_ns,payload_bytes,"
+                 "stream\n";
     }
     const auto reliability = declare_parameter<std::string>("reliability", "reliable");
     const auto depth = declare_parameter<int64_t>("depth", 128);
@@ -96,10 +122,16 @@ public:
     const std::string suffix = side_ == "guest" && bridged ? "guest" : "host";
     const std::string outgoing = side_ == "host" ? "h2g" : "g2h";
     const std::string incoming = side_ == "host" ? "g2h" : "h2g";
-    publisher_ = create_publisher<Packet>("/latency/" + outgoing + "/" + suffix, qos);
-    subscription_ = create_subscription<Packet>(
-      "/latency/" + incoming + "/" + suffix, qos,
-      [this](Packet::ConstSharedPtr packet) { receive(*packet); });
+    if (ball_) {
+      setup_ball(bridged);
+    } else {
+      publisher_ = create_publisher<Packet>("/latency/" + outgoing + "/" + suffix, qos);
+      subscription_ = create_subscription<Packet>(
+        "/latency/" + incoming + "/" + suffix, qos,
+        [this](Packet::ConstSharedPtr packet) { receive(*packet); });
+      publishers_.push_back(publisher_);
+      subscriptions_.push_back(subscription_);
+    }
     if (side_ == "host") {
       reports_ = create_subscription<Records>(
         "/latency/guest_events", rclcpp::QoS(128).reliable(),
@@ -107,9 +139,13 @@ public:
     } else {
       reporter_ = create_publisher<Records>("/latency/guest_events", rclcpp::QoS(128).reliable());
     }
-    packet_.data.resize(header_bytes + payload, 0xa5);
-    encode(packet_.data, 0, packet_magic);
-    events_.reserve(static_cast<size_t>(stop_ / 1e9 * rate_ * 2 + 1024));
+    if (!ball_) {
+      packet_.data.resize(header_bytes + payload, 0xa5);
+      encode(packet_.data, 0, packet_magic);
+    }
+    double event_rate = ball_ ? 0. : rate_ * 2;
+    for (const auto & item : streams_) event_rate += item.second.rate;
+    events_.reserve(static_cast<size_t>(stop_ / 1e9 * event_rate + 1024));
   }
   ~Endpoint() override
   {
@@ -132,7 +168,12 @@ public:
   void tick()
   {
     const bool peers =
-      publisher_->get_subscription_count() > 0 && subscription_->get_publisher_count() > 0 &&
+      std::all_of(
+        publishers_.begin(), publishers_.end(),
+        [](const auto & p) { return p->get_subscription_count() > 0; }) &&
+      std::all_of(
+        subscriptions_.begin(), subscriptions_.end(),
+        [](const auto & p) { return p->get_publisher_count() > 0; }) &&
       (reporter_ ? reporter_->get_subscription_count() > 0 : reports_->get_publisher_count() > 0);
     if (!ready_ && peers) {
       ready_ = true;
@@ -143,7 +184,8 @@ public:
     if (time == SharedClock::unset) return;
     // An independent source, never an echo. A frozen/jumping clock releases a
     // burst with actual publish times; scheduled times remain in every record.
-    while (!frozen_ && time < stop_ && scheduled(sequence_) <= time) {
+    if (ball_) tick_ball(time);
+    while (!ball_ && !frozen_ && time < stop_ && scheduled(sequence_) <= time) {
       encode(packet_.data, 1, sequence_);
       encode(packet_.data, 2, scheduled(sequence_));
       const auto published = now();
@@ -171,6 +213,149 @@ public:
   }
 
 private:
+  static uint64_t release(uint64_t sequence, double rate)
+  {
+    return static_cast<uint64_t>(std::llround(sequence * 1e9 / rate));
+  }
+  template <typename Message>
+  void typed(
+    uint64_t id, const std::string & topic, double rate, size_t depth, bool bridged,
+    Message example)
+  {
+    auto & stream = streams_[id];
+    stream.rate = rate;
+    rclcpp::SerializedMessage serialized;
+    rclcpp::Serialization<Message> codec;
+    codec.serialize_message(&example, &serialized);
+    stream.bytes = serialized.size();
+    const bool outgoing = (side_ == "host") == (id != 4);
+    const auto name =
+      "/latency/ball/" + topic + "/" + (side_ == "guest" && bridged ? "guest" : "host");
+    auto qos = rclcpp::QoS(depth).best_effort().durability_volatile();
+    // Application queues differ from bridge queues. Robot sensor consumers
+    // use SensorDataQoS (depth 5); the effort receiver uses depth 1. Synthetic
+    // camera/clock producers use the ROS/Gazebo publisher queue depth of 10.
+    if (outgoing) qos = (id <= 2 || id == 5) ? rclcpp::QoS(10).reliable() : rclcpp::SensorDataQoS();
+    if (outgoing) {
+      auto publisher = create_publisher<Message>(name, qos);
+      publishers_.push_back(publisher);
+      auto message = std::make_shared<Message>(std::move(example));
+      stream.publish = [this, publisher, message](uint64_t scheduled) {
+        stamp(*message).sec = scheduled / 1000000000ULL;
+        stamp(*message).nanosec = scheduled % 1000000000ULL;
+        const auto published = now();
+        if (published >= stop_) return SharedClock::unset;
+        publisher->publish(*message);
+        return published;
+      };
+    } else {
+      subscriptions_.push_back(
+        create_subscription<Message>(name, qos, [this, id](std::shared_ptr<const Message> message) {
+          const auto received = now();  // Callback entry, before inspecting the message.
+          const auto physics = physics_ ? physics_->now() : SharedClock::unset;
+          if (received == SharedClock::unset || frozen_ || received > cutoff_) return;
+          const auto & header = stamp(*message);
+          if (header.sec < 0) throw std::runtime_error("Invalid capture timestamp");
+          const uint64_t capture = uint64_t(header.sec) * 1000000000ULL + header.nanosec;
+          const auto & stream = streams_.at(id);
+          const auto sequence = static_cast<uint64_t>(std::llround(capture * stream.rate / 1e9));
+          if (release(sequence, stream.rate) != capture)
+            throw std::runtime_error("Message capture stamp does not identify a source sample");
+          if (events_.size() >= 4000000)
+            throw std::runtime_error("Benchmark event capacity exceeded");
+          // Actual publication time is joined from buffered source records after
+          // export. Actual ROS messages carry no benchmark envelope or extra bytes.
+          events_.push_back(
+            {1, sequence, capture, SharedClock::unset, received, physics, stream.bytes, id});
+        }));
+    }
+  }
+  void setup_ball(bool bridged)
+  {
+    const auto width = declare_parameter<int64_t>("camera_width", 640);
+    const auto height = declare_parameter<int64_t>("camera_height", 480);
+    const auto camera_hz = declare_parameter<double>("camera_hz", 90.);
+    const auto joint_hz = declare_parameter<double>("joint_hz", 250.);
+    const auto control_hz = declare_parameter<double>("control_hz", 250.);
+    const auto physics_step = declare_parameter<int64_t>("physics_step_ns", 1000000);
+    if (width < 64 || height < 64 || width * height * 3 > 16 * 1024 * 1024 || physics_step < 100000)
+      throw std::invalid_argument("Invalid ball-catching dimensions or physics step");
+    for (double rate : {camera_hz, joint_hz, control_hz})
+      if (!std::isfinite(rate) || rate <= 0 || rate > 10000)
+        throw std::invalid_argument("Invalid ball-catching source rate");
+    sensor_msgs::msg::Image image;
+    image.width = width;
+    image.height = height;
+    image.step = width * 3;
+    image.encoding = "rgb8";
+    image.data.resize(width * height * 3, 0xa5);
+    image.header.frame_id = "left_camera";
+    typed(1, "left_image", camera_hz, 5, bridged, image);
+    image.header.frame_id = "right_camera";
+    typed(2, "right_image", camera_hz, 5, bridged, std::move(image));
+    sensor_msgs::msg::JointState joints, command;
+    for (size_t i = 1; i <= 7; ++i) {
+      joints.name.push_back("fr3_joint" + std::to_string(i));
+      command.name.push_back("fr3_joint" + std::to_string(i));
+    }
+    joints.position.resize(7, 0.);
+    joints.velocity.resize(7, 0.);
+    command.effort.resize(7, 0.);
+    typed(3, "joint_states", joint_hz, 5, bridged, std::move(joints));
+    typed(4, "effort_command", control_hz, 1, bridged, std::move(command));
+    typed(5, "clock", 1e9 / physics_step, 1, bridged, rosgraph_msgs::msg::Clock{});
+    for (const auto & item :
+         std::vector<std::pair<std::string, double>>{{"ready", 25.}, {"perception_ready", 10.}}) {
+      const auto topic =
+        "/latency/ball/" + item.first + "/" + (side_ == "guest" && bridged ? "guest" : "host");
+      if (side_ == "guest") {
+        auto publisher = create_publisher<std_msgs::msg::Bool>(topic, rclcpp::QoS(1).reliable());
+        publishers_.push_back(publisher);
+        Stream stream;
+        stream.rate = item.second;
+        stream.publish = [publisher](uint64_t) {
+          std_msgs::msg::Bool message;
+          message.data = true;
+          publisher->publish(message);
+          return uint64_t(0);
+        };
+        background_.push_back(std::move(stream));
+      } else {
+        subscriptions_.push_back(create_subscription<std_msgs::msg::Bool>(
+          topic, rclcpp::QoS(1).reliable(), [](std_msgs::msg::Bool::ConstSharedPtr) {}));
+      }
+    }
+  }
+  void tick_ball(uint64_t time)
+  {
+    if (frozen_ || time >= stop_) return;
+    // Merge source schedules so stereo pairs are emitted together, including
+    // when advancing a paused clock makes several frames due at once.
+    while (time < stop_) {
+      auto next = streams_.end();
+      for (auto it = streams_.begin(); it != streams_.end(); ++it)
+        if (
+          it->second.publish && release(it->second.sequence, it->second.rate) <= time &&
+          (next == streams_.end() || release(it->second.sequence, it->second.rate) <
+                                       release(next->second.sequence, next->second.rate)))
+          next = it;
+      if (next == streams_.end()) break;
+      auto & stream = next->second;
+      const auto capture = release(stream.sequence, stream.rate);
+      const auto physics = physics_ ? physics_->now() : SharedClock::unset;
+      const auto published = stream.publish(capture);
+      if (published == SharedClock::unset) break;
+      events_.push_back(
+        {0, stream.sequence++, capture, published, SharedClock::unset, physics, stream.bytes,
+         next->first});
+      time = now();
+    }
+    for (auto & stream : background_)
+      while (time < stop_ && release(stream.sequence, stream.rate) <= time) {
+        stream.publish(release(stream.sequence++, stream.rate));
+        time = now();
+      }
+  }
   uint64_t scheduled(uint64_t sequence) const
   {
     return static_cast<uint64_t>(std::llround(sequence * 1e9 / rate_));
@@ -211,8 +396,9 @@ private:
   void write(const std::string & side, const Event & event)
   {
     output_ << side << ',' << (event[0] == 0 ? "send" : "receive");
-    for (size_t i = 1; i < event.size(); ++i) output_ << ',' << event[i];
-    output_ << '\n';
+    for (size_t i = 1; i < event.size() - 1; ++i) output_ << ',' << event[i];
+    if (event[7] >= stream_names.size()) throw std::runtime_error("Invalid event stream");
+    output_ << ',' << stream_names[event[7]] << '\n';
   }
   void report(const Records & chunk)
   {
@@ -246,6 +432,11 @@ private:
       done_ = true;
     }
   }
+  bool ball_{};
+  std::map<uint64_t, Stream> streams_;
+  std::vector<Stream> background_;
+  std::vector<rclcpp::PublisherBase::SharedPtr> publishers_;
+  std::vector<rclcpp::SubscriptionBase::SharedPtr> subscriptions_;
   std::string side_, origin_file_, ready_file_, done_file_;
   std::unique_ptr<SharedClock> clock_, physics_;
   void * library_{};
