@@ -25,7 +25,8 @@ export interface Case {
 export interface Experiment {
   id: string; name: string; status: string; machines: string[]; cases: Case[]; created: number;
   config: Record<string, unknown>; eta_seconds?: number | null; eta_basis?: string;
-  results_deleted?: boolean; stop_pending?: string[];
+  results_deleted?: boolean; stop_pending?: string[]; remote_cleaned?: boolean;
+  cleanup_errors?: Record<string, string>;
   preparations: Record<string, { status: string; task?: string; phase?: string; progress?: Attempt['progress']; error?: string; transfer?: { phase: string; image_kind: string; image_index: number; image_count: number; bytes_sent: number; bytes_per_second: number; eta_seconds?: number | null; eta_basis?: string; elapsed_seconds: number; updated: number; source: string }; collection_status?: string; collection_error?: string }>;
   calibration_machine?: string;
   calibration?: { records: Record<string, { sustainable_gbps: number }> };

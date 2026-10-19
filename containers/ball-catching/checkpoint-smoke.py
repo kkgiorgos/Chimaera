@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate real checkpoint capture, collection, image import and repeated restore.
+"""Validate real checkpoint capture, collection, sparse asset transfer and repeated restore.
 
 Run on a KVM-capable worker with its built application image, disk and kernel.
 Uses only an isolated output directory and disposable containers. Each simulated
@@ -19,7 +19,7 @@ import time
 SOURCE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(SOURCE / 'orchestrator/backend'))
 from common import atomic_json, digest
-from checkpoints import LOCATION, package, unpack
+from checkpoints import LOCATION, package, sparse_copy, unpack
 from agent import Agent
 from controller import safe_extract
 
@@ -33,7 +33,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--restores', type=int, default=2)
     parser.add_argument('--skip-packaging', action='store_true',
-        help='Run capture, repeated restores and report collection without exporting/importing an image')
+        help='Run capture, repeated restores and report collection without transferring readiness assets')
     args = parser.parse_args()
     root, output = args.repo.resolve(), args.output.resolve()
     if output.exists() or args.restores < 2:
@@ -113,7 +113,10 @@ def main():
             image, index = package(output, args.image, disk, kernel)
         def image_import():
             nonlocal imported
-            (output / 'consumer').mkdir()
+            destination = output / 'consumer/shared-assets'
+            destination.mkdir(parents=True)
+            sparse_copy(['tar', '--dereference', '--sparse', '--format=pax', '--sparse-version=1.0',
+                         '-cf', '-', '-C', str(output / 'export-assets'), '.'], destination)
             imported = unpack(output / 'consumer', image, index)
         # Corruption must fail closed before a simulator starts.
         def reject_changed_index():
@@ -138,7 +141,7 @@ def main():
         for nonce in range(2, args.restores + 2):
             phase('restore-' + str(nonce), lambda n=nonce: container('restore-' + str(n),
                 image, 'restore', nonce=n, imported=imported,
-                prepared_snapshot=prepared if args.skip_packaging else None))
+                prepared_snapshot=prepared if args.skip_packaging else imported))
         def collect():
             task = dict(id='checkpoint-smoke-prepare', kind='prepare', status='completed',
                         output=str(output), container='none')

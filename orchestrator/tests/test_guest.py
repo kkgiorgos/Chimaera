@@ -61,7 +61,7 @@ def test_guest_recipe_change_rebuilds_disk_without_removing_previous_cache(tmp_p
     builds = []
 
     def execute(argv, **kwargs):
-        if '--assemble' in argv:
+        if '--assemble-stream' in argv:
             mount = argv[argv.index('-v') + 1]
             work = Path(mount.removesuffix(':/work'))
             (work / 'disk.img').write_bytes(recipe.read_bytes())
@@ -69,7 +69,10 @@ def test_guest_recipe_change_rebuilds_disk_without_removing_previous_cache(tmp_p
         return subprocess.CompletedProcess(argv, 0)
 
     with patch('guest.run', return_value='sha256:cached-application'), \
+         patch('guest.subprocess.Popen') as export, \
          patch('guest.subprocess.run', side_effect=execute):
+        export.return_value.wait.return_value = 0
+        export.return_value.poll.return_value = 0
         first, _ = ensure_assets(tmp_path, tmp_path / 'experiment', 'cached-image', kernel=kernel)
         again, _ = ensure_assets(tmp_path, tmp_path / 'experiment', 'cached-image', kernel=kernel)
         assert again == first

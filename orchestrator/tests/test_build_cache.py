@@ -41,14 +41,14 @@ def test_sdk_cache_depends_on_build_content_not_repo_commit_or_dashboard(tmp_pat
 
 
 def pipeline_fixture(tmp_path):
-    directory = tmp_path / 'experiment'
+    directory = tmp_path / '.chimaera-orchestrator/experiments/experiment'
     identity = dict(revision='revision', fingerprint='sources')
     kernel = tmp_path / 'kernel'
     kernel.write_bytes(b'pinned kernel')
     disk = tmp_path / 'disk.img'
     disk.write_bytes(b'local disk differs from reference filesystem bytes')
     records = dict(stream=dict(sustainable_gbps=40))
-    provenance = dict(sdk_image_id=SDK_ID, source_identity=identity, revision='revision', disk_sha256='other-host-disk',
+    provenance = dict(sdk_image_id=SDK_ID, application_image_id=APP_ID, source_identity=identity, revision='revision', disk_sha256='other-host-disk',
                       kernel_sha256=digest(kernel), input_hashes={'experiment.json': 'portable'})
     request = dict(config={'ramulator_config': 'memory.json'}, source_identity=identity, cpus=1,
                    memory='2g', build_jobs=4, calibration=dict(records=records, provenance=provenance),
@@ -70,12 +70,14 @@ def pipeline_fixture(tmp_path):
 def test_preparation_reuses_images_and_builds_guest_locally_with_shared_calibration(tmp_path, monkeypatch):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=execute) as commands, \
          patch('guest.ensure_assets', return_value=(disk, kernel)) as assets:
         prepare(directory)
-    assets.assert_called_once_with(tmp_path, directory, 'chimaera:ball-' + APP_KEY, str(disk), str(kernel))
+    assets.assert_called_once_with(tmp_path, directory, SDK_ID, str(disk), str(kernel))
     assert not any('buildx' in call.args[0] for call in commands.call_args_list)
     assert not any(any(str(arg).endswith('/containers/build.py') for arg in call.args[0]) for call in commands.call_args_list)
     ready = json.loads((directory / 'ready.json').read_text())
@@ -98,10 +100,13 @@ def test_checkpoint_consumer_imports_producer_disk_and_never_recreates_readiness
         result = execute(argv, **kwargs)
         if '--skip-build' in argv:
             atomic_json(directory / 'inputs/runner.json', dict(image=APP_ID, devices=['/dev/kvm'],
-                env={}, mounts=[dict(source='assets', target='/assets/readiness')]))
+                env={'CHIMAERA_CHECKPOINT_ROOT': '/assets/readiness/checkpoints'},
+                mounts=[dict(source='assets', target='/assets/readiness')]))
         return result
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=checkpoint_execute) as commands, \
          patch('guest.ensure_assets') as assets, \
@@ -115,8 +120,8 @@ def test_checkpoint_consumer_imports_producer_disk_and_never_recreates_readiness
     assert '--readiness-from' in setup and '--checkpoint-create' not in setup
     runner = json.loads((directory / 'inputs/runner.json').read_text())
     assert runner['devices'] == []
-    assert runner['env']['CHIMAERA_CHECKPOINT_ROOT'] == '/opt/chimaera/readiness/checkpoints'
-    assert not any(mount['target'] == '/assets/readiness' for mount in runner['mounts'])
+    assert runner['env']['CHIMAERA_CHECKPOINT_ROOT'] == '/assets/readiness/checkpoints'
+    assert any(mount['target'] == '/assets/readiness' for mount in runner['mounts'])
     ready = json.loads((directory / 'ready.json').read_text())
     assert ready['provenance']['readiness_checkpoint'] is True
 
@@ -127,7 +132,9 @@ def test_checkpoint_consumer_rejects_preparation_without_a_shared_checkpoint(tmp
     request['readiness_checkpoint'] = True
     atomic_json(directory / 'request.json', request)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=execute), \
          patch('guest.ensure_assets') as assets:
@@ -141,7 +148,7 @@ def test_checkpoint_producer_freezes_the_prepared_image_and_removes_case_kvm(tmp
     request = json.loads((directory / 'request.json').read_text())
     request.update(readiness_checkpoint=True, calibration=None)
     atomic_json(directory / 'request.json', request)
-    final_image = 'sha256:' + 'c' * 64
+    final_image = APP_ID
     def checkpoint_execute(argv, **kwargs):
         result = execute(argv, **kwargs)
         if '--skip-build' in argv:
@@ -149,7 +156,9 @@ def test_checkpoint_producer_freezes_the_prepared_image_and_removes_case_kvm(tmp
                 env={}, mounts=[]))
         return result
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=checkpoint_execute) as commands, \
          patch('guest.ensure_assets', return_value=(disk, kernel)), \
@@ -171,7 +180,9 @@ def test_source_mismatch_reports_queued_and_local_values_before_using_images(tmp
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     local = dict(identity, **{field: 'different-local-value'})
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=local), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=local), \
          patch('pipeline.build_identities') as builds, \
          patch('pipeline.subprocess.run') as commands, \
          patch('guest.ensure_assets') as assets:
@@ -193,7 +204,9 @@ def test_preparation_still_rejects_different_shared_kernel(tmp_path, monkeypatch
     request['calibration']['provenance']['kernel_sha256'] = 'incompatible kernel'
     atomic_json(directory / 'request.json', request)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk', application='app')), \
          patch('pipeline.subprocess.run', side_effect=execute), \
          patch('guest.ensure_assets', return_value=(disk, kernel)):
@@ -223,7 +236,9 @@ def test_preparation_rejects_different_build_sources_before_docker_or_assets(tmp
     request['calibration']['provenance']['build_inputs'] = dict(sdk='reference-sdk', application='reference-app')
     atomic_json(directory / 'request.json', request)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='local-sdk', application='local-app')), \
          patch('pipeline.subprocess.run') as commands, \
          patch('guest.ensure_assets') as assets:
@@ -255,36 +270,16 @@ def test_host_editor_caches_and_generated_parser_tables_do_not_change_build_keys
 def test_consumer_never_builds_sdk_when_transfer_is_missing(tmp_path, monkeypatch):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk', application='app')), \
          patch('pipeline.subprocess.run', return_value=subprocess.CompletedProcess([], 1)) as commands, \
          patch('guest.ensure_assets') as assets:
-        with pytest.raises(ValueError, match='complete SDK transfer'):
+        with pytest.raises(ValueError, match='complete image transfer'):
             prepare(directory)
         assert len(commands.call_args_list) == 1
         assets.assert_not_called()
-
-
-def test_application_cache_and_build_use_calibration_sdk_identity(tmp_path, monkeypatch):
-    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
-    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    def build_application(argv, **kwargs):
-        if argv[:3] == ['docker', 'image', 'inspect'] and '--format' not in argv and 'chimaera:ball-' in argv[-1]:
-            return subprocess.CompletedProcess(argv, 1)
-        return execute(argv, **kwargs)
-    with patch('pipeline.source_identity', return_value=identity), \
-         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
-         patch('pipeline.subprocess.run', side_effect=build_application) as commands, \
-         patch('guest.ensure_assets', return_value=(disk, kernel)):
-        prepare(directory)
-    build = next(c.args[0] for c in commands.call_args_list if 'buildx' in c.args[0])
-    assert 'SDK_IMAGE=chimaera:sdk-image-' + 'a' * 64 in build
-    assert build[build.index('-t') + 1] == 'chimaera:ball-' + APP_KEY
-    assert not any(any(str(arg).endswith('/containers/build.py') for arg in c.args[0])
-                   for c in commands.call_args_list)
-    ready = json.loads((directory / 'ready.json').read_text())
-    assert ready['provenance']['sdk_image_id'] == SDK_ID
-    assert ready['provenance']['application_image_id'] == APP_ID
 
 
 @pytest.mark.parametrize('present', [True, False])
@@ -298,13 +293,15 @@ def test_consumer_uses_shared_application_without_building(tmp_path, monkeypatch
         if not present and argv == ['docker', 'image', 'inspect', APP_ID]:
             return subprocess.CompletedProcess(argv, 1)
         return execute(argv, **kwargs)
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=inspect) as commands, \
          patch('guest.ensure_assets', return_value=(disk, kernel)) as assets:
         if present:
             prepare(directory)
-            assert assets.call_args.args[2] == APP_ID
+            assert assets.call_args.args[2] == SDK_ID
             ready = json.loads((directory / 'ready.json').read_text())
             assert ready['image'] == APP_ID
             assert ready['provenance']['application_image_id'] == APP_ID
@@ -321,7 +318,9 @@ def test_producer_records_both_images_for_distribution(tmp_path, monkeypatch):
     request['calibration'] = None
     atomic_json(directory / 'request.json', request)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
-    with patch('pipeline.source_identity', return_value=identity), \
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
          patch('pipeline.subprocess.run', side_effect=execute), \
          patch('guest.ensure_assets', return_value=(disk, kernel)):

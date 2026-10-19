@@ -72,13 +72,13 @@ def run_case(inputs, output, case):
     selected = next((p for p in manifest['points'] if p['id'] == case), None)
     if selected is None:
         raise ValueError('Unknown case: ' + case)
-    # Each worker has its own writable manifest/bundle and private /tmp sockets.
+    # Each worker has a writable manifest and shares the immutable input bundle.
     output.mkdir(parents=True, exist_ok=True)
     if not (output / 'experiment_manifest.json').exists():
         if any(output.iterdir()):
             raise ValueError('Worker suite must be empty or resumable')
         shutil.copy2(prepared / 'experiment_manifest.json', output / 'experiment_manifest.json')
-        shutil.copy2(prepared / 'guest.tar.gz', output / 'guest.tar.gz')
+        (output / 'guest.tar.gz').symlink_to(prepared / 'guest.tar.gz')
         (output / 'calibration').symlink_to(prepared / 'calibration', target_is_directory=True)
         (output / 'routes.json').write_bytes((prepared / 'routes.json').read_bytes())
     return subprocess.call(command + ['--resume', '--case', case])

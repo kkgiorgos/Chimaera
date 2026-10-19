@@ -1,17 +1,15 @@
-"""Build a ball-catching guest from its Ubuntu application image without host mounts.
+"""Build a reusable guest from its Ubuntu dependency base without host mounts.
 
 The rootfs retains the image's ROS runtime. The application bundle is injected at
 boot by the existing benchmark. A pinned prebuilt gem5 kernel is downloaded and
 verified when absent; rebuilding Linux itself is unnecessary.
 """
 import json
-import os
 from pathlib import Path
 import shutil
 import struct
 import subprocess
 import sys
-import tarfile
 import tempfile
 import urllib.request
 import uuid
@@ -19,11 +17,12 @@ import uuid
 from common import atomic_json, content_identity, digest, run
 
 
-def assemble(work):
+def assemble(work, stream=False):
     with tempfile.TemporaryDirectory(dir=work, prefix='rootfs-') as temporary:
         root = Path(temporary)
         # Trusted archive exported from our locally built image, extracted in a helper.
-        subprocess.run(['tar', '--no-same-owner', '-xf', str(work / 'rootfs.tar'), '-C', temporary], check=True)
+        subprocess.run(['tar', '--no-same-owner', '-xf', '-' if stream else str(work / 'rootfs.tar'),
+                        '-C', temporary], check=True)
         for tree in ('src', 'tmp', 'var/lib/apt/lists'):
             shutil.rmtree(root / tree, ignore_errors=True)
         for directory in ('tmp', 'run', 'dev', 'proc', 'sys'):
@@ -107,16 +106,27 @@ def ensure_assets(root, directory, image, disk=None, kernel=None):
     try:
         run(['docker', 'create', '--name', name, '--label',
              'chimaera.experiment=' + directory.name, image])
-        subprocess.run(['docker', 'export', '-o', str(work / 'rootfs.tar'), name], check=True)
         init = (root / 'containers/wall-follow/scripts/guest-init.sh').read_text()
         # Remove the wall-follow-only diagnostic probe, retaining generic boot/readfile handling.
         start = init.index("if grep -qw 'chimaera.probe=1'")
         end = init.index('\nworkload_pid=', start)
         (work / 'init.sh').write_text(init[:start] + init[end:])
         # mkfs populates root-owned guest files in a disposable root helper.
-        subprocess.run(['docker', 'run', '--rm', '--label', 'chimaera.experiment=' + directory.name,
-            '-v', f'{work}:/work', 'chimaera-supervisor:local',
-            'python3', '/app/guest.py', '--assemble'], check=True)
+        with tempfile.TemporaryFile() as errors:
+            export = subprocess.Popen(['docker', 'export', name], stdout=subprocess.PIPE, stderr=errors)
+            try:
+                subprocess.run(['docker', 'run', '--rm', '-i', '--label', 'chimaera.experiment=' + directory.name,
+                    '-v', f'{work}:/work', 'chimaera-supervisor:local',
+                    'python3', '/app/guest.py', '--assemble-stream'], stdin=export.stdout, check=True)
+                export.stdout.close()
+                if export.wait(timeout=30):
+                    errors.seek(0)
+                    raise RuntimeError('Guest export failed: ' + errors.read().decode(errors='replace')[-2000:])
+            finally:
+                export.stdout.close()
+                if export.poll() is None:
+                    export.kill()
+                export.wait()
         (work / 'disk.img').replace(disk)
         atomic_json(assets / ('disk-provenance-' + key + '.json'),
                     dict(image=image, image_id=image_id, recipe=recipe, sha256=digest(disk)))
@@ -129,5 +139,5 @@ def ensure_assets(root, directory, image, disk=None, kernel=None):
     return disk, kernel
 
 
-if __name__ == '__main__' and sys.argv[1:] == ['--assemble']:
-    assemble(Path('/work'))
+if __name__ == '__main__':
+    assemble(Path('/work'), stream=sys.argv[1:] == ['--assemble-stream'])

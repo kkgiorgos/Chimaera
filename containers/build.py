@@ -44,6 +44,7 @@ def main():
     cli.add_argument('--profile', default='jammy-humble-fortress')
     cli.add_argument('--jobs', type=int, default=3)
     cli.add_argument('--tag')
+    cli.add_argument('--builder', help='Use a dedicated Buildx builder')
     cli.add_argument('--no-cache', action='store_true')
     cli.add_argument('--print-command', action='store_true')
     cli.add_argument('--prebuilt-gem5', type=Path,
@@ -64,6 +65,8 @@ def main():
                    '--build-arg', 'BUILD_JOBS=' + str(args.jobs)]
         if args.no_cache:
             command.append('--no-cache')
+        if args.builder:
+            command += ['--builder', args.builder]
         with tempfile.TemporaryDirectory(prefix='chimaera-gem5-artifacts-') as temporary:
             if args.prebuilt_gem5:
                 if not args.print_command:

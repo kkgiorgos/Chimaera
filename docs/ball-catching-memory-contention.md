@@ -88,9 +88,10 @@ and measurement, and statistics reset synchronously with the throw boundary.
 Orchestrated experiments perform this readiness run only on the preparation
 machine, once per compatible hardware/camera/controller configuration. The guest
 bridge finishes an exchange, marks its next exchange for a fresh host handshake,
-and requests a gem5 checkpoint. The final application image carries that checkpoint,
-the exact backing disk, kernel and guest bundle, plus the host readiness input
-replay. Each case restores without constructing any KVM CPU or KvmVM object.
+and requests a gem5 checkpoint. The orchestrator transfers that checkpoint, the exact backing disk, kernel and
+guest bundle, plus the host readiness input replay, as separate sparse assets.
+The reusable application image contains no guest disk or checkpoint. Each case
+restores without constructing any KVM CPU or KvmVM object.
 Its host replays the readiness prefix while gem5 stays paused and checks the
 resulting simulation time and joint positions/velocities against the saved boundary.
 Gazebo's renderer/physics engine internals are reconstructed by replay, rather

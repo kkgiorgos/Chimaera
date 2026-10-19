@@ -1,12 +1,11 @@
 """One detached preparation operation: build locally, freeze inputs, validate provenance."""
-import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
 
-from common import atomic_json, build_identities, digest, run, source_identity
+from common import atomic_json, build_identities, digest, source_identity
 
 
 def prepare(directory):
@@ -43,38 +42,18 @@ def prepare(directory):
             raise ValueError('Simulator/application build sources differ from the calibration machine: '
                 + differences + '. Check ignored external sources and executable permissions as well as Git revision. '
                 'Use matching build inputs on every machine before retrying preparation.')
-    sdk = 'chimaera:sdk-' + builds['sdk'][:16]
     if calibration:
-        sdk = calibration['provenance'].get('sdk_image_id')
-        if not sdk:
-            raise ValueError('Shared calibration lacks its SDK image identity; prepare the calibration machine again')
-    present = subprocess.run(['docker', 'image', 'inspect', sdk], capture_output=True)
-    if present.returncode:
-        if calibration:
-            raise ValueError('Calibration SDK image is missing; complete SDK transfer before preparation')
-        subprocess.run([sys.executable, str(root / 'containers/build.py'), '--tag', sdk, '--jobs', str(request['build_jobs'])], check=True)
-    sdk_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', sdk], text=True).strip()
-    if calibration and sdk_id != sdk:
-        raise ValueError('Local SDK image differs from the calibration SDK')
-    sdk_reference = 'chimaera:sdk-image-' + sdk_id.removeprefix('sha256:')
-    subprocess.run(['docker', 'image', 'tag', sdk_id, sdk_reference], check=True)
-    # A source key alone can reuse an application built against another SDK's live APT packages.
-    application_key = hashlib.sha256((builds['application'] + sdk_id).encode()).hexdigest()
-    image = 'chimaera:ball-' + application_key[:16]
-    shared_application = calibration and calibration['provenance'].get('application_image_id')
-    if shared_application:
-        image = shared_application
-    present = subprocess.run(['docker', 'image', 'inspect', image], capture_output=True)
-    if present.returncode:
-        if shared_application:
-            raise ValueError('Calibration application image is missing; complete image transfer before preparation')
-        subprocess.run(['docker', 'buildx', 'build', '--load', '--progress', 'plain', '--provenance=false',
-            '--platform', 'linux/amd64', '-f', str(root / 'containers/ball-catching/Dockerfile'),
-            '--build-arg', 'SDK_IMAGE=' + sdk_reference, '--build-arg', 'BUILD_JOBS=' + str(request['build_jobs']),
-            '-t', image, str(root)], check=True)
-    application_id = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image], text=True).strip()
-    if shared_application and application_id != shared_application:
-        raise ValueError('Local application image differs from the calibration application image')
+        sdk_id = calibration['provenance'].get('sdk_image_id')
+        application_id = calibration['provenance'].get('application_image_id')
+        if not sdk_id or not application_id:
+            raise ValueError('Shared calibration lacks its image identities; prepare the producer again')
+        if subprocess.run(['docker', 'image', 'inspect', application_id], capture_output=True).returncode:
+            raise ValueError('Calibration image is missing; complete image transfer before preparation')
+        base_id = calibration['provenance'].get('base_image_id', sdk_id)
+    else:
+        from images import build
+        sdk_id, base_id, application_id = build(root, builds, request['build_jobs'])
+    image = application_id
     for image_id in (sdk_id, application_id):
         atomic_json(root / '.chimaera-orchestrator/assets' /
                     ('image-' + image_id.removeprefix('sha256:') + '.json'), dict(image_id=image_id))
@@ -88,7 +67,7 @@ def prepare(directory):
         readiness = unpack(directory, application_id, checkpoint_index)
         disk, kernel = readiness / 'guest.img', readiness / 'kernel'
     else:
-        disk, kernel = ensure_assets(root, directory, image, request.get('disk'), request.get('kernel'))
+        disk, kernel = ensure_assets(root, directory, base_id, request.get('disk'), request.get('kernel'))
     args = []
     if calibration:
         for pattern, record in calibration['records'].items():
@@ -114,24 +93,22 @@ def prepare(directory):
     # experiment and memory.json are portable and remain strictly hashed.
     hashes.pop('source-experiment.json', None)
     provenance = dict(source_identity=identity, revision=revision, build_inputs=builds,
-                      sdk_image_id=sdk_id, application_image_id=application_id,
+                      sdk_image_id=sdk_id, base_image_id=base_id, application_image_id=application_id,
                       disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
     if checkpoint_mode:
-        from checkpoints import LOCATION, package
+        from checkpoints import package
         if not calibration:
-            atomic_json(directory / 'stage.json', dict(phase='Packaging ready checkpoint and backing disk'))
+            atomic_json(directory / 'stage.json', dict(phase='Exposing readiness assets for sparse transfer'))
             application_id, checkpoint_index = package(directory, application_id, disk, kernel)
             image = application_id
             atomic_json(root / '.chimaera-orchestrator/assets' /
                 ('image-' + application_id.removeprefix('sha256:') + '.json'), dict(image_id=application_id))
         provenance.update(application_image_id=application_id, readiness_checkpoint=True,
                           checkpoint_index_sha256=checkpoint_index)
-        # Both producer and consumers execute the immutable prepared image.
+        # Checkpoints are mounted once per machine, outside the application image.
         runner = json.loads((inputs / 'runner.json').read_text())
         runner.update(image=application_id, devices=[])
-        runner['env']['CHIMAERA_CHECKPOINT_ROOT'] = LOCATION + '/checkpoints'
-        runner['mounts'] = [mount for mount in runner['mounts'] if mount['target'] != '/assets/readiness']
         atomic_json(inputs / 'runner.json', runner)
     if calibration:
         # Local ext4 images contain host-local filesystem timestamps/UUIDs.
@@ -147,6 +124,11 @@ def prepare(directory):
             raise ValueError('Simulator/application build sources differ from the calibration machine')
     atomic_json(directory / 'ready.json', dict(records=records, provenance=provenance,
         plan=json.loads((inputs / 'plan.json').read_text()), image=image))
+    if not calibration:
+        atomic_json(root / '.chimaera-orchestrator/assets/current-guest.json',
+                    dict(disk=str(disk), kernel=str(kernel)))
+    from assets import clean_unused
+    clean_unused(root / '.chimaera-orchestrator', [disk, kernel])
     atomic_json(directory / 'stage.json', dict(phase='Ready'))
 
 

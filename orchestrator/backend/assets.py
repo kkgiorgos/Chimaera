@@ -1,4 +1,4 @@
-"""Remove orchestrator caches while retaining every saved experiment's dependencies."""
+"""Keep the current reusable assets and unfinished experiments; remove old versions."""
 import json
 import os
 import re
@@ -41,6 +41,12 @@ def asset_inventory(data, keep_paths=()):
     data = Path(data)
     paths = {str(Path(p).resolve()) for p in keep_paths if p}
     images = set()
+    current = data / 'assets/current-images.json'
+    if current.exists():
+        images.update(record['id'] for record in json.loads(current.read_text()).values())
+    guest = data / 'assets/current-guest.json'
+    if guest.exists():
+        paths.update(str(Path(p).resolve()) for p in json.loads(guest.read_text()).values() if p)
     experiments = data / 'experiments'
     # Include archived failed preparations: they may still be needed for recovery.
     for name in ('runner.json', 'ready.json', 'request.json'):
@@ -49,7 +55,7 @@ def asset_inventory(data, keep_paths=()):
             if record.get('image'):
                 images.add(record['image'])
             provenance = record.get('provenance') or (record.get('calibration') or {}).get('provenance', {})
-            images.update(provenance[key] for key in ('sdk_image_id', 'application_image_id') if provenance.get(key))
+            images.update(provenance[key] for key in ('sdk_image_id', 'base_image_id', 'application_image_id') if provenance.get(key))
             paths.update(str(Path(m['source']).resolve()) for m in record.get('mounts', [])
                          if Path(m['source']).is_absolute())
             paths.update(str(Path(record[key]).resolve()) for key in ('disk', 'kernel') if record.get(key))
@@ -69,13 +75,13 @@ def asset_inventory(data, keep_paths=()):
             protected.add(run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image],
                               text=True).strip())
 
-    listing = run(['docker', 'image', 'ls', '--no-trunc', '--format', '{{json .}}'], text=True)
+    listing = run(['docker', 'image', 'ls', '--all', '--no-trunc', '--format', '{{json .}}'], text=True)
     candidates = {}
     present = set()
     for line in listing.splitlines():
         entry = json.loads(line)
         present.add(entry['ID'])
-        if entry['Repository'] == 'chimaera' and entry['Tag'].startswith(('sdk-', 'ball-', 'transfer-')):
+        if entry['Repository'] == 'chimaera' and entry['Tag'].startswith(('sdk-', 'ball-', 'transfer-', 'orchestrator-')):
             candidates.setdefault(entry['ID'], set()).add('chimaera:' + entry['Tag'])
     assets = data / 'assets'
     for marker in assets.glob('image-*.json'):
@@ -106,6 +112,10 @@ def clean_unused(data, keep_paths=(), asset_ids=None):
     data = Path(data)
     assets = data / 'assets'
     items = asset_inventory(data, keep_paths)
+    present = {item['id'] for item in items if item['kind'] == 'image'}
+    for marker in assets.glob('image-*.json'):
+        if json.loads(marker.read_text())['image_id'] not in present:
+            marker.unlink()
     if asset_ids is not None:
         if not isinstance(asset_ids, list) or not asset_ids or any(not isinstance(i, str) for i in asset_ids):
             raise ValueError('Choose at least one asset')
@@ -120,7 +130,15 @@ def clean_unused(data, keep_paths=(), asset_ids=None):
             continue
         image, tags = item['id'], item['tags']
         # No force: Docker also protects containers outside this orchestrator.
-        run(['docker', 'image', 'rm', *(tags or [image])], timeout=120)
+        try:
+            run(['docker', 'image', 'rm', *(tags or [image])], timeout=120)
+        except RuntimeError as error:
+            if any(reason in str(error).lower() for reason in
+                   ('dependent child', 'being used by', 'referenced in multiple repositories')):
+                # Ancestors may be retained by containers outside this worker.
+                # Keep their registry entry and reconsider on the next cleanup.
+                continue
+            raise
         (assets / ('image-' + image.removeprefix('sha256:') + '.json')).unlink(missing_ok=True)
         removed_images += 1
     removed_disks = 0

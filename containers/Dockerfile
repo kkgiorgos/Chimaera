@@ -51,7 +51,15 @@ RUN python3 -c 'import json,pathlib; p=pathlib.Path("/opt/chimaera"); (p/"build-
 
 # Keep shared compilers and libraries so applications can build against the
 # identical environment and export an overlay via a bind mount.
-FROM bridge-build AS image
+FROM dependencies AS image
+COPY --from=bridge-build /opt/chimaera/gem5/ /opt/chimaera/gem5/
+COPY --from=bridge-build /opt/chimaera/ramulator2/ /opt/chimaera/ramulator2/
+COPY --from=bridge-build /opt/chimaera/ros/ /opt/chimaera/ros/
+COPY --from=bridge-build /opt/chimaera/licenses/ /opt/chimaera/licenses/
+COPY --from=bridge-build /opt/chimaera/build-manifest.json /opt/chimaera/build-manifest.json
+# Keep the small development interface needed to rebuild a guest bridge.
+COPY --from=bridge-build /src/gem5/include/ /src/gem5/include/
+COPY --from=bridge-build /src/gem5/util/m5/src/ /src/gem5/util/m5/src/
 COPY containers/scripts/entrypoint.sh /opt/chimaera/scripts/entrypoint.sh
 ENV ROS_LOCALHOST_ONLY=1 LD_LIBRARY_PATH=/opt/chimaera/ramulator2
 WORKDIR /tmp

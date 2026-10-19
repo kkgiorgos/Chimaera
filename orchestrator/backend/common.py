@@ -85,6 +85,7 @@ def build_identities(root):
         'containers/build.py', 'containers/profiles', 'containers/scripts', 'gem5',
         'gem5-transport', 'ros/chimaera_ros_ws/src'])
     app = content_identity(root, ['containers/ball-catching/Dockerfile',
+        'orchestrator/backend/images.py',
         'containers/ball-catching/Dockerfile.dockerignore', 'ros/ball_catching_ws/src',
         'ros/franka_ws/src/franka_description'])
     return dict(sdk=sdk, application=hashlib.sha256((sdk + app).encode()).hexdigest())

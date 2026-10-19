@@ -30,7 +30,7 @@ class SSH:
         command = shlex.join(['docker', 'exec', '-i', 'chimaera-supervisor',
                               'python3', '/app/agent.py', 'rpc'])
         output = run(self.base(machine) + [command], input=json.dumps(dict(method=method, **params)).encode(),
-                     timeout=610 if method == 'clean_assets' else 40)
+                     timeout=610 if method in {'clean_assets', 'release', 'commit_assets'} else 40)
         result = json.loads(output)
         if 'error' in result:
             raise RuntimeError(result['error'])
@@ -73,6 +73,42 @@ class SSH:
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
             raise ValueError('Invalid Docker image ID')
         return value
+
+    def copy_readiness(self, source, destination, experiment, expected, cancel=None, timeout=3600):
+        if cancel is not None and cancel.is_set():
+            raise RuntimeError('Readiness transfer cancelled')
+        directory = self.call(destination, 'asset_destination', experiment=experiment)
+        helper = Path(__file__).with_name('readiness_transfer.py').read_text()
+        path = str(Path(source['repo']) / '.chimaera-orchestrator/experiments' / experiment / 'export-assets')
+        command = shlex.join(['python3', '-c', helper, path, directory,
+                             json.dumps(self.base(destination)), str(timeout)])
+        with tempfile.TemporaryFile() as errors:
+            process = subprocess.Popen(self.base(source) + [command], stdin=subprocess.PIPE,
+                                       stdout=subprocess.DEVNULL, stderr=errors)
+            deadline = time.monotonic() + timeout
+            try:
+                while process.poll() is None:
+                    if cancel is not None and cancel.is_set():
+                        raise RuntimeError('Readiness transfer cancelled')
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError('Readiness transfer exceeded its time limit')
+                    try:
+                        process.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                if process.returncode:
+                    errors.seek(0)
+                    raise RuntimeError(errors.read().decode(errors='replace')[-4000:])
+            finally:
+                process.stdin.close()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        if cancel is not None and cancel.is_set():
+            raise RuntimeError('Readiness transfer cancelled')
+        self.call(destination, 'commit_assets', experiment=experiment, expected=expected)
 
     def copy_image(self, source, destination, image, cancel=None, timeout=3600, progress=None):
         """Coordinate a direct producer-to-destination stream; receive only progress."""

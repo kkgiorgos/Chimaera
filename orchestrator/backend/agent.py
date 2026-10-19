@@ -41,7 +41,7 @@ class Agent:
         self.lock = threading.RLock()
 
     def rpc(self, method, **params):
-        if method not in {'snapshot', 'prepare', 'start', 'stop', 'stop_case', 'logs', 'cleanup', 'clean_assets', 'storage', 'remember_image', 'asset_destination', 'reset_prepare'}:
+        if method not in {'snapshot', 'prepare', 'start', 'stop', 'stop_case', 'logs', 'cleanup', 'clean_assets', 'storage', 'remember_image', 'asset_destination', 'commit_assets', 'release', 'release_attempt', 'reset_prepare'}:
             raise ValueError('Unknown supervisor operation')
         with self.lock:
             return getattr(self, method)(**params)
@@ -50,6 +50,7 @@ class Agent:
         return self.data / 'experiments' / identifier(experiment)
 
     def prepare(self, experiment, config, cpus, memory, build_jobs, source_identity, disk='', kernel='', calibration=None, generation=0):
+        self.claim(experiment)
         self.check_generation(experiment, generation)
         directory = self.directory(experiment)
         key = experiment + '-prepare'
@@ -71,9 +72,36 @@ class Agent:
         return self.launch(key, experiment, 'prepare', command, directory)
 
     def asset_destination(self, experiment):
-        path = self.directory(experiment) / 'shared-assets'
-        path.mkdir(parents=True, exist_ok=True)
+        self.claim(experiment)
+        path = self.directory(experiment) / 'shared-assets.incoming'
+        if path.exists():
+            shutil.rmtree(path)
+        path.mkdir(parents=True)
         return str(path)
+
+    def commit_assets(self, experiment, expected):
+        from checkpoints import unpack
+        self.claim(experiment)
+        directory = self.directory(experiment)
+        incoming = directory / 'shared-assets.incoming'
+        destination = directory / 'shared-assets'
+        # Validate in place before publishing. A failed transfer is never ready.
+        unpack(incoming.parent, '', expected, destination=incoming)
+        if destination.exists():
+            shutil.rmtree(destination)
+        incoming.rename(destination)
+        return True
+
+    def claim(self, experiment):
+        self.directory(experiment)
+        if self.store.get('released', experiment):
+            raise ValueError('Experiment inputs were released; create a new experiment')
+        active = self.store.get('lifecycle', 'active')
+        legacy = any(p.is_dir() and p.name != experiment and not self.store.get('released', p.name)
+                     for p in (self.data / 'experiments').glob('*'))
+        if (active and active != experiment) or legacy:
+            raise ValueError('Finalize the existing experiment before preparing another')
+        self.store.put('lifecycle', 'active', experiment)
 
     def check_generation(self, experiment, generation):
         if generation <= self.store.get('stopped', experiment, -1):
@@ -95,11 +123,13 @@ class Agent:
         if directory.exists():
             archive = directory / 'preparation-failures' / uuid.uuid4().hex[:8]
             archive.mkdir(parents=True)
-            for name in ('inputs', 'ready.json', 'stage.json', 'export-assets', 'experiment.json',
-                         'request.json', 'worker.log', 'preparation-report', 'checkpoint-image'):
+            for name in ('ready.json', 'stage.json', 'experiment.json',
+                         'request.json', 'worker.log', 'preparation-report'):
                 path = directory / name
                 if path.exists():
                     path.rename(archive / name)
+            for name in ('inputs', 'export-assets', 'checkpoint-image', 'readiness-assets'):
+                shutil.rmtree(directory / name, ignore_errors=True)
         return True
 
     def launch(self, key, experiment, kind, command, output, **metadata):
@@ -136,6 +166,7 @@ class Agent:
         self.store.put('tasks', task['id'], task)
 
     def start(self, experiment, case, attempt, cpus, memory, generation=0):
+        self.claim(experiment)
         self.check_generation(experiment, generation)
         identifier(case)
         key = identifier(attempt)
@@ -315,6 +346,8 @@ class Agent:
             sys.path.insert(0, scripts)
         from watch_memory_suite import snapshot
         for task in tasks:
+            if task.get('output_removed'):
+                continue
             if task['kind'] == 'case':
                 try:
                     task['progress'] = snapshot(Path(task['output']) / 'suite')
@@ -480,7 +513,40 @@ class Agent:
         directory = self.directory(experiment)
         if directory.exists():
             shutil.rmtree(directory)
+        self.store.put('released', experiment, True)
+        if self.store.get('lifecycle', 'active') == experiment:
+            self.store.delete('lifecycle', 'active')
         return True
+
+    def release_attempt(self, experiment, attempt):
+        task = self.store.get('tasks', identifier(attempt))
+        if not task:
+            return True
+        if task['experiment'] != experiment or task['kind'] != 'case':
+            raise ValueError('Attempt does not belong to this experiment')
+        if task['status'] not in {'completed', 'failed', 'stopped'}:
+            raise ValueError('Attempt is still running')
+        self.cleanup_task_container(task)
+        if not task.get('container_removed'):
+            raise ValueError('Attempt container has not been removed')
+        output = self.directory(experiment) / 'attempts' / identifier(attempt)
+        if output.exists():
+            shutil.rmtree(output)
+        task['output_removed'] = True
+        self.store.put('tasks', attempt, task)
+        return True
+
+    def release(self, experiment, keep_paths=()):
+        # A durable tombstone rejects delayed preparation/transfer/start RPCs.
+        self.store.put('released', identifier(experiment), True)
+        self.cleanup(experiment)
+        if self.store.get('lifecycle', 'active') == experiment:
+            self.store.delete('lifecycle', 'active')
+        from assets import clean_unused
+        result = clean_unused(self.data, keep_paths)
+        from images import prune
+        prune()
+        return result
 
     def storage(self, keep_paths=()):
         from assets import allocated_bytes, asset_inventory, filesystem_usage
@@ -494,11 +560,14 @@ class Agent:
             raise ValueError('Wait for machine tasks to stop before cleaning unused assets')
         return clean_unused(self.data, keep_paths, asset_ids)
 
-    def remember_image(self, image):
+    def remember_image(self, image, current=False):
         if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
             raise ValueError('Invalid Docker image ID')
         atomic_json(self.data / 'assets' / ('image-' + image.removeprefix('sha256:') + '.json'),
                     dict(image_id=image))
+        if current:
+            atomic_json(self.data / 'assets/current-images.json',
+                        {'chimaera:orchestrator-app': dict(id=image, key='imported')})
         return True
 
 

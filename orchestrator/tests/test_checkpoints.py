@@ -11,32 +11,16 @@ from checkpoints import package, sparse_copy, unpack
 from common import digest
 
 
-def test_import_checks_disk_identity_and_does_not_mark_corrupt_assets_ready(tmp_path):
-    image = 'sha256:' + 'a' * 64
-    directory = tmp_path / 'readiness-assets'
-    def copy(command, destination):
-        assert command[:2] == ['docker', 'cp'] and command[-1] == '-'
-        (directory / 'checkpoints').mkdir()
-        for name in ('guest.img', 'kernel', 'guest.tar.gz'):
-            (directory / name).write_text(name)
-        index = dict(provenance=dict(disk_sha256='different disk',
-            kernel_sha256=digest(directory / 'kernel'),
-            bundle_sha256=digest(directory / 'guest.tar.gz')))
-        (directory / 'checkpoints/index.json').write_text(json.dumps(index))
-    # Build the expected index independently; image bytes must match this identity.
-    fixture = tmp_path / 'expected.json'
-    kernel = tmp_path / 'kernel'
-    bundle = tmp_path / 'bundle'
-    kernel.write_text('kernel')
-    bundle.write_text('guest.tar.gz')
-    fixture.write_text(json.dumps(dict(provenance=dict(disk_sha256='different disk',
-        kernel_sha256=digest(kernel), bundle_sha256=digest(bundle)))))
-    with patch('checkpoints.subprocess.run') as commands, patch(
-            'checkpoints.sparse_copy', side_effect=copy):
-        with pytest.raises(ValueError, match='asset differs: guest.img'):
-            unpack(tmp_path, image, digest(fixture))
-    assert not (directory / 'import.json').exists()
-    assert any(call.args[0][:2] == ['docker', 'rm'] for call in commands.call_args_list)
+def test_import_checks_disk_identity_and_rejects_corrupt_assets(tmp_path):
+    directory = tmp_path / 'shared-assets'
+    (directory / 'checkpoints').mkdir(parents=True)
+    for name in ('guest.img', 'kernel', 'guest.tar.gz'):
+        (directory / name).write_text(name)
+    index = dict(groups={}, provenance=dict(disk_sha256='different disk',
+        kernel_sha256=digest(directory / 'kernel'), bundle_sha256=digest(directory / 'guest.tar.gz')))
+    (directory / 'checkpoints/index.json').write_text(json.dumps(index))
+    with pytest.raises(ValueError, match='asset differs: guest.img'):
+        unpack(tmp_path, 'unused image', digest(directory / 'checkpoints/index.json'))
 
 
 def test_sparse_import_restores_dense_zero_regions_without_expanding_them(tmp_path):
@@ -80,15 +64,15 @@ def test_sparse_import_rejects_paths_and_links_outside_destination(tmp_path, kin
     assert not outside.exists()
 
 
-def test_package_sparse_disk_in_one_readable_layer_without_changing_source(tmp_path):
+def test_package_and_transfer_sparse_disk_without_a_copy_or_docker_layer(tmp_path):
     prepared = tmp_path / 'inputs/prepared'
     identifier = 'b' * 64
     checkpoint = prepared / 'checkpoints' / identifier
     checkpoint.mkdir(parents=True)
-    (checkpoint / 'checkpoint.json').write_text('saved')
-    index = prepared / 'checkpoints/index.json'
-    index.write_text(json.dumps(dict(version=1, groups={identifier: {'checkpoint.json': 'hash'}})))
-    (prepared / 'guest.tar.gz').write_bytes(b'guest bundle')
+    state = checkpoint / 'checkpoint.json'
+    state.write_text('saved')
+    bundle = prepared / 'guest.tar.gz'
+    bundle.write_bytes(b'guest bundle')
     disk, kernel = tmp_path / 'disk', tmp_path / 'kernel'
     with disk.open('wb') as stream:
         stream.write(b'backing disk')
@@ -97,37 +81,31 @@ def test_package_sparse_disk_in_one_readable_layer_without_changing_source(tmp_p
     disk.chmod(0o600)
     kernel.write_bytes(b'kernel')
     original = digest(disk)
-    execute = subprocess.run
-
-    def command(arguments, **kwargs):
-        if arguments[:3] == ['docker', 'buildx', 'build']:
-            context = Path(arguments[-1])
-            dockerfile = (context / 'Dockerfile').read_text()
-            assert 'ADD readiness.tar.gz /opt/chimaera/readiness/' in dockerfile
-            assert 'RUN chmod' not in dockerfile
-            assert not (context / 'readiness').exists()
-            archive = context / 'readiness.tar.gz'
-            assert archive.stat().st_size < 100_000
-            with tarfile.open(archive) as stream:
-                member = stream.getmember('./guest.img')
-                # Docker rejects the older GNU sparse ('S') header type.
-                assert member.type == tarfile.REGTYPE
-                assert member.sparse is not None
-                assert member.size == disk.stat().st_size
-                assert member.mode & 0o444 == 0o444
-                assert member.uid == member.gid == 0
-                assert stream.extractfile(member).read() == disk.read_bytes()
-                assert stream.extractfile('./checkpoints/' + identifier + '/checkpoint.json').read() == b'saved'
-            return None
-        if arguments[0] == 'docker':
-            return None
-        return execute(arguments, **kwargs)
-
-    with patch('checkpoints.subprocess.run', side_effect=command), patch(
-            'checkpoints.run', return_value='sha256:' + 'c' * 64 + '\n'):
-        image, expected = package(tmp_path, 'sha256:' + 'a' * 64, disk, kernel)
-    assert image == 'sha256:' + 'c' * 64
+    index = prepared / 'checkpoints/index.json'
+    index.write_text(json.dumps(dict(version=1, groups={identifier: {'checkpoint.json': digest(state)}},
+        provenance=dict(disk_sha256=original, kernel_sha256=digest(kernel), bundle_sha256=digest(bundle)))))
+    application = 'sha256:' + 'a' * 64
+    with patch('checkpoints.subprocess.run') as docker:
+        image, expected = package(tmp_path, application, disk, kernel)
+        docker.assert_not_called()
+    assert image == application
     assert expected == digest(index)
+    export = tmp_path / 'export-assets'
+    assert (export / 'guest.img').is_symlink()
+    assert (export / 'guest.img').resolve() == disk
+    # Exercise the real GNU tar transport format and extraction, including holes.
+    archive = tmp_path / 'wire.tar.gz'
+    subprocess.run(['tar', '--dereference', '--sparse', '--format=pax', '--sparse-version=1.0',
+        '--mode=a+rX', '-czf', str(archive), '-C', str(export), '.'], check=True)
+    assert archive.stat().st_size < 100_000
+    destination = tmp_path / 'shared-assets'
+    destination.mkdir()
+    subprocess.run(['tar', '-xzSf', str(archive), '-C', str(destination)], check=True)
+    assert (destination / 'guest.img').stat().st_blocks * 512 < 1024 * 1024
+    assert unpack(tmp_path, application, expected) == destination
     assert digest(disk) == original
     assert disk.stat().st_mode & 0o777 == 0o600
-    assert not (tmp_path / 'checkpoint-image').exists()
+    state_import = destination / 'checkpoints' / identifier / 'checkpoint.json'
+    state_import.write_text('corrupted memory')
+    with pytest.raises(ValueError, match='checkpoint file differs'):
+        unpack(tmp_path, application, expected)

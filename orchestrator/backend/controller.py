@@ -22,6 +22,7 @@ from notifications import notification_event
 BUSY = {'dispatching', 'running', 'stopping', 'collecting'}
 OCCUPIED = {'dispatching', 'running', 'stopping'}
 ACTIVE = {'preparing', 'running', 'stopping', 'needs_attention'}
+FINAL = {'completed', 'partial', 'deleted'}
 
 
 def validate_config(root, config):
@@ -239,6 +240,9 @@ class Controller:
             key = command['id']
             if self.store.get('experiments', key):
                 return
+            if any(e['status'] not in FINAL or not e.get('remote_cleaned')
+                   for e in self.store.all('experiments')):
+                raise ValueError('Finish or finalize the existing experiment and wait for storage cleanup before creating another')
             experiment = dict(id=key, name=body['name'], config=body['config'], machines=body['machines'],
                 created=time.time(), status='queued', preparations={}, calibration=None, generation=0,
                 calibration_machine=body.get('calibration_machine', body['machines'][0]),
@@ -308,6 +312,8 @@ class Controller:
                         preparation['collection_status'] = 'pending'
                         preparation.pop('collection_error', None)
             elif kind == 'retry_prepare':
+                if experiment['status'] not in ACTIVE:
+                    raise ValueError('Resume the experiment before retrying preparation')
                 machine = self.machine(body['machine'])
                 preparation = experiment['preparations'].get(machine['id'])
                 if not preparation or preparation['status'] not in ('failed', 'stopped'):
@@ -318,8 +324,11 @@ class Controller:
                 self.submit('reset-' + machine['id'], 'reset', (experiment['id'], machine['id']),
                     lambda: self.remote.call(machine, 'reset_prepare', experiment=experiment['id']))
             elif kind == 'accept_partial':
-                if experiment['status'] != 'needs_attention' or any(c['status'] in BUSY for c in experiment['cases']):
+                if experiment['status'] not in {'needs_attention', 'stopped'} or any(c['status'] in BUSY for c in experiment['cases']):
                     raise ValueError('Wait for active cases to finish before accepting partial results')
+                if any(p['status'] in {'preparing', 'running', 'accepted', 'copying_sdk', 'resetting'}
+                       for p in experiment['preparations'].values()):
+                    raise ValueError('Stop preparation before finalizing the experiment')
                 experiment.update(status='partial', finished=time.time())
                 notification_event(self.store, f"{experiment['name']}: partial results accepted",
                     title="Partial results accepted", experiment=experiment)
@@ -408,6 +417,8 @@ class Controller:
                 self.last_poll[machine['id']] = time.time()
                 self.submit('poll-' + machine['id'], 'poll', machine['id'], lambda m=machine: self.remote.call(m, 'snapshot'))
         experiments = self.store.all('experiments')
+        for experiment in experiments:
+            self.reclaim(experiment)
         active = next((e for e in experiments if e['status'] in ACTIVE), None)
         if not active:
             active = next((e for e in experiments if e['status'] == 'queued'), None)
@@ -418,8 +429,67 @@ class Controller:
         if active:
             self.schedule(active)
 
+    def reclaim(self, experiment):
+        """Retry acknowledged-copy cleanup after disconnects and controller restarts."""
+        experiment_id = experiment['id']
+        for case in experiment['cases']:
+            for attempt in case['attempts']:
+                if attempt.get('collected') and not attempt.get('remote_released') and not experiment.get('remote_cleaned'):
+                    machine = self.machine(attempt['machine'])
+                    if machine.get('online'):
+                        self.submit('release-attempt-' + attempt['id'], 'release_attempt',
+                            (experiment_id, case['id'], attempt['id']),
+                            lambda m=machine, a=attempt['id']: self.remote.call(m, 'release_attempt',
+                                experiment=experiment_id, attempt=a))
+        if experiment['status'] not in FINAL or experiment.get('remote_cleaned'):
+            return
+        attempts = [a for c in experiment['cases'] for a in c['attempts']]
+        preparations = experiment['preparations']
+        if not experiment.get('results_deleted') and (
+                any(not a.get('collected') for a in attempts) or
+                any(not p.get('collected') for p in preparations.values())):
+            return
+        # Transfers, result downloads and accepted RPCs must settle before release.
+        involved = set(preparations) | {a['machine'] for a in attempts}
+        if any(kind not in {'poll', 'release', 'release_attempt', 'deploy'} and
+               ((isinstance(context, tuple) and context[0] == experiment_id) or
+                (kind == 'start' and any(context == a['id'] for a in attempts)))
+               for kind, context, _ in self.jobs.values()):
+            return
+        if not involved:
+            experiment['remote_cleaned'] = True
+            self.save(experiment)
+        for machine_id in involved - set(experiment.get('released_machines', [])):
+            machine = self.machine(machine_id)
+            if machine.get('online'):
+                self.submit('release-' + experiment_id + '-' + machine_id, 'release',
+                    (experiment_id, machine_id), lambda m=machine: self.remote.call(m, 'release',
+                        experiment=experiment_id, keep_paths=[m.get('disk'), m.get('kernel')]))
+
     def finished(self, kind, context, result):
-        if kind == 'clean_assets':
+        if kind == 'release_attempt':
+            experiment = self.experiment(context[0])
+            case = next(c for c in experiment['cases'] if c['id'] == context[1])
+            attempt = next(a for a in case['attempts'] if a['id'] == context[2])
+            attempt['remote_released'] = True
+            self.save(experiment)
+        elif kind == 'release':
+            experiment = self.experiment(context[0])
+            released = experiment.setdefault('released_machines', [])
+            if context[1] not in released:
+                released.append(context[1])
+            experiment.get('cleanup_errors', {}).pop(context[1], None)
+            involved = set(experiment['preparations']) | {
+                a['machine'] for c in experiment['cases'] for a in c['attempts']}
+            if involved.issubset(released):
+                experiment['remote_cleaned'] = True
+                for category in ('collections', 'assets'):
+                    shutil.rmtree(self.data / category / experiment['id'], ignore_errors=True)
+                event(self.store, f"{experiment['name']}: working files released; collected results retained")
+                if not experiment.get('results_deleted'):
+                    atomic_json(self.data / 'results' / experiment['id'] / 'run.json', experiment)
+            self.save(experiment)
+        elif kind == 'clean_assets':
             machine = self.machine(context)
             machine.update(cleaning=False, cleanup_result=result, cleanup_error=None)
             self.store.put('machines', context, machine)
@@ -499,6 +569,10 @@ class Controller:
         # start/prepare/stop are reconciled from the next authoritative snapshot.
 
     def failed(self, kind, context, error):
+        if kind == 'release':
+            experiment = self.experiment(context[0])
+            experiment.setdefault('cleanup_errors', {})[context[1]] = error
+            self.save(experiment)
         if kind == 'stop_case':
             experiment = self.experiment(context[0])
             case = next(c for c in experiment['cases'] if c['id'] == context[1])
@@ -559,7 +633,8 @@ class Controller:
 
     def ingest(self, machine, snapshot):
         for experiment in self.store.all('experiments'):
-            if machine['id'] not in experiment['machines'] or experiment.get('results_deleted'):
+            if (machine['id'] not in experiment['machines'] or experiment.get('results_deleted')
+                    or machine['id'] in experiment.get('released_machines', [])):
                 continue
             for task in snapshot['tasks']:
                 if task['experiment'] != experiment['id']:
@@ -696,7 +771,6 @@ class Controller:
                 raise ValueError('Calibration SDK identity is missing; prepare the calibration machine again')
             image = self.remote.image_id(source, 'chimaera:sdk-' + key[:16])
         # Track imports before streaming so interrupted transfers can be cleaned too.
-        self.remote.call(destination, 'remember_image', image=image)
         key = (experiment['id'], destination['id'], experiment.get('generation', 0))
         def progress(kind, index, count):
             def update(value):
@@ -705,17 +779,24 @@ class Controller:
                                                        image_count=count, source=source['name'])
             return update
         application = provenance.get('application_image_id')
-        count = 2 if application else 1
-        sdk_id = self.remote.copy_image(source, destination, image, cancel=cancelled,
-                                       progress=progress('SDK', 1, count))
-        images = dict(sdk_image_id=sdk_id)
-        self.remote.call(destination, 'remember_image', image=sdk_id)
+        count = 2 if provenance.get('readiness_checkpoint') else 1
+        # The application already contains every SDK layer. Consumers need no
+        # standalone SDK image or second export of those same filesystem layers.
+        images = dict(sdk_image_id=image)
         if application:
             self.remote.call(destination, 'remember_image', image=application)
             images['application_image_id'] = self.remote.copy_image(
                 source, destination, application, cancel=cancelled,
-                progress=progress('Application', 2, count))
-            self.remote.call(destination, 'remember_image', image=images['application_image_id'])
+                progress=progress('Application', 1, count))
+            self.remote.call(destination, 'remember_image', image=images['application_image_id'], current=True)
+        else:
+            images['sdk_image_id'] = self.remote.copy_image(source, destination, image, cancel=cancelled,
+                                                          progress=progress('SDK', 1, count))
+        if provenance.get('readiness_checkpoint'):
+            progress('Readiness assets', 2, count)(dict(phase='Streaming sparse disk and checkpoints',
+                bytes_sent=0, bytes_per_second=0, elapsed_seconds=0, eta_seconds=None, updated=time.time()))
+            self.remote.copy_readiness(source, destination, experiment['id'],
+                                      provenance['checkpoint_index_sha256'], cancel=cancelled)
         return images
 
     def schedule(self, experiment):

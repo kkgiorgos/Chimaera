@@ -3,7 +3,9 @@
 A self-hosted Next.js dashboard and persistent scheduler for the current
 ball-catching memory-contention benchmark. One experiment runs at a time; cases
 are dispatched from a shared queue to available worker slots on selected machines.
-Queued experiments wait behind unresolved failures.
+Only one unfinished experiment can exist, including stopped runs. Finalized runs
+retain collected results; their working files are released automatically before
+another experiment can start.
 
 ## Deploy on the webserver
 
@@ -84,18 +86,30 @@ Supply an existing guest disk/kernel under **Build and guest assets** if desired
 Leave these fields empty to prepare them automatically. Choose the
 **Image preparation & calibration machine** when creating an experiment; it must
 be one of the selected machines.
-That machine produces the frozen calibration reference, SDK image, and application
-image. The producer streams both exact images directly to the other workers over
-authenticated SSH. The controller coordinates transfers and receives progress;
-image bytes never pass through the webserver. Configure the destination SSH targets
-(including aliases, ports, identities, and any jump hosts) to work from the producer
-host as well as the controller. Producer credentials and SSH configuration belong
-to its host SSH user; the controller does not copy credentials or forward an agent.
-The preparation machine uses its configured assets or constructs a guest disk
-and downloads the pinned kernel. Its final application image includes the exact
-backing disk, kernel, guest bundle and readiness checkpoints. Consumers import
-these assets from that image; independently generated disks cannot restore the
-producer's checkpoint. Consumer disk/kernel overrides are therefore unused.
+That machine maintains three replaceable image slots: `chimaera:orchestrator-sdk`
+(simulator and bridge), `chimaera:orchestrator-base` (installed application
+dependencies), and `chimaera:orchestrator-app` (the installed ROS application).
+The slots share Docker layers. Application packages compile in a disposable
+container built from the installed base; only its installed overlay is committed
+to the application image, with build trees and source mounts excluded. This
+avoids a second BuildKit cache of application revisions. Application source
+changes replace only the application; dependency/simulator changes rebuild the affected base. Build sources
+and intermediate compilation files stay out of the final images.
+
+Only the application image is streamed to consumers; it already includes the SDK
+and dependency layers. Images remain pinned by immutable IDs during a run. The
+producer separately streams the exact backing disk, kernel, bundle and readiness
+checkpoints as a compressed sparse tar stream. No disk is added to an image, no
+transfer archive is written to disk, and producer export links reference the
+original files without copying them. Consumers extract directly into an incoming
+directory, verify every asset/checkpoint hash, and publish it atomically. Consumer
+disk/kernel overrides are unused. The controller receives only progress and
+results; producer credentials and SSH configuration remain on its host.
+
+The producer builds its reusable guest from the dependency base, so changing only
+ROS application code does not construct another full guest disk. The guest bundle
+injects that experiment's application at boot. Consumers retain one sparse disk
+copy for the active experiment and mount it read-only across their case workers.
 
 Docker image stores can assign different image IDs after a save/load transfer.
 When IDs differ, transfer verification compares the producer and destination's
@@ -160,30 +174,28 @@ machine, then **Validate** to preview the expanded cases. The server uses the be
 provides JSON schema diagnostics. `ramulator_config` is relative to the repository
 root and must resolve to a file inside that repository.
 
-**Queue experiment** freezes the configuration and source identity. When its turn
+**Start experiment** freezes the configuration and source identity. When its turn
 arrives, preparation runs automatically:
 
-1. On the chosen calibration machine, validate the queued source identity and build
-   or reuse its source-keyed SDK and application images.
-2. Prepare its guest assets, run memory-only calibration and fractional-rate
-   checks, and freeze the guest bundle. Boot Linux once per compatible readiness
-   configuration with KVM, switch to the selected detailed CPU at workbegin, and
-   reach arm/fresh-camera readiness with the aggressor disabled. Save the guest
-   at a completed bridge exchange and record the host readiness prefix. No ball
-   is thrown during preparation. The default matrix produces one checkpoint.
-3. Package the checkpoints and exact backing disk/kernel/bundle into the application
-   image. Record both immutable Docker image IDs with the calibration. Stream those images
-   with `docker image save`, gzip and `docker image load` over a direct SSH
-   connection from the producer to each remaining worker. Skip each transfer when that exact image already
-   exists there. Archives carry a dedicated `chimaera:transfer-<image-id>` tag so
-   loaded images retain a named reference. Imported images do not replace
-   source-keyed local SDK tags.
-4. Verify the image ID after loading. Consumers validate their source keys, use
-   the copied application image, import the producer's frozen assets, and validate
-   calibration, checkpoint integrity, simulator, kernel, disk and bundle hashes.
-   Consumers run no robot readiness simulation and receive no KVM device.
-5. Dispatch cases dynamically as workers become ready. The calibration machine can
-   run cases while SDK copies and other workers' preparation continue.
+1. Validate the frozen source identity and build or reuse the current SDK,
+   dependency base and application. A dedicated Buildx builder named
+   `chimaera-orchestrator` uses a 2 GB retention target for reclaimable cache;
+   no other builder or daemon-wide cache is pruned.
+2. Reuse or construct the producer's base guest and pinned kernel. Calibrate,
+   freeze the application bundle and create readiness checkpoints once per
+   compatible configuration, with KVM only on this machine.
+3. Stream the application image and separate sparse readiness assets directly to
+   each consumer over SSH. Consumers do not build a second SDK, disk or checkpoint.
+4. Verify image content and all asset hashes, validate shared calibration, and
+   freeze each machine's runner with read-only disk and checkpoint mounts.
+5. Dispatch cases to ready workers. Once an attempt is verified and committed on
+   the controller, remove its remote output. Failed downloads preserve their
+   worker copy until **Retry collection** succeeds.
+6. After completion, or **Finalize results** on a stopped/failed run, collect all
+   remaining attempts and preparation diagnostics, remove experiment files and
+   obsolete image/disk versions on every selected worker, and retain central
+   results/configuration/provenance. Cleanup retries after disconnects/restarts;
+   a new experiment waits for acknowledgement from every involved machine.
 
 Every case restores the same compatible, aggressor-free detailed guest state.
 While gem5 stays paused, its host replays the recorded readiness commands at native
@@ -209,10 +221,11 @@ Missing or incompatible checkpoints fail preparation/execution; there is no KVM
 fallback. Use a new experiment after updating the simulator/bridge for this protocol.
 
 The dashboard shows **Copying prepared images** during transfer, with the current
-SDK/application image, compressed bytes sent, average transfer rate, elapsed time,
+application image, compressed bytes sent, average transfer rate, elapsed time,
 and an estimated ETA for the current image based on its uncompressed Docker size
 and measured export/network throughput. The ETA excludes loading and verification;
 those stages display their status instead. ETA appears after throughput is sampled.
+Readiness transfer has a separate sparse-asset stage without an estimated percentage.
 The report also shows the cache-check, streaming, loading, or verification stage. Byte counts measure
 data forwarded by the producer to the destination SSH connection; loading can continue after all
 bytes have been sent. A percentage is not shown because the compressed archive
@@ -272,24 +285,18 @@ watchdog and a 30 ms detailed-time budget. Other phases have five-minute
 watchdogs; optional full-disk image packaging has ten minutes. Logs and
 `smoke-result.json` remain in the output directory. Containers
 are disposable; test images and imported assets remain available for inspection.
-Omit `--skip-packaging` to also test checkpoint image packaging/import and changed
-index rejection, with an initial restore before image export and two restores
-from the imported disk and packaged checkpoints.
-The backing disk and checkout are mounted read-only. Packaging uses a compressed
-sparse archive and one image layer to avoid duplicating the full disk in Docker.
-Import streams the image contents and recreates zero regions as sparse file
-holes, retaining the exact backing-disk hash without allocating its empty space.
+Omit `--skip-packaging` to also exercise sparse readiness export/import and
+changed-index rejection. Both restore paths mount checkpoints outside the image;
+the original backing disk remains unchanged.
 
-SDK image cache keys depend on the content of simulator, transport, bridge, stack
-profile and build inputs. Application image keys additionally depend on the robot
-application sources and the exact SDK image ID. Host editor caches (`.cache`, `.vscode`), simulation output
-(`m5out`, `m5_outputs`), and generated parser tables are excluded from both cache
-keys and Docker build contexts. Repository commits, dashboard changes, experiment parameters,
-worker sizes and build parallelism do not invalidate the SDK image. If its image
-is already present, preparation skips gem5 compilation entirely. A missing image
-uses Docker layers and the existing SCons build cache; a simulator or dependency
-change can require recompilation. Generated guest disks are also cached locally
-by image identity and guest-construction recipe.
+Build reuse checks both source keys and the actual image ID in each stable slot.
+Host editor caches, generated parser tables and simulation outputs are excluded
+from keys. A new Git commit, dashboard change, experiment setting or worker size
+does not by itself rebuild the simulator. Replacing an application always starts
+from the dependency base, so image layers do not accumulate successive overlays.
+Old versions become eligible for scoped cleanup when no unfinished experiment or
+container references them. One current producer guest/kernel and the current
+image slots remain reusable; no version history is retained in these caches.
 
 Calibration measures the **simulated** memory system's sustainable bandwidth for
 each pattern. A 50% pressure case requests half that pattern's calibrated rate;
@@ -299,8 +306,8 @@ date via `SOURCE_DATE_EPOCH`; genuinely different binaries/dependencies still fa
 closed and expose the preparation error. The fixed date does not pin packages
 installed from live APT repositories: separately built SDKs can have different
 dependencies and simulator binaries even when their source keys match. To reuse a
-calibration reliably, the orchestrator copies the calibration SDK and application
-image automatically using immutable identities. A missing copied
+calibration reliably, the orchestrator copies the producer application
+image, including its SDK layers, automatically using immutable identities. A missing copied
 image fails preparation instead of triggering an independent build. No worker
 silently recalibrates.
 
@@ -316,7 +323,7 @@ If you intentionally change simulator inputs, start a new experiment and produce
 new calibration using the build that all workers will use. Keep the existing
 calibration records intact; editing their hashes would hide incompatible builds.
 
-The generated guest uses the application image's Ubuntu/ROS filesystem, a generic
+The generated guest uses the dependency base's Ubuntu/ROS filesystem, a generic
 root init/readfile boot path, a partition-2 ext4 root, and this repository's m5 tool.
 It is deliberately larger than a minimal runtime-only image and uses sparse disk
 storage. The kernel is a pinned prebuilt resource, not a new Linux source build.
@@ -354,7 +361,7 @@ failure does not trigger an automatic benchmark restart.
 
 A failed case notifies Discord while other cases continue. Catch and miss both
 count as successful benchmark results. At the end, failures hold the experiment
-queue until you **Retry failed cases** or **Accept partial results**. Preparation
+queue until you **Retry failed cases** or **Finalize results**. Preparation
 failures have separate log and manual retry controls.
 
 Case downloads exclude the shared `suite/calibration` link, whose target exists
@@ -417,75 +424,40 @@ in result transfers or the result archive.
 **Open comparison report** combines the workers' already embedded robot models and
 trials into an offline HTML report; the webserver does not require ROS.
 
-**Clean remote copies** removes this experiment's remote inputs, attempt files,
-and stopped containers. The confirmation explicitly allows discarding uncollected
-remote output when a download failed. Shared image/guest caches stay available
-for later experiments.
-**Delete experiment** cancels collection and removes webserver result files,
-retaining history marked deleted. Active workers must be stopped first; collection
-completion is not required. Remote copies can be cleaned before or after deletion.
-A cleaned/deleted run must be cloned for a new execution rather than resumed.
+Completed experiments keep only central results and small history records.
+Stopped and failed experiments keep their shared inputs for recovery until
+**Finalize results** is selected. Finalization is irreversible: the configuration
+can be cloned for another run, but the finalized checkpoint is not retained.
+Uncollected output blocks release rather than silently losing results. The
+explicit **Clean remote copies** action can discard uncollected output when that
+is intentional. **Delete experiment** deletes central results, retains a deleted
+history entry and automatically releases remote working files after outstanding
+operations settle.
 
 ## Reclaim unused machine assets
 
-Choose **Clean unused assets** on a machine card when that machine has no active
-experiment. It removes unused orchestrator SDK/application Docker images (including
-imported images recorded by new preparations), generated guest disks, and their
-cache metadata. The card reports removed image/disk counts and allocated guest
-disk space reclaimed; Docker layer savings depend on shared layers.
-
-Saved remote experiments, including stopped and failed preparations, retain their
-image and disk dependencies so retries and resume continue to work. Docker
-container dependencies and explicitly configured disk/kernel paths are preserved.
-To release old experiment dependencies, collect results and use **Clean remote
-copies** first, then **Clean unused assets**. Results on the controller stay intact.
-Cleanup fails if saved dependency manifests cannot be read safely.
-
-Cleanup is limited to orchestrator caches. It retains the small pinned kernel,
-Docker build caches, unrelated Docker images, and external guest files. It does not
-run a global Docker prune. Images/disks removed from the cache are recreated or
-copied on demand by a later experiment.
+Automatic preparation/finalization cleanup removes obsolete managed image and
+generated disk versions. The current reusable image slots, one producer guest,
+pinned kernel, unfinished experiment dependencies, containers and explicitly
+configured external assets are protected. **Clean unused assets** remains useful
+for legacy caches. Cleanup never runs a global Docker image/volume prune; only
+the dedicated orchestrator builder's cache has the 2 GB retention target.
 
 ## Updating an existing deployment
 
-Update the checkout on the webserver and workers, then run this from
-`orchestrator/` on the webserver:
+Finish or stop existing experiments before adopting this storage layout. Update
+all worker and webserver checkouts, rebuild the controller/dashboard with
+`docker compose --env-file .env up -d --build` from this directory, and redeploy
+supervisors. The first new preparation builds the new image stages; existing
+checkpoint images are not compatible with the separate-asset transfer protocol.
 
-```bash
-docker compose --env-file .env up -d --build
-```
-
-Use **Redeploy supervisor** on each machine so it also receives the recovery and
-local-build changes. Running sibling worker containers keep their frozen inputs.
-Do not delete the controller volume or remote `.chimaera-orchestrator` directories
-as an upgrade step.
-
-Old failed cases stuck in `collecting` are recovered to a failed execution state
-when the controller starts. Use **Retry collection** for download failures, or
-**Delete experiment** to cancel collection and abandon the run. If workers are
-still active, choose **Stop** first. **Clean remote copies** remains available
-after deletion and can explicitly discard uncollected output. New experiments
-use the local image/guest cache policy; legacy generated guest caches are left
-untouched, while new guests use recipe-specific cache names.
-
-For automatic SDK sharing and calibration-machine selection, update all checkouts,
-rebuild the webserver stack, and redeploy supervisors before queueing a new
-experiment. Choose the intended producer in **Image preparation & calibration machine**. Existing
-frozen experiments retain their original source identities and build keys; queue a
-new experiment when adopting the generated-file exclusions, rather than editing
-saved hashes. New experiments share both Docker images; older frozen calibrations without an
-application image ID keep their original local application build behavior.
-SDKs and application images remain cached; the application cache now
-includes the SDK image identity so an application built against a different SDK
-is rebuilt.
-
-For the guest-init symlink fix, stop the affected experiment, update all checkouts,
-rebuild the webserver stack and redeploy supervisors, then queue a new experiment.
-Preparation automatically builds a fresh guest disk under the changed recipe key;
-the SDK/application images remain cached. Existing prepared experiments still
-reference their original disk, so retrying only their failed cases reuses that
-disk. If a machine has an explicitly configured guest disk path, clear it to use
-the corrected generated guest, or supply a separately corrected disk.
+Finalize old stopped/failed runs after collecting their results. Old completed
+runs are released automatically after every recorded result is collected. If
+there are several old queued runs, stop and finalize unwanted ones before
+starting a new experiment. Legacy caches referenced by unfinished runs remain
+protected. Do not delete the controller volume or edit saved provenance hashes.
+Manual checkpoint smoke directories and unrelated Docker images remain outside
+automatic cleanup.
 
 ## Development and checks
 
@@ -551,7 +523,7 @@ dependencies, configured guest disks and kernels, and container dependencies are
 protected. Removal checks dependencies again and refuses stale or protected
 selections. Stop experiments on that machine before removing caches.
 
-To release assets retained by an old experiment, first use **Remove remote
+To explicitly discard files retained by an old experiment, use **Remove remote
 copies** for that experiment on the selected machine. This discards remote inputs,
 checkpoints, logs and uncollected output while retaining collected dashboard
 results. Refresh usage afterwards, then remove caches that are now unused.
@@ -563,3 +535,12 @@ to enable the new storage inspection RPC. Storage inspection itself is read-only
 it does not prune Docker or remove files. Files outside managed experiments and
 caches (for example manual checkpoint smoke-test directories) remain outside the
 removal controls.
+
+The application image builder also has an opt-in Docker smoke check using tiny
+synthetic ROS tools, with no gem5/Gazebo simulation. It checks replacement from
+the same base, runtime entrypoint/environment, and exclusion of source mounts,
+then removes its test containers and images:
+
+```bash
+python3 orchestrator/tests/docker_images.py
+```

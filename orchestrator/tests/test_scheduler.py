@@ -645,8 +645,8 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
     value['calibration']['provenance']['application_image_id'] = app_id
     original = dict(value['calibration']['provenance'])
     local = {
-        'm1': dict(sdk_image_id='sha256:' + 'c' * 64, application_image_id='sha256:' + 'd' * 64),
-        'm2': dict(sdk_image_id='sha256:' + 'e' * 64, application_image_id='sha256:' + 'f' * 64),
+        'm1': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'd' * 64),
+        'm2': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'f' * 64),
     }
     transfers = []
 
@@ -662,7 +662,7 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
     finish_jobs(controller)
     saved = controller.experiment('e1')
     assert saved['calibration']['provenance'] == original
-    assert set(transfers) == {('m0', machine, image) for machine in local for image in (SDK_ID, app_id)}
+    assert set(transfers) == {('m0', machine, app_id) for machine in local}
     for machine, images in local.items():
         assert all(saved['preparations'][machine][key] == image for key, image in images.items())
     controller.schedule(saved)
@@ -671,7 +671,7 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
         request = next(c[2] for c in controller.remote.calls if c[:2] == (machine, 'prepare'))
         assert request['calibration']['provenance'] == dict(original, **images)
         remembered = [c[2]['image'] for c in controller.remote.calls if c[:2] == (machine, 'remember_image')]
-        assert set(images.values()) <= set(remembered)
+        assert images['application_image_id'] in remembered
     assert controller.experiment('e1')['calibration']['provenance'] == original
 
 
@@ -698,6 +698,9 @@ def test_queue_persists_calibration_choice_and_rejects_unselected_machine(contro
     body['calibration_machine'] = 'm1'
     with pytest.raises(ValueError, match='Calibration machine'):
         controller.command('experiment', body)
+    previous = controller.experiment(key)
+    previous.update(status='completed', remote_cleaned=True)
+    controller.save(previous)
     body.pop('calibration_machine')
     key = controller.command('experiment', body)
     controller.apply(controller.store.get('commands', key))
@@ -734,7 +737,7 @@ def test_selected_machine_supplies_both_images_before_consumer_prepares(controll
         assert 'Application transfer interrupted' in preparation['error']
     else:
         copies = [c for c in controller.remote.calls if c[1] == 'copy_image']
-        assert [c[2]['image'] for c in copies] == [SDK_ID, app_id]
+        assert [c[2]['image'] for c in copies] == [app_id]
         controller.schedule(controller.experiment('e1'))
         finish_jobs(controller)
         assert any(c[0] == 'm1' and c[1] == 'prepare' for c in controller.remote.calls)
