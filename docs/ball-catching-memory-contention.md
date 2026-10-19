@@ -535,16 +535,44 @@ same detailed-simulation origin as image freshness, with
 `*_simulation_seconds` fields and `timing_clock: "gem5 simulation"`. This
 clock advances during computation even if a ROS `/clock` callback is delayed.
 The host persists envelopes in `guest_records.jsonl`; after shutdown the runner
-checks per-stream sequence continuity and writes `perception.jsonl`,
-`interception.jsonl`, `control_timing.jsonl` and `control.jsonl`. Missing
-perception/control telemetry or a sequence gap is an infrastructure error.
+checks per-stream sequences and writes `perception.jsonl`, `interception.jsonl`,
+`control_timing.jsonl` and `control.jsonl`. Forward sequence gaps preserve the
+received records and mark the timing export as partial. `guest_telemetry.json`
+lists missing sequence ranges per stream and their total record count, including
+gaps during preparation before launch. Scoring and DRAM measurements remain
+available for completed trials. Invalid clocks, duplicate/backward sequences,
+malformed records, and missing perception/control streams remain infrastructure
+errors.
 The report also matches exported controller timings against independently
-received effort-command timestamps, so an undelivered contiguous tail is shown
-as a partial timing export.
+received task effort-command timestamps, so an undelivered contiguous tail is
+shown as a partial timing export. Its command coverage and sequence-gap counts
+describe different checks and may refer to the same missing record; do not add
+them together. Processing statistics describe the received subset when the
+export is partial.
 No guest file logging or serial-console transfer is enabled. Clock reads,
 JSON serialization and DDS export add fixed instrumentation overhead to every
 case; export follows the measured computation but affects later work and DRAM
 traffic. A controller update is measured once, before either timing export.
+
+For an existing trial rejected specifically by the former sequence-gap check,
+copy or extract its collected worker attempt and reprocess its `suite/` directory
+in the original application image, or a sourced installation with its robot
+meshes available:
+
+```bash
+python3 ros/ball_catching_ws/scripts/run_memory_suite.py \
+  --collect-only --output /path/to/attempt/suite --case case-007
+```
+
+This command reads the saved result, raw telemetry and final gem5/Ramulator
+statistics and rebuilds the timing files, `benchmark.json` and offline dashboard.
+It requires a recorded sequence-gap failure and validates the ball launch.
+It preserves the raw files and simulation provenance, saves the original manifest
+as `experiment_manifest.before-collection.json`, and records the recovery reason
+and postprocessor hashes in the updated point. Simulation wall duration is
+unavailable for recovered trials. It does not launch simulators or change the
+orchestrator's saved execution status. Running experiments retain their frozen
+collector; newly prepared experiments include the updated collector.
 
 Dashboard comparison rows include mean/P95/P99 computation in milliseconds,
 image age, host wall duration and delivered control cadence. Detailed timing

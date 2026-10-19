@@ -56,7 +56,7 @@
         finite(benchmark?.wall_seconds) ?
           `${benchmark.wall_seconds_lower_bound ? '≥ ' : ''}${format(benchmark.wall_seconds / 60)} min` : '—',
         trial?.summary?.timing_coverage?.status === 'partial' ?
-          `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
+          `Partial · ${trial.summary.timing_coverage.sequence_gaps || 0} missing telemetry records · ${trial.summary.timing_coverage.missing_control_timings ?? 'unknown'} missing task control timings` :
           trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked'];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;

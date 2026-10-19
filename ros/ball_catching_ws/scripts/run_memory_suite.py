@@ -562,6 +562,18 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
         if (directory / 'launch.json').exists():
             raise RuntimeError('Readiness preparation launched the ball')
         return
+    collect_trial(directory, data, point, calibration, time.monotonic() - started)
+
+
+def collect_trial(directory, data, point, calibration, wall_seconds=None):
+    """Derive measurements from recorded files, independently of simulation."""
+    failure = launch_failure(directory / 'launch_validation.json')
+    if failure:
+        raise ValueError(failure)
+    execution = json.loads((directory / 'execution.json').read_text())
+    checkpoint_restore = execution.get('checkpoint_restore')
+    fixed = execution['fixed']
+    roi = directory / 'gem5'
     result = json.loads((directory / 'result.json').read_text())
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
@@ -572,12 +584,12 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
         measurement_start = json.loads((roi / 'measurement_start.json').read_text())['tick']
         pressure_warmup = (measurement_start - pressure_start) / 1e12
     write_json(directory / 'benchmark.json', dict(mode='gem5', point=point,
-        memory=metrics, hardware=data['hardware'], aggressor=aggressor,
+        memory=metrics, hardware=execution['hardware'], aggressor=execution['aggressor'],
         ramulator_sha256=data['ramulator_sha256'],
-        memory_profile=dict(standard=json.loads(frozen_memory.read_text())['memory_system']['controllers'][0]['dram']['impl'],
+        memory_profile=dict(standard=json.loads((directory / 'ramulator.json').read_text())['memory_system']['controllers'][0]['dram']['impl'],
                             peak_gbps=data['peak_gbps']),
         calibrated_sustainable_gbps=calibration[point['pattern']]['sustainable_gbps'] if point['pressure'] else None,
-        peak_gbps=data['peak_gbps'], wall_seconds=time.monotonic() - started,
+        peak_gbps=data['peak_gbps'], wall_seconds=wall_seconds,
         telemetry=telemetry,
         checkpoint=str(checkpoint_restore) if checkpoint_restore else None,
         pressure_warmup_seconds=pressure_warmup,
@@ -585,6 +597,53 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
         measurement_window='launch boundary to final evaluation; boundary quantization applies',
         commands=command_metrics(directory / 'commands.csv', result['launch_time'], result['result_time'],
                                  point['rates']['control_hz'])))
+    if telemetry['status'] == 'partial':
+        coverage = telemetry.get('coverage', {})
+        print(f'Partial timing export: {telemetry["sequence_gaps"]} missing telemetry records; '
+              f'{coverage.get("missing_control_timings", "unknown")} missing task control timings',
+              file=sys.stderr)
+
+
+def collect_suite(output, cases):
+    """Recover trials rejected by the former sequence-gap check from saved data."""
+    output = output.resolve()
+    manifest_path = output / 'experiment_manifest.json'
+    original = manifest_path.read_text()
+    manifest = json.loads(original)
+    if manifest['mode'] != 'gem5':
+        raise ValueError('Collection recovery requires a gem5 suite')
+    unknown = set(cases) - {p['id'] for p in manifest['points']}
+    if unknown:
+        raise ValueError('Unknown cases: ' + ', '.join(sorted(unknown)))
+    selected = [p for p in manifest['points'] if p['id'] in cases]
+    for point in selected:
+        if (point['status'] != 'infrastructure_failure'
+                or not point.get('reason', '').startswith('Guest telemetry sequence gap in ')):
+            raise ValueError('Only sequence-gap failures can be recovered: ' + point['id'])
+    for point in selected:
+        attempts = sorted(output.glob(point['id'] + '-attempt-*'))
+        if not attempts:
+            raise ValueError('No recorded attempt for ' + point['id'])
+        directory = attempts[-1]
+        collect_trial(directory, manifest['configuration'], point, manifest.get('calibration', {}))
+        point['collection_recovery'] = dict(
+            original_status=point['status'], original_reason=point['reason'],
+            recovered_at=time.time(),
+            postprocessor_sha256={name: digest(SCRIPTS / name) for name in
+                                  ('run_memory_suite.py', 'guest_records.py', 'benchmark_metrics.py')},
+            scope='Reprocessed saved files; simulation provenance and raw records are unchanged. '
+                  'Original simulation wall duration was not recorded.')
+        point.update(status='complete', trials=[directory.name],
+                     config=json.loads((directory / 'experiment.json').read_text()))
+        point.pop('reason')
+    from report import create_dashboard
+    completed = [output / trial for point in manifest['points'] for trial in point['trials']]
+    create_dashboard(completed, output / 'dashboard.html', manifest['points'])
+    backup = output / 'experiment_manifest.before-collection.json'
+    if not backup.exists():
+        backup.write_text(original)
+    write_json(manifest_path, manifest)
+    return 0
 
 
 def main():
@@ -612,7 +671,17 @@ def main():
                         help='Stage the producer\'s exact guest bundle with --prepare-only')
     parser.add_argument('--source-revision', help='Source revision for a frozen export without a Git checkout')
     parser.add_argument('--resume', action='store_true')
+    parser.add_argument('--collect-only', action='store_true',
+                        help='Recover selected sequence-gap failures from saved data without simulation')
     args = parser.parse_args()
+    if args.collect_only:
+        if not args.output or not args.case:
+            parser.error('--collect-only requires --output and --case')
+        if (args.dry_run or args.native_preflight or args.calibrate_only or args.prepare_only
+                or args.checkpoint_create or args.checkpoint_from or args.bundle_from
+                or args.calibration_from or args.cpu_type):
+            parser.error('--collect-only cannot be combined with simulation or preparation options')
+        return collect_suite(args.output, args.case)
     if args.prepare_only and (args.native_preflight or args.calibrate_only):
         parser.error('--prepare-only cannot be combined with native execution or calibration')
     if (args.checkpoint_create or args.checkpoint_from) and (
