@@ -13,6 +13,11 @@ services and actions are outside this version. The
 optional synchronized Gazebo Fortress stepping. The universal bridge runs
 exclusively through gem5-transport.
 
+For directional publish-to-callback delay in simulation time, see the
+[synthetic message latency benchmark](../../docs/chimaera-message-latency.md).
+It compares normal native Gazebo, stepped native Gazebo, and Chimaera/KVM with
+configurable body sizes, rates, synchronization intervals and polling.
+
 ## Build and try the example
 
 From the repository root, in a matching build environment:

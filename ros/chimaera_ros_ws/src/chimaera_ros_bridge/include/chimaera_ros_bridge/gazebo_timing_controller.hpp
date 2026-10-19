@@ -83,6 +83,11 @@ public:
     if (!result.ok()) {
       throw std::runtime_error(result.message);
     }
+    // Optional experiment observer: update the logical host clock before
+    // publishing guest messages while Gazebo is still at the previous boundary.
+    if (on_gem5_boundary) {
+      on_gem5_boundary(gem5_.elapsed_ticks());
+    }
     bridge_.exchange(host_);
     // DDS and the host command gateway run asynchronously to the timing barrier.
     // Allow their executors to consume commands while both simulators are paused.
@@ -202,6 +207,7 @@ public:
   double gem5_wall_seconds{}, gazebo_wall_seconds{};
   std::function<void()> pump;
   std::function<bool()> cancelled;
+  std::function<void(uint64_t)> on_gem5_boundary;
 
 private:
   void settle()

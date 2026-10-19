@@ -7,9 +7,9 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
   <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
   <depend>libjson-c-dev</depend><build_depend>pkg-config</build_depend>
   <exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
-  <test_depend>std_msgs</test_depend>
   <test_depend>sensor_msgs</test_depend>
   <test_depend>rosgraph_msgs</test_depend>
   <test_depend>geometry_msgs</test_depend>
