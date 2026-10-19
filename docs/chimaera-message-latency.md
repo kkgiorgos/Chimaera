@@ -26,6 +26,10 @@ robot, rendering, application computation or memory aggressor.
 
 ## Local interactive workbench
 
+For a backend containing ROS, Gazebo and gem5 with persistent results and LAN
+access, use the [Docker workbench](../containers/latency/README.md). The commands
+below describe the host-installed alternative.
+
 Start the separate local app from the repository root. Its HTTP server uses the
 Python standard library and its page has no Node build or CDN dependencies:
 
@@ -37,14 +41,18 @@ PYTHONPATH=ros/chimaera_ros_ws/src/chimaera_ros_bridge \
 
 An installed runtime also exposes `ros2 run chimaera_ros_bridge chimaera_latency
 serve --repo-root "$PWD"`. Optional server arguments are `--port`, `--data-root`
-and `--runtime-prefix`. The server binds only to loopback.
+and `--runtime-prefix`. The server defaults to loopback. For LAN access add
+`--host 192.168.1.2`, substituting the machine's LAN IP, and open
+`http://192.168.1.2:8787` from another device. The workbench controls local
+processes without a login, so bind it only on a trusted network. Host and
+same-origin request checks remain enabled.
 
 Open **Runtime** to inspect prerequisites and asset paths. **Build and stage**
 builds the ROS benchmark and bridges with colcon, using two compiler jobs, then
 creates a boot-time guest bundle. It does not compile gem5, install system
 dependencies or download a disk/kernel. **Stage current runtime** packages the
 selected existing prefix. Rebuild/restage after changing the collectors. Version
-3 bundles support per-case CPU selection and the typed traffic event protocol;
+4 bundles support per-case CPU selection, typed traffic and single-boot sessions;
 older bundles show as unready and require Build and stage.
 
 Use the visual controls to select traffic, timing pairs and named gem5 hardware
@@ -176,7 +184,7 @@ To run the same saved experiment from the CLI after building and staging:
 ros2 run chimaera_ros_bridge chimaera_latency experiment \
   ros/chimaera_ros_ws/src/chimaera_ros_bridge/latency_web/experiments/ball-catching.json \
   --output /tmp/ball-catching-traffic \
-  --guest-bundle /path/to/current-v3-guest.tar.gz
+  --guest-bundle /path/to/current-v4-guest.tar.gz
 ```
 
 Export an edited configuration from the app to use different windows or CPU
@@ -283,9 +291,85 @@ on native operation. CPU profiles also share those native controls. CLI `run`
 accepts one `--cpu-type`; `sweep` accepts several. Both accept `--num-cores`,
 `--cpu-clock`, `--l1d-size`, `--l1i-size`, `--l2-size`, `--l1-assoc` and
 `--l2-assoc`. To sweep different clocks/caches together, use named profiles in
-the workbench. Every case starts fresh processes and, for Chimaera, boots
-the same staged image. Infrastructure failure stops the sweep and preserves the
+the workbench. Every case starts fresh endpoints and Gazebo processes.
+By default, Chimaera cases with the same hardware configuration reuse one
+booted VM. Infrastructure failure stops the sweep and preserves the
 failed case. Regenerate the report to see completed and excluded cases.
+
+### Reusing a boot for the ball-catching traffic sweep
+
+Build and stage a **v4** runtime, then run the existing ball-catching preset.
+The workbench's **Reuse one gem5 boot per hardware configuration** option and
+the JSON field `"single_boot": true` enable the same path; this is the default
+for new sweeps. CLI `sweep --fresh-boots`, or `"single_boot": false` for a saved
+experiment, restores one boot per case. CLI `run` continues to run one case.
+Single-boot sweeps require a v4 guest bundle passed through `--guest-bundle`.
+
+Cases run together by CPU/core/clock/cache configuration, retaining their
+original case IDs. After a case's complete guest export reaches the host, the
+driver requests guest teardown and continues servicing its transport. The
+guest supervisor reaps both the bridge and endpoint before a workend barrier.
+Only after the next host bridge has opened its sockets does START_CASE resume
+the guest and inject the next YAML/session/routes through readfile. The next
+workbegin establishes a new authoritative clock origin; detailed CPUs switch
+only on the first case. Each new controller negotiates its own polling interval.
+The guest bridge also waits for the endpoint's readiness file, confirming DDS
+discovery from both sides before starting the measurement clock. The file is
+cleared before every case, including reused sessions.
+
+Synchronization, polling, payload/rate, QoS and typed traffic settings can change
+between cases within that VM. Each case has new endpoints, a new Gazebo world,
+new event counters, its own warmup/measurement/drain and independent exports.
+CPU models, core counts, clocks and cache geometry remain boot boundaries.
+The guest kernel, filesystem cache and architectural cache state persist, so
+these are repeated measurements in a warm VM. Use fresh boots for comparisons
+that require independent boot state. The reusable bridge checks readfile once
+per exchange for teardown; this control overhead is part of its measured path.
+
+`run.json` records `boot_session` and `boot_reused`; `clock-origin.json` freezes
+each case's origin. Later case directories link their `gem5` directory and
+`gem5.log` to the boot owner, whose simulator log and statistics cover the
+whole session. Event CSVs and summaries remain separate. Stop or an infrastructure
+failure closes the owned VM; resume starts a new VM for unfinished cases.
+The wall timeout includes guest teardown and setup as well as measurement.
+
+### Startup investigation
+
+The documented pre-workbegin latency stalls occur during KVM boot, before
+Timing/O3 is activated. Archived runs using the same x86 boot path contain
+`ata1: lost interrupt (Status 0x50)`, `failed command: READ DMA`, a command age
+of roughly 30 seconds and subsequent `I/O error, dev sda`. For example, inspect
+`ros/ball_catching_ws/results/memory-patterns-docker/jobs/case-008/suite/case-008-attempt-001/gem5/board.pc.com_1.device`
+around line 446. This identifies missed IDE completion interrupts and guest
+disk retries as a startup-stall mechanism, independent of the traffic window
+and selected detailed CPU. Some archived runs recover, so an I/O error alone
+is not treated as a fatal benchmark result. The exact source of the interrupt
+loss has not been reproduced or isolated to a simulator code defect here.
+
+Docker validation also exposed a separate deterministic startup failure: the
+existing SDK/guest image has no `ros2 run` CLI plugin. The guest session now
+launches its staged endpoint executable directly. On an explicit guest failure,
+the timing runner gives the emulated UART a bounded second to transmit the
+error before exiting, preserving messages that previously ended mid-line.
+
+Readfile startup now prints stage and shell-failure markers. Each Chimaera
+attempt retains a bounded `startup.json` with its startup phase and serial
+evidence. A timeout before the host initializes its logical clock reports
+startup separately from a slow measurement; it does not suggest that changing
+synchronization steps fixes a guest boot failure. Boot reuse reduces exposure
+to repeated boots; it does not repair the underlying IDE interrupt behavior.
+
+Verification covers the reusable timing state machine, KVM workend overshoot,
+two-case VM ownership and new polling/traffic injection, cleanup, bundle
+compatibility and disk-error diagnostics. Docker validation on 2026-10-19 passed
+all eleven CTest targets, native running and two native stepping cases, and
+two KVM cases in one boot. The KVM checks used one 3 GHz core, 64×64 RGB at
+20 Hz, 100 Hz joints/control, 50/20 ms synchronization, 1 ms polling and
+0.05/0.2/0.15 s warmup/measurement/drain. Both cases exported source and receipt
+records in all five streams, with distinct clock origins and one boot marker.
+Waiting for the endpoint's readiness file fixed an observed reused-case race
+where the measurement window expired during DDS discovery. These are short
+functional checks; detailed CPU and full-rate performance validation remain separate.
 
 `latency-report.html` summarizes measurements; CSV and JSON retain numerical
 results. JSON also contains differences against both native controls, matched by

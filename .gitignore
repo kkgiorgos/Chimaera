@@ -3,6 +3,8 @@ results/*
 .chimaera-orchestrator/
 .chimaera-latency/
 .chimaera-profile/
+containers/latency/.env
+.chimaera-rewrite/
 orchestrator/.env
 /.ssh/
 orchestrator/web/node_modules/

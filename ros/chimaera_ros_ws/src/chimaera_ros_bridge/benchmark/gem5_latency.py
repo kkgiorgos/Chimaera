@@ -17,13 +17,14 @@ from gem5.resources.resource import DiskImageResource, KernelResource
 from gem5.simulate.simulator import Simulator
 from gem5.utils.requires import requires
 
-from chimaera_gem5 import TimingServer, add_chimaera_arguments, configure_ticks, guest_start_script
+from chimaera_gem5 import TimingServer, ReusableTimingServer, add_chimaera_arguments, configure_ticks, guest_start_script
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--gem5-root', required=True)
 parser.add_argument('--image', required=True)
 parser.add_argument('--kernel', required=True)
 parser.add_argument('--guest-bundle')
+parser.add_argument('--case-script', help='Enable single-boot sessions; host-owned next-case script')
 parser.add_argument('--cpu-type', choices=('kvm', 'timing', 'o3'), default='kvm')
 parser.add_argument('--cpu-clock', default='3GHz')
 parser.add_argument('--num-cores', type=int, default=2)
@@ -50,7 +51,7 @@ board = X86Board(clk_freq=args.cpu_clock, processor=processor,
     cache_hierarchy=MESITwoLevelCacheHierarchy(l1d_size=args.l1d_size, l1d_assoc=args.l1_assoc,
         l1i_size=args.l1i_size, l1i_assoc=args.l1_assoc, l2_size=args.l2_size,
         l2_assoc=args.l2_assoc, num_l2_banks=1))
-preamble = 'rm -f /tmp/chimaera-sim-time-origin.ns\n'
+preamble = 'rm -f /tmp/chimaera-sim-time-origin.ns /tmp/chimaera-latency-endpoint-ready\n'
 if args.guest_bundle:
     encoded = base64.b64encode(Path(args.guest_bundle).read_bytes()).decode('ascii')
     # Extraction runs inside the guest's ephemeral CowDiskImage. No host image
@@ -64,9 +65,14 @@ board.set_kernel_disk_workload(
         preamble=preamble))
 
 
+switched = False
+
+
 def prepare_clock():
-    if args.cpu_type != 'kvm':
+    global switched
+    if args.cpu_type != 'kvm' and not switched:
         processor.switch()
+        switched = True
     origin = m5.curTick() // 1000
     Path(str(board.readfile)).write_text(f'CHIMAERA_TIME_ORIGIN_NS {origin}\n')
     (Path(m5.options.outdir) / 'latency_clock_origin.json').write_text(
@@ -75,6 +81,8 @@ def prepare_clock():
                         active_cpus=[core.get_simobject().type for core in processor.get_cores()])) + '\n')
 
 
-timing = TimingServer(on_ready=prepare_clock)
+timing = (ReusableTimingServer(readfile=str(board.readfile), case_script=args.case_script,
+                              on_ready=prepare_clock) if args.case_script
+          else TimingServer(on_ready=prepare_clock))
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

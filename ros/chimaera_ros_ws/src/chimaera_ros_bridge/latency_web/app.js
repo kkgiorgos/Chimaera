@@ -51,6 +51,7 @@ function renderForm() {
   document.querySelectorAll('[data-value]').forEach(input=>{input.value=config[input.dataset.value];});
   document.querySelectorAll('[data-mode]').forEach(input=>{input.checked=config.modes.includes(input.dataset.mode);});
   $('reliability').value=config.reliability;
+  $('single-boot').checked=config.single_boot!==false;
   $('physics-step').value=config.physics_step_ns/1e6;
   $('workload').value=config.workload||'synthetic';
   document.querySelectorAll('[data-ball]').forEach(input=>input.value=config.ball_catching[input.dataset.ball]);
@@ -408,6 +409,7 @@ $('sweep-name').addEventListener('input',event=>{state.draft.name=event.target.v
 document.querySelectorAll('[data-mode]').forEach(input=>input.addEventListener('change',()=>{state.draft.modes=[...document.querySelectorAll('[data-mode]:checked')].map(v=>v.dataset.mode);schedulePlan();}));
 $('workload').addEventListener('change',()=>{state.draft.workload=$('workload').value;if(state.draft.workload==='synthetic'){state.draft.payload_bytes=[64];state.draft.rate_hz=[100];}renderWorkload();schedulePlan();});
 $('reliability').addEventListener('change',()=>{state.draft.reliability=$('reliability').value;schedulePlan();});
+$('single-boot').addEventListener('change',()=>{state.draft.single_boot=$('single-boot').checked;schedulePlan();});
 $('physics-step').addEventListener('input',()=>{state.draft.physics_step_ns=Number($('physics-step').value)*1e6;schedulePlan();});
 $('form-mode').onclick=()=>editorMode('form');$('json-mode').onclick=()=>editorMode('json');
 $('config-json').addEventListener('input',()=>schedulePlan());

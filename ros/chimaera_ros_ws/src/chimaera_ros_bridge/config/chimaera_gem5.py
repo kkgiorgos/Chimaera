@@ -65,7 +65,9 @@ def guest_start_script(command, files=(), *, preamble=""):
     shell code, run before file injection and the privileged guest command.
     """
     script = """#!/bin/bash
-set -eo pipefail
+set -Eeo pipefail
+trap 'status=$?; echo "CHIMAERA_STARTUP failed status=$status line=$LINENO" >&2; exit "$status"' ERR
+echo 'CHIMAERA_STARTUP readfile' >&2
 chimaera_root() {
     if (( EUID == 0 )); then
         "$@"
@@ -87,7 +89,7 @@ chimaera_root() {
         mode = '755' if source.stat().st_mode & 0o111 else '644'
         script += f"printf %s {encoded} | base64 -d | chimaera_root tee {destination} >/dev/null\n"
         script += f"chimaera_root chmod {mode} {destination}\n"
-    return script + "chimaera_root " + shlex.quote(command) + "\n"
+    return script + "echo 'CHIMAERA_STARTUP launch' >&2\nchimaera_root " + shlex.quote(command) + "\n"
 
 
 def parse_ticks(value, allow_zero=False):
@@ -108,6 +110,7 @@ class TimingServer:
         self.finished = False
         self.exit_requested = False
         self.simulator = None
+        self.case_idle = False
 
     def on_workbegin(self):
         while True:
@@ -161,7 +164,7 @@ class TimingServer:
         target = start + ticks
         if ticks > 3_600_000_000_000_000 or target >= m5.MaxTick:
             raise ValueError("step exceeds one hour or the gem5 tick range")
-        while m5.curTick() < target and not self.finished:
+        while m5.curTick() < target and not self.finished and not self.case_idle:
             # m5.simulate uses a relative budget. Handling an intermediate event
             # must not grant a fresh full interval (the old config did that).
             self.simulator.set_max_ticks(target - m5.curTick())
@@ -244,10 +247,66 @@ class TimingServer:
         while not self.roi_started and not self.finished:
             self._run_once()
         if self.finished:
+            cause = simulator.get_last_exit_event_cause()
+            code = simulator.get_last_exit_event_code()
+            if cause == 'm5_fail instruction encountered':
+                # PID 1 reports workload failure immediately after writing its
+                # error to the emulated UART. Let the UART finish transmitting
+                # before exiting, or the useful guest error is cut off mid-line.
+                simulator.set_max_ticks(1_000_000_000_000)
+                simulator.run()
             raise RuntimeError(
                 "guest finished before its bridge was ready: "
-                f"{simulator.get_last_exit_event_cause()} "
-                f"(code {simulator.get_last_exit_event_code()}); "
+                f"{cause} "
+                f"(code {code}); "
                 f"see {Path(m5.options.outdir) / 'board.pc.com_1.device'}")
         self.serve(socket_path, managed_shutdown=managed_shutdown)
         print(f"[host] Timing server stopped at tick {m5.curTick()}", flush=True)
+
+
+class ReusableTimingServer(TimingServer):
+    """Stop after guest teardown; start the next case in the same booted VM.
+
+    END_CASE is serviced by a cooperating guest bridge and supervisor. The
+    host must continue pumping its transport until CASE_STATUS reports IDLE.
+    START_CASE consumes an experiment-owned script file, never socket payloads.
+    """
+
+    def __init__(self, *, readfile, case_script, on_ready=None):
+        super().__init__(on_ready=on_ready)
+        self.readfile = Path(readfile)
+        self.case_script = Path(case_script)
+        self.ending_case = False
+
+    def on_workend(self):
+        while True:
+            if not self.ending_case:
+                self.finished = True
+            else:
+                self.case_idle = True
+                self.ending_case = False
+            m5.stats.dump()
+            yield True
+
+    def handle_command(self, line):
+        if line == 'CASE_STATUS':
+            return 'IDLE' if self.case_idle else 'ACTIVE'
+        if line == 'END_CASE':
+            if not self.roi_started or self.finished or self.ending_case or self.case_idle:
+                raise ValueError('No active case to end')
+            self.readfile.write_text('CHIMAERA_END_CASE\n')
+            self.ending_case = True
+            return 'ENDING'
+        if line == 'START_CASE':
+            if not self.case_idle or self.finished:
+                raise ValueError('Previous guest session has not stopped')
+            script = self.case_script.read_text()
+            self.readfile.write_text(script)
+            self.case_idle = False
+            self.roi_started = False
+            while not self.roi_started and not self.finished:
+                self._run_once()
+            if self.finished:
+                raise RuntimeError('Guest failed while starting the next case')
+            return f'READY {m5.curTick()}'
+        return super().handle_command(line)

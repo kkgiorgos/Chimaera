@@ -15,7 +15,7 @@ DEFAULT = dict(version=1, name='Bridge latency sweep', modes=list(MODES),
     payload_bytes=[64], rate_hz=[100.], interval_us=[50000, 20000], poll_us=[10000, 5000],
     duration=.5, warmup=.1, drain=.2, physics_step_ns=1000000,
     reliability='reliable', depth=128, timeout=300, repeats=1,
-    gem5_configs=[dict(HARDWARE, name='KVM')])
+    gem5_configs=[dict(HARDWARE, name='KVM')], single_boot=True)
 
 
 def number(value, name, low, high, integer=False):
@@ -67,6 +67,8 @@ def plan_sweep(value):
         raise ValueError('Unknown sweep configuration field')
     config = copy.deepcopy(DEFAULT)
     config.update(value)
+    if type(config['single_boot']) is not bool:
+        raise ValueError('single_boot must be boolean')
     if config['version'] != 1 or type(config['version']) is not int:
         raise ValueError('Unsupported sweep version')
     if not isinstance(config['name'], str) or not 1 <= len(config['name'].strip()) <= 120:

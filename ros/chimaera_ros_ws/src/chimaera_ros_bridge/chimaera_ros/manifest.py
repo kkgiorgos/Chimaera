@@ -9,7 +9,7 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 m5ops="address", wait_for_application=False, timing_backend="gem5",
                 gazebo_world="", physics_step_ns=1000000, timing_file="",
                 max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False,
-                checkpoint_control=False)
+                checkpoint_control=False, application_ready_file='')
 
 
 def fields(value, allowed, required=()):
@@ -91,6 +91,8 @@ def load(path):
         raise ValueError("simulation_time_from_readfile must be boolean")
     if type(bridge['checkpoint_control']) is not bool:
         raise ValueError("checkpoint_control must be boolean")
+    if not isinstance(bridge['application_ready_file'], str) or '\0' in bridge['application_ready_file']:
+        raise ValueError('application_ready_file must be a path string')
     if type(bridge['image_diagnostics']) is not bool:
         raise ValueError("image_diagnostics must be boolean")
     integer(bridge['interval_us'], 2, 3600000000)

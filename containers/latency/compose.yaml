@@ -1,0 +1,50 @@
+name: chimaera-latency
+services:
+  backend:
+    image: chimaera:latency
+    build:
+      context: ../..
+      dockerfile: containers/latency/Dockerfile
+      args:
+        SDK_IMAGE: ${CHIMAERA_SDK_IMAGE:-chimaera:jammy-humble-fortress}
+        BUILD_JOBS: ${CHIMAERA_BUILD_JOBS:-2}
+    init: true
+    restart: unless-stopped
+    user: "${CHIMAERA_UID:-1000}:${CHIMAERA_GID:-1000}"
+    group_add:
+      - "${CHIMAERA_KVM_GID:-108}"
+    devices:
+      - /dev/kvm:/dev/kvm
+    ports:
+      - "${CHIMAERA_BIND:-127.0.0.1}:${CHIMAERA_PORT:-8787}:8787"
+    environment:
+      CHIMAERA_PUBLIC_ADDRESS: "${CHIMAERA_BIND:-127.0.0.1}:${CHIMAERA_PORT:-8787}"
+      CHIMAERA_GUEST_IMAGE: /assets/guest.img
+      CHIMAERA_GUEST_KERNEL: /assets/kernel
+      IGN_IP: 127.0.0.1
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    volumes:
+      - type: bind
+        source: ${CHIMAERA_DATA:-../../.chimaera-latency/docker}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CHIMAERA_DISK:?Set CHIMAERA_DISK to the existing guest disk}
+        target: /assets/guest.img
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CHIMAERA_KERNEL:?Set CHIMAERA_KERNEL to the existing guest kernel}
+        target: /assets/kernel
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:exec,mode=1777,size=2g
+    shm_size: 512m
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s

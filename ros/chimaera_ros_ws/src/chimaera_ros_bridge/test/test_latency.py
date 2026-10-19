@@ -114,20 +114,22 @@ class LatencyAnalysisTest(unittest.TestCase):
         binary.write_text('test executable')
         capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
         capabilities.parent.mkdir(parents=True)
-        capabilities.write_text('{"version":3}')
+        capabilities.write_text('{"version":4}')
         output = self.root / 'stage'
         bundle = self.root / 'guest.tar.gz'
         stage_guest(output, package, bundle)
         guest = json.loads((output / 'opt/chimaera/latency/session.json').read_text())
         self.assertEqual(guest['routes'], '/tmp/chimaera-latency-routes.json')
         self.assertTrue(guest['bridge']['simulation_time_from_readfile'])
+        self.assertEqual(guest['guest']['processes'][0]['command'][0],
+                         '/opt/chimaera/latency/app/lib/chimaera_ros_bridge/latency_endpoint')
         self.assertTrue(guest['guest']['setup'][1].endswith('/share/chimaera_ros_bridge/local_setup.bash'))
         self.assertIn('run /tmp/chimaera-latency-session.json --side guest',
             (output / 'opt/chimaera/latency/guest_start').read_text())
         with tarfile.open(bundle) as archive:
             self.assertIn('opt/chimaera/latency/guest_start', archive.getnames())
             marker = json.load(archive.extractfile('opt/chimaera/latency/latency-runtime.json'))
-            self.assertEqual(marker, dict(version=3, cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
+            self.assertEqual(marker, dict(version=4, cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
             self.assertTrue(all(not name.startswith('/') and '..' not in Path(name).parts
                                 for name in archive.getnames()))
             self.assertTrue(all(member.mtime == 0 for member in archive.getmembers()))

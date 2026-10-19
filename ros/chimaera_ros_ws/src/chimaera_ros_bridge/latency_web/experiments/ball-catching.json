@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "single_boot": true,
   "name": "Ball-catching traffic",
   "modes": [
     "native_free",

@@ -1,4 +1,4 @@
-"""Loopback-only benchmark workbench. No Python or JavaScript web framework required."""
+"""Local/LAN benchmark workbench. No Python or JavaScript web framework required."""
 import argparse
 import copy
 import csv
@@ -22,6 +22,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .latency import MODES, UNSET, driver_failure, make_report, measurements, read_events, run_case, stage_guest, write_json
+from .latency_session import SweepSessions, ordered_cases
+from .latency_startup import startup_status
 from .latency_config import DEFAULT, HARDWARE, plan_sweep
 from .latency_budget import wall_budget
 
@@ -162,7 +164,7 @@ class Workbench:
             dict(key='kvm', label='KVM boot', ready=os.access('/dev/kvm', os.R_OK | os.W_OK)),
             dict(key='simulator', label='Gem5 binary', ready=(gem5/'build/X86/gem5.opt').is_file()),
             dict(key='image', label='Guest disk and kernel', ready=Path(runtime['image']).is_file() and Path(runtime['kernel']).is_file()),
-            dict(key='bundle', label='Staged guest bundle (v3)', ready=self._bundle_ready(runtime['bundle'])),
+            dict(key='bundle', label='Staged guest bundle (v4)', ready=self._bundle_ready(runtime['bundle'])),
             dict(key='compiler', label='Colcon and CMake', ready=shutil.which('colcon') is not None and shutil.which('cmake') is not None)]
         supported = False
         if checks[2]['ready']:
@@ -183,7 +185,7 @@ class Workbench:
                 with tarfile.open(path) as archive:
                     marker = archive.extractfile('opt/chimaera/latency/latency-runtime.json')
                     metadata = json.loads(marker.read(4096)) if marker else {}
-                self.bundle_checks[key] = (isinstance(metadata, dict) and metadata.get('version') == 3
+                self.bundle_checks[key] = (isinstance(metadata, dict) and metadata.get('version') == 4
                     and isinstance(metadata.get('cpu_types'), list)
                     and all(cpu in metadata['cpu_types'] for cpu in ('kvm', 'timing', 'o3'))
                     and isinstance(metadata.get('workloads'), list)
@@ -304,10 +306,11 @@ class Workbench:
 
     def _execute(self, identifier):
         job = self.jobs[identifier]
+        sessions = SweepSessions(job['config'].get('single_boot', False) and self.executor is run_case)
         try:
             runtime = job['runtime']
             environment = self._environment(runtime)
-            for case in job['cases']:
+            for case in ordered_cases(job['cases'], sessions.enabled):
                 if case['status']=='complete':
                     continue
                 if self.cancelled.is_set():
@@ -316,9 +319,10 @@ class Workbench:
                     case.update(status='running', started=time.time())
                     self._save(job)
                 directory = Path(case.get('path',str(Path(job['source']) / case['id'])))
+                extra = dict(reuse=sessions.for_case(case['config'])) if sessions.enabled else {}
                 self.executor(directory, case['config'], Path(runtime['prefix']), Path(runtime['gem5_root']),
                     Path(runtime['image']), Path(runtime['kernel']), Path(runtime['bundle']) if runtime['bundle'] else None,
-                    environment=environment, cancelled=self.cancelled.is_set)
+                    environment=environment, cancelled=self.cancelled.is_set, **extra)
                 with self.lock:
                     case.update(status='complete', finished=time.time())
                     self._save(job)
@@ -333,6 +337,7 @@ class Workbench:
                     if case['status'] == 'running':
                         case.update(status='stopped' if stopped else 'failed', error=str(error), finished=time.time())
         finally:
+            sessions.close()
             with self.lock:
                 self._save(job)
             try:
@@ -493,6 +498,8 @@ class Workbench:
                 phase = ('Starting Gazebo / booting guest' if elapsed is None else 'Warming up' if elapsed<config['warmup']
                     else 'Measuring' if elapsed<config['warmup']+config['duration']
                     else 'Draining messages' if elapsed<config['warmup']+config['duration']+config['drain'] else 'Exporting records')
+                if elapsed is None and config['mode'] == 'chimaera':
+                    phase = startup_status(directory)['description']
                 job['progress'] = dict(case=running['id'], phase=phase, simulated_seconds=elapsed)
             if job['kind']=='sweep' and job['status'] in ('failed','stopped','interrupted'):
                 remaining = [case for case in job['cases'] if case['status']!='complete']
@@ -533,8 +540,13 @@ def handler(workbench, web):
 
         def allowed(self):
             host=self.headers.get('Host','')
-            if host not in (f'localhost:{self.server.server_port}',f'127.0.0.1:{self.server.server_port}'):
-                raise ValueError('Use the local workbench address')
+            addresses = {'localhost', '127.0.0.1', self.connection.getsockname()[0]}
+            authorities = {f'{address}:{self.server.server_port}' for address in addresses}
+            public_address = getattr(self.server, 'public_address', None)
+            if isinstance(public_address, str) and public_address:
+                authorities.add(public_address)
+            if host not in authorities:
+                raise ValueError('Use the workbench IP address and port')
             origin=self.headers.get('Origin')
             if origin and origin!=f'http://{host}':
                 raise ValueError('Cross-origin requests are not accepted')
@@ -645,7 +657,7 @@ def handler(workbench, web):
     return Handler
 
 
-def serve(repo, data=None, runtime_prefix=None, port=8787):
+def serve(repo, data=None, runtime_prefix=None, port=8787, host='127.0.0.1', public_address=None):
     repo=Path(repo).resolve()
     data=Path(data or repo/'.chimaera-latency').resolve()
     data.mkdir(parents=True, exist_ok=True)
@@ -661,11 +673,12 @@ def serve(repo, data=None, runtime_prefix=None, port=8787):
         web=Path(runtime_prefix or workbench.runtime['prefix'])/'share/chimaera_ros_bridge/latency_web'
     if not web.is_dir():
         raise ValueError('Workbench assets are missing; rebuild with BUILD_LATENCY_BENCHMARK=ON')
-    server=ThreadingHTTPServer(('127.0.0.1',port),handler(workbench,web.resolve()))
+    server=ThreadingHTTPServer((host,port),handler(workbench,web.resolve()))
+    server.public_address = public_address
     server.timeout=.5
     stopping=threading.Event()
     previous={sig:signal.signal(sig,lambda *_:stopping.set()) for sig in (signal.SIGINT,signal.SIGTERM)}
-    print(f'Chimaera latency workbench: http://127.0.0.1:{server.server_port}',flush=True)
+    print(f'Chimaera latency workbench: http://{host}:{server.server_port}',flush=True)
     try:
         while not stopping.is_set():
             server.handle_request()
@@ -683,8 +696,9 @@ def main():
     parser.add_argument('--data-root',type=Path)
     parser.add_argument('--runtime-prefix',type=Path)
     parser.add_argument('--port',type=int,default=8787)
+    parser.add_argument('--host',default='127.0.0.1',help='Bind address; use the host LAN IP for LAN access')
     args=parser.parse_args()
-    serve(args.repo_root,args.data_root,args.runtime_prefix,args.port)
+    serve(args.repo_root,args.data_root,args.runtime_prefix,args.port,args.host)
 
 
 if __name__=='__main__':

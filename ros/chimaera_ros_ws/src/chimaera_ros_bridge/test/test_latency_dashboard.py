@@ -324,6 +324,7 @@ class WorkbenchTest(unittest.TestCase):
             code, value = request('/api/plan', DEFAULT, headers)
             self.assertEqual((code, value['total']), (200, 7))
             self.assertEqual(request('/api/plan', DEFAULT, dict(headers, Origin='http://external.test'))[0], 400)
+            self.assertEqual(request('/api/plan', DEFAULT, dict(headers, Host='external.test'))[0], 400)
             self.assertEqual(request('/api/prepare', {'build':'false'}, headers)[0], 400)
             self.assertEqual(request('/api/stop', [], headers)[0], 400)
             connection.request('GET', '/%2e%2e/chimaera_ros/latency.py')
@@ -335,6 +336,33 @@ class WorkbenchTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(3)
+
+    def test_lan_host_keeps_same_origin_validation(self):
+        web = Path(__file__).resolve().parents[1]/'latency_web'
+        request = object.__new__(handler(self.workbench, web))
+        request.server = Mock(server_port=8787)
+        request.connection = Mock()
+        request.connection.getsockname.return_value = ('192.168.1.2', 8787)
+        request.headers = dict(Host='192.168.1.2:8787', Origin='http://192.168.1.2:8787')
+        request.allowed()
+        request.headers['Origin'] = 'http://external.test'
+        with self.assertRaisesRegex(ValueError, 'Cross-origin'):
+            request.allowed()
+
+    def test_published_docker_address_is_explicit_and_keeps_origin_guard(self):
+        request = object.__new__(handler(self.workbench, self.root))
+        request.server = Mock(server_port=8787, public_address='192.168.1.2:9876')
+        request.connection = Mock()
+        request.connection.getsockname.return_value = ('172.18.0.2', 8787)
+        request.headers = dict(Host='192.168.1.2:9876', Origin='http://192.168.1.2:9876')
+        request.allowed()
+        request.headers['Host'] = 'external.test:9876'
+        with self.assertRaisesRegex(ValueError, 'workbench IP'):
+            request.allowed()
+        request.headers['Host'] = '192.168.1.2:9876'
+        request.headers['Origin'] = 'http://external.test:9876'
+        with self.assertRaisesRegex(ValueError, 'Cross-origin'):
+            request.allowed()
 
 
 if __name__ == '__main__':

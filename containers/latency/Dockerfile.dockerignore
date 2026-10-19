@@ -1,0 +1,15 @@
+**
+!gem5-transport/
+!gem5-transport/**
+!ros/
+!ros/chimaera_ros_ws/
+!ros/chimaera_ros_ws/src/
+!ros/chimaera_ros_ws/src/**
+!containers/
+!containers/latency/
+!containers/latency/start.py
+**/__pycache__
+**/*.pyc
+**/build
+**/install
+**/log

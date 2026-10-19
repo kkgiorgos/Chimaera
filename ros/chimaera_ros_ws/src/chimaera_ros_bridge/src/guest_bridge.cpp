@@ -5,9 +5,12 @@
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <chimaera_ros_bridge/checkpoint_barrier.hpp>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <thread>
 
 namespace
 {
@@ -39,6 +42,14 @@ int main(int argc, char ** argv)
       RCLCPP_INFO(
         node->get_logger(), "Waiting for guest application ROS endpoints before workbegin");
       node->wait_for_local_routes(std::chrono::seconds(timeout), [] { return !rclcpp::ok(); });
+      const auto ready_file = node->declare_parameter<std::string>("application_ready_file", "");
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout);
+      while (!ready_file.empty() && !std::filesystem::exists(ready_file)) {
+        if (!rclcpp::ok() || std::chrono::steady_clock::now() >= deadline)
+          throw std::runtime_error("Timed out waiting for application readiness: " + ready_file);
+        executor.spin_some();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      }
       RCLCPP_INFO(node->get_logger(), "Guest application ROS endpoints ready");
     }
     Mapping mapping;
@@ -52,7 +63,10 @@ int main(int argc, char ** argv)
       ops == "instruction" ? chimaera::GuestM5Ops::instruction : chimaera::GuestM5Ops::address,
       ops == "instruction");
     RCLCPP_INFO(node->get_logger(), "Guest bridge ready; entering workbegin barrier");
-    m5_work_begin_addr(0, 0);
+    if (std::getenv("CHIMAERA_LATENCY_DETAILED_START"))
+      m5_work_begin(0, 0);
+    else
+      m5_work_begin_addr(0, 0);
     bool time_ready = false;
     while (rclcpp::ok()) {
       const auto result = controller.run_next();
@@ -94,6 +108,12 @@ int main(int argc, char ** argv)
       }
       // Deliver, pump ROS once, then queue outgoing messages for the next poll.
       node->exchange(controller);
+      if (std::getenv("CHIMAERA_LATENCY_REUSE")) {
+        char control[96]{};
+        const auto length = ops == "instruction" ? m5_read_file(control, 95, 0)
+                                                  : m5_read_file_addr(control, 95, 0);
+        if (std::string(control, length) == "CHIMAERA_END_CASE\n") break;
+      }
       if (checkpoint_control) {
         // Quiesce at a completed exchange so a checkpoint never splits a
         // transport header/payload or leaves a stale host handshake behind.
