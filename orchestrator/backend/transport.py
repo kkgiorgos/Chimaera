@@ -23,6 +23,7 @@ class SSH:
         # Host paths must stay identical inside the supervisor and helper containers.
         command = (f'cd {repo} && CHIMAERA_REPO={repo} CHIMAERA_UID=$(id -u) '
                    'CHIMAERA_GID=$(id -g) CHIMAERA_DOCKER_GID=$(stat -c %g /var/run/docker.sock) '
+                   'CHIMAERA_KVM_GID=$(stat -c %g /dev/kvm 2>/dev/null || true) '
                    'docker compose -f orchestrator/worker.compose.yaml up -d --build')
         run(self.base(machine) + [command], timeout=1200)
 

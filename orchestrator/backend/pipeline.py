@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 
 from common import atomic_json, build_identities, digest, source_identity
@@ -17,6 +18,12 @@ def prepare(directory):
     config = request['config']
     if config.get('fixed', {}).get('transport_backend', 'm5') == 'dma' and checkpoint_mode:
         raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
+    dma = config.get('fixed', {}).get('transport_backend', 'm5') == 'dma'
+    shared_kernel = (calibration or {}).get('provenance', {}).get('kernel_bundle_sha256')
+    managed_kernel = dma and not config.get('fixed', {}).get('dma_module') and not shared_kernel
+    if managed_kernel and request.get('kernel'):
+        raise ValueError('A custom DMA kernel requires fixed.dma_module built for that kernel; '
+                         'leave both fields empty for an automatically built pair')
     if config.get('fixed', {}).get('dma_module'):
         config['fixed']['dma_module'] = str(root / config['fixed']['dma_module'])
     # The stored JSON remains portable; resolve its repository-relative memory config here.
@@ -62,6 +69,27 @@ def prepare(directory):
         atomic_json(root / '.chimaera-orchestrator/assets' /
                     ('image-' + image_id.removeprefix('sha256:') + '.json'), dict(image_id=image_id))
     atomic_json(directory / 'stage.json', dict(phase='Preparing guest disk and kernel'))
+    kernel_bundle = None
+    if shared_kernel:
+        from kernel_assets import verify
+        guest_kernel, module = verify(directory / 'shared-assets', shared_kernel)
+        config.setdefault('fixed', {})['dma_module'] = str(module)
+        kernel_bundle = shared_kernel
+    elif managed_kernel:
+        from kernel_assets import ensure, expose
+        guest_kernel, module = ensure(root, directory, request['build_jobs'])
+        config.setdefault('fixed', {})['dma_module'] = str(module)
+        kernel_bundle = expose(directory, guest_kernel, module)
+    else:
+        guest_kernel = request.get('kernel')
+    if kernel_bundle:
+        pair_directory = Path(config['fixed']['dma_module']).parent
+        for source, target in [('kernel-assets.json', 'kernel-assets.json'),
+                               ('build.json', 'kernel-build.json'), ('kernel.config', 'kernel.config')]:
+            shutil.copyfile(pair_directory / source, directory / target)
+    # Keep the queued config intact; resolve the managed driver only in the
+    # preparation copy. configure.py freezes it under a portable /assets path.
+    atomic_json(directory / 'experiment.json', config)
     readiness = None
     if checkpoint_mode and calibration:
         from checkpoints import unpack
@@ -71,7 +99,13 @@ def prepare(directory):
         readiness = unpack(directory, application_id, checkpoint_index)
         disk, kernel = readiness / 'guest.img', readiness / 'kernel'
     else:
-        disk, kernel = ensure_assets(root, directory, base_id, request.get('disk'), request.get('kernel'))
+        disk, kernel = ensure_assets(root, directory, base_id, request.get('disk'), guest_kernel)
+    dma_boot = None
+    if dma and not calibration:
+        from kernel_assets import smoke
+        dma_boot = smoke(root, directory, application_id, disk, kernel,
+                         Path(config['fixed']['dma_module']),
+                         timeout=config['fixed'].get('startup_timeout_s', 900))
     args = []
     if calibration:
         for pattern, record in calibration['records'].items():
@@ -100,6 +134,10 @@ def prepare(directory):
                       sdk_image_id=sdk_id, base_image_id=base_id, application_image_id=application_id,
                       disk_sha256=digest(disk), kernel_sha256=digest(kernel),
                       input_hashes=hashes)
+    if kernel_bundle:
+        provenance['kernel_bundle_sha256'] = kernel_bundle
+    if dma_boot:
+        provenance['dma_boot'] = dma_boot
     if checkpoint_mode:
         from checkpoints import package
         if not calibration:
@@ -119,6 +157,8 @@ def prepare(directory):
         # Keep each disk's digest in its provenance without requiring identical bytes.
         expected = calibration['provenance']
         keys = ('source_identity', 'revision', 'kernel_sha256', 'input_hashes')
+        if shared_kernel:
+            keys += ('kernel_bundle_sha256',)
         if checkpoint_mode:
             keys += ('disk_sha256', 'checkpoint_index_sha256')
         for key in keys:

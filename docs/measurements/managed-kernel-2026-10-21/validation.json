@@ -1,0 +1,42 @@
+{
+  "host": "ubuntu-george",
+  "manifest": {
+    "version": 1,
+    "key": "45669fc49e175fc645af3e1aaf48ee2417dba4a8dce560a07db171c42e9840e7",
+    "builder": "sha256:b6bbebc14d405e12d2a83ae58f8a7a182f9595df6c85be7fe0d40520c0e131cd",
+    "inputs": "ba292e2caa0c32f83145067c88ccab327e7d6988322cd58010d795a1bb3531ac",
+    "sha256": {
+      "kernel": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+      "chimaera_dma.ko": "9673c22ff72d62a6832dc1b6f5bf788c63b731de17d9cea3c52f51153973090d",
+      "kernel.config": "b6790de2fa93690dd52ba4752379c15da42dda180ce01b940be7ac1eae32baac",
+      "Module.symvers": "e9e0e01e822774135f4b9c33ed400b1e488c0307546c6b7328ee3344d25cc9f0",
+      "build.json": "63ce28208c738601c50082ac896b4da653fe058d8db5baf1d498e3afb6fa6e52"
+    }
+  },
+  "build": {
+    "kernel_release": "5.15.180-chimaera",
+    "vermagic": "5.15.180-chimaera SMP mod_unload modversions",
+    "source": {
+      "version": "5.15.180",
+      "url": "https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.15.180.tar.xz",
+      "sha256": "f51f68b8bbe60aca5e1ff3781f7e5d2ca6a31dd299c8446c39bf880bfff1cd39"
+    },
+    "compiler": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0"
+  },
+  "boot": {
+    "status": "passed",
+    "cause": "m5_exit instruction encountered",
+    "code": 0
+  },
+  "hashes": {
+    "kernel": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+    "chimaera_dma.ko": "9673c22ff72d62a6832dc1b6f5bf788c63b731de17d9cea3c52f51153973090d"
+  },
+  "disk_io_errors": false,
+  "consumer_transfer": {
+    "host": "pop-os",
+    "manifest_sha256": "b41c7bd7dc5697e1366dce4d3cd5957bc7f00d84c15082aa820ffabe3752e457",
+    "verified": true
+  }
+}
+

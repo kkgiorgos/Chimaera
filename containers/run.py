@@ -85,7 +85,7 @@ def load(path):
     return config
 
 
-def command(config, job, output, image, name):
+def command(config, job, output, image, name, device_groups=None):
     argv = ['docker', 'run', '--rm', '--init', '--pull=never', '--name', name,
             '--network', 'none', '--ipc', 'private', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', f'{os.getuid()}:{os.getgid()}',
@@ -93,7 +93,11 @@ def command(config, job, output, image, name):
             '--memory-swap', config['memory'], '--shm-size', '256m',
             '--tmpfs', '/tmp:rw,nosuid,nodev,mode=1777',
             '--env', 'HOME=/tmp', '--env', f'CHIMAERA_JOB={job["name"]}']
-    groups = {Path(device).stat().st_gid for device in config['devices']}
+    # Supervisors launch sibling containers through the host Docker daemon;
+    # host devices need not exist in the supervisor's own device namespace.
+    device_groups = device_groups or {}
+    groups = {device_groups[device] if device in device_groups else Path(device).stat().st_gid
+              for device in config['devices']}
     groups.update(Path(mount['source']).stat().st_gid for mount in config['mounts'])
     for group in sorted(groups):
         argv += ['--group-add', str(group)]

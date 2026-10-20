@@ -136,6 +136,17 @@ def test_dynamic_dispatch_fills_all_hosts(controller):
     assert value['cases'][6]['attempts'][-1]['machine'] == 'm2'
 
 
+def test_consumer_receives_the_producer_kernel_pair_before_preparation(controller):
+    value = experiment(controller, count=1)
+    value['calibration']['provenance'].update(application_image_id=SDK_ID, kernel_bundle_sha256='kernel-manifest')
+    copies = []
+    controller.remote.copy_readiness = lambda *args, **kwargs: copies.append((args, kwargs))
+    images = controller.copy_sdk(value, controller.machine('m1'), None)
+    assert images['application_image_id'] == SDK_ID
+    assert len(copies) == 1
+    assert copies[0][0][2:] == (value['id'], 'kernel-manifest')
+
+
 def test_lost_dispatch_reply_keeps_same_attempt(controller):
     value = experiment(controller, count=1)
     controller.remote.lose_reply = True

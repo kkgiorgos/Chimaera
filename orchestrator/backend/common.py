@@ -38,7 +38,7 @@ def digest(path):
 def source_identity(root):
     git = ['git', '-c', 'safe.directory=' + str(root), '-C', root]
     revision = run([*git, 'rev-parse', 'HEAD'], text=True).strip()
-    paths = ['gem5', 'gem5-transport', 'ros', 'containers', 'orchestrator/backend']
+    paths = ['gem5', 'gem5-transport', 'ros', 'containers', 'orchestrator/backend', 'orchestrator/kernel']
     diff = run([*git, 'diff', '--binary', 'HEAD', '--', *paths])
     extra = run([*git, 'ls-files', '--others', '--exclude-standard', '-z', '--', *paths])
     result = hashlib.sha256(revision.encode() + diff)

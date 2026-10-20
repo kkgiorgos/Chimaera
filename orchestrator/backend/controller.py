@@ -506,7 +506,8 @@ class Controller:
             machine = self.machine(context)
             machine.update(cleaning=False, cleanup_result=result, cleanup_error=None)
             self.store.put('machines', context, machine)
-            event(self.store, f"{machine['name']}: removed {result['images']} unused images and {result['disks']} guest disks")
+            event(self.store, f"{machine['name']}: removed {result['images']} unused images, "
+                f"{result['disks']} guest disks and {result.get('kernels', 0)} kernel/module pairs")
         elif kind == 'deploy':
             machine = self.machine(context)
             machine.update(deployed=True, deploying=False, error=None)
@@ -794,7 +795,7 @@ class Controller:
         application = provenance.get('application_image_id')
         base = provenance.get('base_image_id', image)
         needs_base = not provenance.get('readiness_checkpoint') and not destination.get('disk')
-        count = (1 + int(bool(provenance.get('readiness_checkpoint'))) +
+        count = (1 + int(bool(provenance.get('readiness_checkpoint') or provenance.get('kernel_bundle_sha256'))) +
                  int(needs_base and base != (application or image)))
         # Application layers suffice for execution, but fresh-boot preparation
         # also exports the dependency base to construct the guest filesystem.
@@ -822,6 +823,11 @@ class Controller:
                 bytes_sent=0, bytes_per_second=0, elapsed_seconds=0, eta_seconds=None, updated=time.time()))
             self.remote.copy_readiness(source, destination, experiment['id'],
                                       provenance['checkpoint_index_sha256'], cancel=cancelled)
+        elif provenance.get('kernel_bundle_sha256'):
+            progress('Guest kernel and DMA module', count, count)(dict(phase='Streaming verified kernel and DMA module',
+                bytes_sent=0, bytes_per_second=0, elapsed_seconds=0, eta_seconds=None, updated=time.time()))
+            self.remote.copy_readiness(source, destination, experiment['id'],
+                                      provenance['kernel_bundle_sha256'], cancel=cancelled)
         return images
 
     def schedule(self, experiment):

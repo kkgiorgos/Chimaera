@@ -8,6 +8,24 @@ from assets import clean_unused
 from common import atomic_json
 
 
+def test_kernel_cache_preserves_current_and_saved_pairs(tmp_path):
+    directories = []
+    for char in 'abc':
+        directory = tmp_path / 'assets' / ('kernel-' + char * 64)
+        directory.mkdir(parents=True)
+        (directory / 'kernel').write_bytes(b'kernel')
+        (directory / 'chimaera_dma.ko').write_bytes(b'module')
+        directories.append(directory)
+    atomic_json(tmp_path / 'assets/current-kernel.json', dict(directory=str(directories[0])))
+    atomic_json(tmp_path / 'experiments/e/inputs/runner.json', dict(
+        mounts=[dict(source=str(directories[1] / 'kernel'))]))
+    with patch('assets.run', side_effect=['', '']):
+        result = clean_unused(tmp_path)
+    assert result['kernels'] == 1
+    assert directories[0].exists() and directories[1].exists()
+    assert not directories[2].exists()
+
+
 def test_cleanup_preserves_saved_experiments_containers_and_configured_disks(tmp_path):
     assets = tmp_path / 'assets'
     assets.mkdir()

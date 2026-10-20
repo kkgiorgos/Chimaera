@@ -7,7 +7,7 @@ export const experimentSchema = object({
   fixed: { ...object({ transport_backend: { enum: ['m5', 'dma'], default: 'm5',
       description: 'DMA uses a fresh KVM boot for every case; readiness checkpoints are unavailable.' },
     dma_module: { type: 'string', default: '',
-      description: 'Repository-relative chimaera_dma.ko built for the guest kernel; empty uses a driver already loaded in the guest.' },
+      description: 'Optional repository-relative chimaera_dma.ko for a custom guest kernel. Leave this and the machine kernel empty to build and verify a matching kernel/driver pair automatically.' },
     duration: positive, warmup: { type: 'number', minimum: 0 }, physics_step: positive,
     joint_hz: positive, camera_position: vector, camera_width: { type: 'integer', minimum: 64 },
     camera_height: { type: 'integer', minimum: 64 }, image_age_periods: positive,

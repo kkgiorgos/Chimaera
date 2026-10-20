@@ -7,20 +7,44 @@ Only one unfinished experiment can exist, including stopped runs. Finalized runs
 retain collected results; their working files are released automatically before
 another experiment can start.
 
-Select DMA by adding these fields inside the experiment's `fixed` object:
+Select DMA inside the experiment's `fixed` object:
 
 ```json
-"transport_backend": "dma",
-"dma_module": "path/to/chimaera_dma.ko"
+"transport_backend": "dma"
 ```
 
-The orchestrator resolves `dma_module` relative to the repository root. Supply a
-module built from `gem5-transport/kernel` for the exact guest kernel on each
-preparation machine. Preparation freezes and hashes the module, then bundles it
-for loading by the guest bridge. An empty or omitted module path requires a driver
-already loaded in your custom guest image; the automatically prepared guest needs
-the module supplied explicitly. Standalone suite configurations resolve the path
-relative to their JSON file.
+Leave `fixed.dma_module` and the preparation machine's **kernel** field empty.
+The producer automatically builds Linux 5.15.180 and `chimaera_dma.ko` from the
+same configured kernel tree, with module version checks enabled. The Linux source
+archive is pinned by SHA-256 in `kernel/policy.json`; `kernel/config.fragment`
+sets the built-in root disk/filesystem, serial console and DMA module support.
+The build runs in an x86-64 Ubuntu toolchain container and uses the machine's
+**build parallelism**, independently of case worker limits. Initial preparation
+requires Internet access, several GiB of temporary disk space, and a full kernel
+build. The resolved configuration, compiler, kernel release, module vermagic and
+file hashes are retained. Changes to the recipe, toolchain image, driver or ABI
+header invalidate the pair cache.
+
+Before marking preparation ready, the producer boots a disposable COW guest with
+the actual disk/kernel/module, loads the driver, opens `/dev/chimaera-dma`, and
+checks the driver ABI. Boot failure, driver rejection, timeout or disk I/O errors
+fail preparation before benchmark dispatch. Its kernel build log and boot serial
+are included in preparation diagnostics. This boot check does not replace a real
+single-case robot validation.
+
+Other machines receive the producer's exact kernel/module pair over the existing
+direct asset stream, verify all hashes, and freeze that driver into the guest
+bundle. They do not independently compile another kernel. The current reusable
+pair and pairs referenced by unfinished experiments are protected from cleanup;
+obsolete pairs appear under **Storage** and can be reclaimed.
+
+For a custom kernel, supply both the preparation machine's kernel path and
+`fixed.dma_module`, built for that exact kernel. The module path is relative to
+the repository root and must exist on preparation machines. These explicit
+artifacts also pass the producer boot check. Supplying a module without a kernel
+retains the existing prebuilt-kernel selection. Standalone suite configurations
+still require an explicit module and resolve its path relative to their JSON file.
+The default `m5` backend continues to use its pinned prebuilt kernel.
 
 DMA uses fresh KVM boots for every case and skips readiness checkpoint creation,
 transfer, and restoration. Memory calibration and application images are still
@@ -174,6 +198,12 @@ resolved on the host. It runs as the SSH user's UID/GID, with access to the host
 Docker socket. Only preparation on the producer receives the KVM device. This trusted supervisor controls Docker;
 benchmark cases retain the existing runner's read-only mounts, private network,
 private IPC, resource limits, and dropped capabilities.
+
+Supervisor deployment records the host KVM group as `CHIMAERA_KVM_GID`, so fresh-boot
+case workers receive the right supplementary group even though `/dev/kvm` is absent
+from the supervisor itself. For manual Compose deployment, set this variable to
+`stat -c %g /dev/kvm` on the worker host. Redeploy supervisors after updating this
+setting; existing dispatch reservations retry with their original attempt IDs.
 
 Remote state lives in `<repository>/.chimaera-orchestrator/`, including the
 supervisor's SQLite database, frozen inputs, assets, and attempt directories.

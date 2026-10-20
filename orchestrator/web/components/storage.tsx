@@ -40,18 +40,18 @@ export default function Storage({ state, command, confirm }: {
   }, [location, revision, cleaning]);
   const locked = cleaning || Boolean(state?.experiments.some(e => busy.includes(e.status) && e.machines.includes(location)));
   const removable = inventory?.assets.filter(a => !a.protected) || [];
-  const diskBytes = inventory?.assets.filter(a => selected.includes(a.id) && a.kind === 'disk').reduce((n, a) => n + (a.bytes || 0), 0) || 0;
+  const diskBytes = inventory?.assets.filter(a => selected.includes(a.id) && a.kind !== 'image').reduce((n, a) => n + (a.bytes || 0), 0) || 0;
   const assets = inventory?.assets || [];
   const visible = assets.filter(a => (filter === 'all' || (filter === 'protected' ? a.protected : !a.protected))
     && a.name.toLowerCase().includes(query.toLowerCase()));
   const selectable = visible.filter(a => !a.protected);
   const checkedCount = selectable.filter(a => selected.includes(a.id)).length;
-  const selectedDiskCount = assets.filter(a => selected.includes(a.id) && a.kind === 'disk').length;
+  const selectedDiskCount = assets.filter(a => selected.includes(a.id) && a.kind !== 'image').length;
   const experimentFiles = inventory?.experiments.filter(e => e.bytes > 0).sort((a, b) => b.bytes - a.bytes) || [];
   const usedPercent = inventory ? Math.min(100, Math.round(inventory.filesystem.used / inventory.filesystem.total * 100)) : 0;
   const removeSelected = () => confirm({
     title: `Remove ${selected.length} assets?`, actionLabel: 'Remove selected',
-    description: `Permanently remove the selected assets from ${machine?.name}. Selected guest disks occupy ${size(diskBytes)}. Docker will reclaim layers when no other image uses them. Dependencies are checked again before removal.`,
+    description: `Permanently remove the selected assets from ${machine?.name}. Selected guest files occupy ${size(diskBytes)}. Docker will reclaim layers when no other image uses them. Dependencies are checked again before removal.`,
     action: () => { void command('clean_assets', { id: location, asset_ids: selected }); },
   });
   return <section className="storage-panel">
@@ -75,7 +75,7 @@ export default function Storage({ state, command, confirm }: {
         {usedPercent >= 90 && <p className="storage-capacity-hint">Space is running low. Start with unused guest disks or old experiment copies.</p>}
       </div>
       {location && <section className="storage-section" aria-labelledby="storage-cache-title">
-        <div className="storage-section-heading"><div><h2 id="storage-cache-title">Cached assets <span>{assets.length}</span></h2><p>Guest disks and images saved between runs.</p></div><span className="storage-protection-note"><LockKeyhole size={13} />Dependencies are protected</span></div>
+        <div className="storage-section-heading"><div><h2 id="storage-cache-title">Cached assets <span>{assets.length}</span></h2><p>Guest disks, kernel/module pairs and images saved between runs.</p></div><span className="storage-protection-note"><LockKeyhole size={13} />Dependencies are protected</span></div>
         <div className="storage-tools"><div className="storage-filters" role="group" aria-label="Filter cached assets">
           {(['all', 'unused', 'protected'] as const).map(value => <button key={value} aria-pressed={filter === value} onClick={() => setFilter(value)}>{value === 'all' ? 'All assets' : value === 'unused' ? 'Unused' : 'Protected'}<span>{value === 'all' ? assets.length : value === 'unused' ? removable.length : assets.length - removable.length}</span></button>)}
         </div><label className="storage-search"><Search size={15} /><input type="search" aria-label="Search cached assets" placeholder="Find an asset…" value={query} onChange={e => setQuery(e.target.value)} /></label></div>
@@ -84,14 +84,14 @@ export default function Storage({ state, command, confirm }: {
           <div className="storage-table-heading"><label><input type="checkbox" aria-label="Select visible unused assets" disabled={locked || !selectable.length} checked={selectable.length > 0 && checkedCount === selectable.length} ref={node => { if (node) node.indeterminate = checkedCount > 0 && checkedCount < selectable.length; }} onChange={e => setSelected(prev => e.target.checked ? [...new Set([...prev, ...selectable.map(a => a.id)])] : prev.filter(id => !selectable.some(a => a.id === id)))} /><span>Asset</span></label><span>Status</span><span>Size</span></div>
           {visible.map(a => <label className={`storage-asset-row ${selected.includes(a.id) ? 'storage-asset-selected' : ''}`} key={a.id}>
             <input type="checkbox" aria-label={`Select ${a.name}`} disabled={locked || a.protected} checked={selected.includes(a.id)} onChange={e => setSelected(prev => e.target.checked ? [...prev, a.id] : prev.filter(id => id !== a.id))} />
-            <span className="storage-file-icon">{a.kind === 'disk' ? <HardDrive size={19} /> : <Image size={19} />}</span>
-            <span className="storage-asset-name"><strong>{a.name}</strong><small>{a.kind === 'disk' ? 'Guest disk' : 'Docker image'}</small></span>
+            <span className="storage-file-icon">{a.kind !== 'image' ? <HardDrive size={19} /> : <Image size={19} />}</span>
+            <span className="storage-asset-name"><strong>{a.name}</strong><small>{a.kind === 'disk' ? 'Guest disk' : a.kind === 'kernel' ? 'Kernel and DMA module' : 'Docker image'}</small></span>
             <span className={`storage-asset-status ${a.protected ? 'is-protected' : ''}`} aria-label={a.protected ? `Protected: ${a.reason}` : 'Unused; can be rebuilt'} title={a.reason || 'Unused cache; can be rebuilt'}>{a.protected ? <LockKeyhole size={12} /> : <Check size={12} />}{a.protected ? 'Protected' : 'Unused'}</span>
             <strong className="storage-file-size">{a.bytes == null ? 'Unknown' : size(a.bytes)}</strong>
           </label>)}
           {!visible.length && <div className="storage-empty"><Database size={25} /><strong>{assets.length ? 'No matching assets' : 'No cached assets'}</strong><p>{assets.length ? 'Try a different name or filter.' : 'Images and guest disks will appear here after preparation.'}</p></div>}
         </div>
-        <div className={`storage-selection ${selected.length ? 'has-selection' : ''}`}><span>{selected.length ? <><strong>{selected.length} selected</strong><small>{selectedDiskCount ? `${size(diskBytes)} in guest disks` : 'Image layers may be shared'}</small></> : 'Select unused assets to remove them.'}</span><div>{selected.length > 0 && <button className="text-button" onClick={() => setSelected([])}>Clear</button>}<button className="button danger-button compact" disabled={locked || !selected.length} onClick={removeSelected}><Trash2 size={14} />Remove selected</button></div></div>
+        <div className={`storage-selection ${selected.length ? 'has-selection' : ''}`}><span>{selected.length ? <><strong>{selected.length} selected</strong><small>{selectedDiskCount ? `${size(diskBytes)} in guest files` : 'Image layers may be shared'}</small></> : 'Select unused assets to remove them.'}</span><div>{selected.length > 0 && <button className="text-button" onClick={() => setSelected([])}>Clear</button>}<button className="button danger-button compact" disabled={locked || !selected.length} onClick={removeSelected}><Trash2 size={14} />Remove selected</button></div></div>
         <p className="storage-footnote">Image sizes include shared layers. Removing an image may free less space than shown.</p>
       </section>}
       <section className="storage-section" aria-labelledby="storage-experiments-title">

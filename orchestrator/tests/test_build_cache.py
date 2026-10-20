@@ -40,6 +40,17 @@ def test_sdk_cache_depends_on_build_content_not_repo_commit_or_dashboard(tmp_pat
     assert build_identities(tmp_path)['sdk'] != initial['sdk']
 
 
+def test_dma_custom_kernel_requires_driver_before_building(tmp_path, monkeypatch):
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    (tmp_path / 'request.json').write_text(json.dumps(dict(
+        config=dict(fixed=dict(transport_backend='dma')), kernel='/custom/kernel')))
+    with patch('pipeline.source_identity') as identity, patch('images.build') as build:
+        with pytest.raises(ValueError, match='requires fixed.dma_module'):
+            prepare(tmp_path)
+    identity.assert_not_called()
+    build.assert_not_called()
+
+
 def pipeline_fixture(tmp_path):
     directory = tmp_path / '.chimaera-orchestrator/experiments/experiment'
     identity = dict(revision='revision', fingerprint='sources')
@@ -65,6 +76,62 @@ def pipeline_fixture(tmp_path):
         return subprocess.CompletedProcess(argv, 0, stdout=image_id if '--format' in argv else '')
 
     return directory, identity, disk, kernel, execute
+
+
+@pytest.mark.parametrize('consumer', [False, True])
+def test_dma_preparation_builds_only_on_producer_and_freezes_shared_pair(tmp_path, monkeypatch, consumer):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    module = kernel.parent / 'chimaera_dma.ko'
+    module.write_bytes(b'matching driver')
+    for name in ('kernel-assets.json', 'build.json', 'kernel.config'):
+        (kernel.parent / name).write_text('{}')
+    request = json.loads((directory / 'request.json').read_text())
+    request['config']['fixed'] = dict(transport_backend='dma')
+    if consumer:
+        request['calibration']['provenance']['kernel_bundle_sha256'] = 'pair-manifest'
+    else:
+        request['calibration'] = None
+        request['kernel'] = ''
+    atomic_json(directory / 'request.json', request)
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('assets.clean_unused'), \
+         patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('pipeline.subprocess.run', side_effect=execute), \
+         patch('guest.ensure_assets', return_value=(disk, kernel)) as guest, \
+         patch('kernel_assets.ensure', return_value=(kernel, module)) as build, \
+         patch('kernel_assets.expose', return_value='pair-manifest'), \
+         patch('kernel_assets.verify', return_value=(kernel, module)) as verify, \
+         patch('kernel_assets.smoke', return_value=dict(status='passed')) as smoke:
+        prepare(directory)
+    ready = json.loads((directory / 'ready.json').read_text())
+    assert ready['provenance']['kernel_bundle_sha256'] == 'pair-manifest'
+    assert json.loads((directory / 'experiment.json').read_text())['fixed']['dma_module'] == str(module)
+    assert json.loads((directory / 'request.json').read_text())['config']['fixed'] == dict(transport_backend='dma')
+    assert guest.call_args.args[-1] == kernel
+    assert build.call_count == int(not consumer)
+    assert smoke.call_count == int(not consumer)
+    assert verify.call_count == int(consumer)
+
+
+def test_dma_boot_failure_prevents_ready_manifest(tmp_path, monkeypatch):
+    directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
+    module = kernel.parent / 'driver.ko'
+    module.write_bytes(b'driver')
+    request = json.loads((directory / 'request.json').read_text())
+    request['calibration'] = None
+    request['config']['fixed'] = dict(transport_backend='dma', dma_module=str(module))
+    atomic_json(directory / 'request.json', request)
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \
+         patch('pipeline.source_identity', return_value=identity), \
+         patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
+         patch('guest.ensure_assets', return_value=(disk, kernel)), \
+         patch('kernel_assets.smoke', side_effect=RuntimeError('boot failed')):
+        with pytest.raises(RuntimeError, match='boot failed'):
+            prepare(directory)
+    assert not (directory / 'ready.json').exists()
 
 
 def test_preparation_reuses_images_and_builds_guest_locally_with_shared_calibration(tmp_path, monkeypatch):

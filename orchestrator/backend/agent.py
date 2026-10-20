@@ -87,7 +87,11 @@ class Agent:
         incoming = directory / 'shared-assets.incoming'
         destination = directory / 'shared-assets'
         # Validate in place before publishing. A failed transfer is never ready.
-        unpack(incoming.parent, '', expected, destination=incoming)
+        if (incoming / 'kernel-assets.json').exists():
+            from kernel_assets import verify
+            verify(incoming, expected)
+        else:
+            unpack(incoming.parent, '', expected, destination=incoming)
         if destination.exists():
             shutil.rmtree(destination)
         incoming.rename(destination)
@@ -187,7 +191,10 @@ class Agent:
         job = next(job for job in config['jobs'] if job['name'] == case)
         output = directory / 'attempts' / key
         output.mkdir(parents=True, exist_ok=True)
-        command = runner.command(config, job, output, config['image'], 'chimaera-' + key)
+        kvm_gid = os.environ.get('CHIMAERA_KVM_GID')
+        device_groups = {'/dev/kvm': int(kvm_gid)} if kvm_gid else {}
+        command = runner.command(config, job, output, config['image'], 'chimaera-' + key,
+                                 device_groups=device_groups)
         # Orchestrated cases may exceed their RAM budget without losing a run.
         # Keep standalone runner hard limits unchanged.
         command[command.index('--memory')] = '--memory-reservation'
@@ -306,7 +313,10 @@ class Agent:
         # The innermost CLI reports its cause before wrappers report the
         # CalledProcessError. Retain that cause for pre-checkpoint failures too.
         errors = re.findall(r'^[\w.-]+\.py: error: [^\r\n]+', log, re.MULTILINE)
-        return errors[0] if errors else None
+        if errors:
+            return errors[0]
+        errors = re.findall(r'^(?:RuntimeError|ValueError|TimeoutError): ([^\r\n]+)', log, re.MULTILINE)
+        return errors[-1] if errors else None
 
     def preparation_report(self, task):
         output = Path(task['output'])
@@ -314,6 +324,9 @@ class Agent:
             report = output / 'preparation-report'
             report.mkdir(parents=True, exist_ok=True)
             for name in ('worker.log', 'request.json', 'ready.json', 'stage.json', 'experiment.json',
+                         'kernel-build.log', 'kernel-smoke/launch.log', 'kernel-smoke/result.json',
+                         'kernel-smoke/board.pc.com_1.device', 'kernel-smoke/check-driver.sh',
+                         'kernel-assets.json', 'kernel-build.json', 'kernel.config',
                          'inputs/inputs.json', 'inputs/runner.json', 'inputs/plan.json',
                          'inputs/prepared/preparation.json', 'inputs/prepared/checkpoints/progress.json'):
                 source = output / name

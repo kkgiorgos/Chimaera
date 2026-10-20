@@ -155,6 +155,19 @@ def test_readiness_progress_and_failure_diagnostics_survive_collection(tmp_path)
     assert not list(report.rglob('ram'))
 
 
+def test_kernel_boot_error_and_serial_are_retained_in_preparation_report(tmp_path):
+    agent = Agent(tmp_path, tmp_path / 'data')
+    directory = agent.directory('e')
+    (directory / 'kernel-smoke').mkdir(parents=True)
+    message = 'Guest kernel/DMA driver boot verification failed; inspect kernel-smoke logs'
+    (directory / 'worker.log').write_text('Traceback (most recent call last):\nRuntimeError: ' + message + '\n')
+    (directory / 'kernel-smoke/board.pc.com_1.device').write_text('load DMA module: Invalid module format')
+    task = dict(id='e-prepare', experiment='e', kind='prepare', status='failed', output=str(directory))
+    assert agent.preparation_log_error(task) == message
+    agent.preparation_report(task)
+    assert (directory / 'preparation-report/kernel-smoke/board.pc.com_1.device').read_text() == 'load DMA module: Invalid module format'
+
+
 def test_retry_preparation_tolerates_already_removed_container(tmp_path):
     agent = Agent(tmp_path, tmp_path / 'data')
     agent.store.put('tasks', 'e-prepare', dict(id='e-prepare', status='failed', container='removed'))
@@ -169,7 +182,8 @@ def test_memory_sizes(size, expected):
     assert memory_bytes(size) == expected
 
 
-def test_case_launch_uses_soft_memory_budget(tmp_path):
+@pytest.mark.parametrize('devices', [[], ['/dev/kvm']])
+def test_case_launch_uses_soft_memory_budget(tmp_path, devices):
     root = Path(__file__).resolve().parents[2]
     agent = Agent(root, tmp_path / 'data')
     directory = agent.directory('e')
@@ -177,14 +191,18 @@ def test_case_launch_uses_soft_memory_budget(tmp_path):
     (directory / 'ready.json').write_text('{}')
     (directory / 'inputs/runner.json').write_text(json.dumps(dict(
         image='test:local', command=['true'], jobs=[dict(name='case-000')],
-        mounts=[], devices=[], cpus=1, memory='2g')))
-    with patch('agent.run', side_effect=[RuntimeError('No such container'), b'created']):
+        mounts=[], devices=devices, cpus=1, memory='2g')))
+    with patch.dict('os.environ', CHIMAERA_KVM_GID='987'), \
+         patch('agent.run', side_effect=[RuntimeError('No such container'), b'created']):
         task = agent.start('e', 'case-000', 'a', 1, '2g')
     argv = task['command']
     assert argv[argv.index('--memory-reservation') + 1] == '2g'
     assert '--memory' not in argv
     assert '--memory-swap' not in argv
     assert task['memory_budget_bytes'] == 2 * 1024**3
+    if devices:
+        assert argv[argv.index('--device') + 1] == '/dev/kvm'
+        assert argv[argv.index('--group-add') + 1] == '987'
 
 
 def test_memory_warning_survives_lower_usage_restart_and_completion(tmp_path):

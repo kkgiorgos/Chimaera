@@ -47,6 +47,12 @@ def asset_inventory(data, keep_paths=()):
     guest = data / 'assets/current-guest.json'
     if guest.exists():
         paths.update(str(Path(p).resolve()) for p in json.loads(guest.read_text()).values() if p)
+    current_kernel = data / 'assets/current-kernel.json'
+    if current_kernel.exists():
+        paths.add(str(Path(json.loads(current_kernel.read_text())['directory']).resolve()))
+    kernel_builder = data / 'assets/kernel-builder.json'
+    if kernel_builder.exists():
+        images.add(json.loads(kernel_builder.read_text())['image'])
     experiments = data / 'experiments'
     # Include archived failed preparations: they may still be needed for recovery.
     for name in ('runner.json', 'ready.json', 'request.json'):
@@ -105,6 +111,13 @@ def asset_inventory(data, keep_paths=()):
         items.append(dict(id=disk.name, kind='disk', name=disk.name,
                           bytes=disk.lstat().st_blocks * 512, protected=protected_disk,
                           reason='Configured, mounted, or referenced by a saved experiment' if protected_disk else ''))
+    for kernel in assets.glob('kernel-*'):
+        if not re.fullmatch(r'kernel-[0-9a-f]{64}', kernel.name) or not kernel.is_dir() or kernel.is_symlink():
+            continue
+        protected_kernel = any(Path(p).is_relative_to(kernel.resolve()) for p in paths)
+        items.append(dict(id=kernel.name, kind='kernel', name=kernel.name,
+                          bytes=allocated_bytes(kernel), protected=protected_kernel,
+                          reason='Current kernel or referenced by a saved experiment or container' if protected_kernel else ''))
     return sorted(items, key=lambda item: item['bytes'] or 0, reverse=True)
 
 
@@ -142,8 +155,15 @@ def clean_unused(data, keep_paths=(), asset_ids=None):
         (assets / ('image-' + image.removeprefix('sha256:') + '.json')).unlink(missing_ok=True)
         removed_images += 1
     removed_disks = 0
+    removed_kernels = 0
+    kernel_freed = 0
     freed = 0
     for item in items:
+        if item['kind'] == 'kernel' and not item['protected']:
+            kernel_freed += item['bytes']
+            shutil.rmtree(assets / item['id'])
+            removed_kernels += 1
+            continue
         if item['kind'] != 'disk' or item['protected']:
             continue
         disk = assets / item['id']
@@ -152,4 +172,5 @@ def clean_unused(data, keep_paths=(), asset_ids=None):
         key = disk.stem.removeprefix('ball-catching-')
         (assets / ('disk-provenance-' + key + '.json')).unlink(missing_ok=True)
         removed_disks += 1
-    return dict(images=removed_images, disks=removed_disks, disk_bytes=freed)
+    return dict(images=removed_images, disks=removed_disks, disk_bytes=freed,
+                kernels=removed_kernels, kernel_bytes=kernel_freed)

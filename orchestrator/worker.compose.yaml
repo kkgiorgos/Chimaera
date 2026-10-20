@@ -12,6 +12,7 @@ services:
       - "${CHIMAERA_DOCKER_GID:?Set Docker socket GID}"
     environment:
       CHIMAERA_REPO: ${CHIMAERA_REPO:?Set absolute repository path}
+      CHIMAERA_KVM_GID: ${CHIMAERA_KVM_GID:-}
     volumes:
       - ${CHIMAERA_REPO}:${CHIMAERA_REPO}
       - /var/run/docker.sock:/var/run/docker.sock
