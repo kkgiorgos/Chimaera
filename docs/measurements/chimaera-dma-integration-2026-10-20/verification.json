@@ -10,28 +10,33 @@
     {
       "kind": "transport CTest",
       "passed": 9,
-      "total": 9
+      "total": 9,
+      "command": "ctest --test-dir /tmp/chimaera-rewrite-transport --output-on-failure"
     },
     {
       "kind": "transport ASan/UBSan CTest",
       "passed": 9,
       "total": 9,
-      "env": "LD_PRELOAD=/lib/x86_64-linux-gnu/libasan.so.6"
+      "env": "LD_PRELOAD=/lib/x86_64-linux-gnu/libasan.so.6",
+      "command": "LD_PRELOAD=/lib/x86_64-linux-gnu/libasan.so.6 ctest --test-dir /tmp/chimaera-rewrite-transport-asan --output-on-failure"
     },
     {
       "kind": "ROS CTest",
       "passed": 14,
-      "total": 14
+      "total": 14,
+      "command": "ctest --test-dir /tmp/chimaera-rewrite-ros --output-on-failure"
     },
     {
       "kind": "wall-follow deployed configuration pytest",
       "passed": 64,
-      "total": 64
+      "total": 64,
+      "command": "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=ros/wall_follow_ws/benchmarking python3 -m pytest -q ros/wall_follow_ws/tests/test_gem5_config.py"
     },
     {
       "kind": "analysis/collector unittest",
       "passed": 8,
-      "total": 8
+      "total": 8,
+      "command": "python3 -m unittest discover -s profiling/chimaera_rewrite -v"
     }
   ],
   "host_cpu": "Intel Core i5-9600K, 6 cores, 3.70 GHz nominal",
@@ -42,8 +47,6 @@
   "guest_kernel": "5.15.0-142-generic",
   "guest_kernel_sha256": "c4a4a9a46725d600d2ec324aced3613bbff2c6a13ca64c81669cb65367f05ccd",
   "gem5_sha256": "705431873db47fc80242b5e07609de983c5c4532b5dc3d0e4f58e450bf64dde4",
-  "fastdds": "2.6.12-1jammy.20260723.233918",
-  "rmw_fastrtps_cpp": "6.2.10-1jammy.20260907.210327",
   "control_roi_instructions": {
     "m5": 146138819,
     "dma": 158575657,
@@ -62,11 +65,273 @@
     "changed_base_files": [
       "opt/chimaera/latency/guest_start"
     ],
-    "capabilities_validation": "pass"
+    "capabilities_validation": "pass",
+    "export_result": "Missing file; ROS run completed but no bridge phases can be attributed."
   },
   "planned_matrices": {
     "m5_acceptance": 9,
     "dma_acceptance": 9,
-    "dma_validation": 15
-  }
+    "dma_validation": 18,
+    "dds_large_pilot": 9
+  },
+  "fastdds_host": "2.6.12-1jammy.20260723.233918",
+  "rmw_fastrtps_cpp_host": "6.2.10-1jammy.20260907.210327",
+  "diagnostic_trace_bundle_v2": {
+    "sha256": "de485110936b75e55684eb38f24ab93470a44a83dde54eefd8db38e9ab7b9d02",
+    "helper_sha256": "4343536a7a9b1c2d29ba061d7edeceaf5ea42dd5400a08ac6ddd5b6fd57267eb",
+    "base_files_checked": 88,
+    "changed_base_files": [
+      "opt/chimaera/latency/guest_start"
+    ],
+    "capabilities_validation": "pass",
+    "note": "Inotify origin notification; gem5 elapsed >=0.7 s controls export; diagnostic only, core binaries unchanged.",
+    "export_result": "pass",
+    "export_elapsed_ns": 703677994
+  },
+  "fastdds_guest": "2.6.12-1jammy.20260723.233918",
+  "rmw_fastrtps_cpp_guest": "6.2.10-1jammy.20260907.210327",
+  "rclcpp_host_and_guest": "16.0.21-1jammy.20260907.213403",
+  "completed_matrices": {
+    "m5_acceptance": 9,
+    "dma_acceptance": 9,
+    "dma_validation": 18,
+    "dds_large_pilot": 9
+  },
+  "dds_experiment": {
+    "performance_cases_matched": 6,
+    "diagnostic_cases": 3,
+    "full_byte_images_valid": true,
+    "empty_source_stream": "large_dds_integrity_chimaera/effort_command",
+    "note": "All nine attempts retained; empty-source diagnostic excluded from performance export."
+  },
+  "diagnostic_exporter_source_sha256": "5b7a4ea259326d6714fd76c5857c8bbb072368923e63890d764fab8aaade9e68",
+  "diagnostic_bundle_adapter_source_sha256": "59a038dd761d31ae2cda8a215a38c0185e77f846384be97d53ff4cfd7acc6a5b",
+  "dds_adapter_source_sha256": "295c82a02a5a18d77b585433d62e14849a6696dab685217830a538001efc2048",
+  "dds_probe_source_sha256": "20813da756c7a16395f2883637d67c9fc9cc1763fb25a7cb0d4cf7faa91f3759",
+  "profiling_tools_commit": "336fc9adaca7bf37de5638fe0e5d5c808acd8549",
+  "history_attempts": {
+    "total": 102,
+    "complete": 92,
+    "outcomes": {
+      "failed": 7,
+      "complete": 92,
+      "interrupted": 1,
+      "cancelled": 2
+    }
+  },
+  "acceptance_delivery": {
+    "m5/control_2s": {
+      "streams": {
+        "host_to_guest": {
+          "published": 194,
+          "received": 194,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "guest_to_host": {
+          "published": 194,
+          "received": 194,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": true
+    },
+    "m5/stereo_latest_2s": {
+      "streams": {
+        "left_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "right_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "joint_states": {
+          "published": 500,
+          "received": 490,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "effort_command": {
+          "published": 501,
+          "received": 240,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "clock": {
+          "published": 2000,
+          "received": 230,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": false,
+      "pair_age_max_ms": 30.996247,
+      "observed_pair_age_within_one_frame_period": true
+    },
+    "m5/stereo_lossless_2s": {
+      "streams": {
+        "left_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "right_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "joint_states": {
+          "published": 500,
+          "received": 500,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "effort_command": {
+          "published": 501,
+          "received": 501,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "clock": {
+          "published": 2000,
+          "received": 2000,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": true,
+      "pair_age_max_ms": 36.052995,
+      "observed_pair_age_within_one_frame_period": false
+    },
+    "dma/control_2s": {
+      "streams": {
+        "host_to_guest": {
+          "published": 194,
+          "received": 194,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "guest_to_host": {
+          "published": 194,
+          "received": 194,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": true
+    },
+    "dma/stereo_latest_2s": {
+      "streams": {
+        "left_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "right_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "joint_states": {
+          "published": 500,
+          "received": 446,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "effort_command": {
+          "published": 499,
+          "received": 265,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "clock": {
+          "published": 2000,
+          "received": 362,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": false,
+      "pair_age_max_ms": 30.988945,
+      "observed_pair_age_within_one_frame_period": true
+    },
+    "dma/stereo_lossless_2s": {
+      "streams": {
+        "left_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "right_image": {
+          "published": 60,
+          "received": 60,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "joint_states": {
+          "published": 500,
+          "received": 500,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "effort_command": {
+          "published": 499,
+          "received": 499,
+          "duplicates": 0,
+          "reordered": 0
+        },
+        "clock": {
+          "published": 2000,
+          "received": 2000,
+          "duplicates": 0,
+          "reordered": 0
+        }
+      },
+      "all_actual_publications_received": true,
+      "pair_age_max_ms": 38.886021,
+      "observed_pair_age_within_one_frame_period": false
+    }
+  },
+  "cleanup": {
+    "time": "2026-10-20T18:57:30.149047+00:00",
+    "test_containers_before": {
+      "chimaera-rewrite-20261020": "running",
+      "chimaera-rewrite-dma-debug-20261020": "running",
+      "chimaera-rewrite-dma-validation-20261020": "running",
+      "chimaera-rewrite-dds-tuning-20261020": "running"
+    },
+    "test_containers_after": {
+      "chimaera-rewrite-20261020": "exited",
+      "chimaera-rewrite-dma-debug-20261020": "exited",
+      "chimaera-rewrite-dma-validation-20261020": "exited",
+      "chimaera-rewrite-dds-tuning-20261020": "exited"
+    },
+    "completed_matrices": {
+      "integration-r5-m5-acceptance": 9,
+      "integration-r5-dma-acceptance": 9,
+      "integration-r5-dma-validation": 18,
+      "integration-r6-dds-large-pilot": 9
+    },
+    "production_before": {
+      "status": "running",
+      "health": "healthy"
+    },
+    "production_after": {
+      "status": "running",
+      "health": "healthy"
+    },
+    "raw_data_retained": "/home/kkgiorgos/Chimaera/.chimaera-rewrite/20261020"
+  },
+  "post_run_binary_hash_check": "Both acceptance SDK binaries match gem5_sha256; module matches retained probe SHA."
 }

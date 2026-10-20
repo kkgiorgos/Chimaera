@@ -1,0 +1,30 @@
+{
+  "time": "2026-10-20T18:57:30.149047+00:00",
+  "test_containers_before": {
+    "chimaera-rewrite-20261020": "running",
+    "chimaera-rewrite-dma-debug-20261020": "running",
+    "chimaera-rewrite-dma-validation-20261020": "running",
+    "chimaera-rewrite-dds-tuning-20261020": "running"
+  },
+  "test_containers_after": {
+    "chimaera-rewrite-20261020": "exited",
+    "chimaera-rewrite-dma-debug-20261020": "exited",
+    "chimaera-rewrite-dma-validation-20261020": "exited",
+    "chimaera-rewrite-dds-tuning-20261020": "exited"
+  },
+  "completed_matrices": {
+    "integration-r5-m5-acceptance": 9,
+    "integration-r5-dma-acceptance": 9,
+    "integration-r5-dma-validation": 18,
+    "integration-r6-dds-large-pilot": 9
+  },
+  "production_before": {
+    "status": "running",
+    "health": "healthy"
+  },
+  "production_after": {
+    "status": "running",
+    "health": "healthy"
+  },
+  "raw_data_retained": "/home/kkgiorgos/Chimaera/.chimaera-rewrite/20261020"
+}

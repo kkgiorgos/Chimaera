@@ -1,0 +1,37 @@
+[INFO] [1325376038.626320250] [guest_bridge]: Receive /latency/ball/left_image/guest [sensor_msgs/msg/Image] (host_to_guest)
+[INFO] [1325376038.626320250] [guest_bridge]: Receive /latency/ball/right_image/guest [sensor_msgs/msg/Image] (host_to_guest)
+[INFO] [1325376038.626320250] [guest_bridge]: Receive /latency/ball/joint_states/guest [sensor_msgs/msg/JointState] (host_to_guest)
+[INFO] [1325376038.626320250] [guest_bridge]: Send /latency/ball/effort_command/guest [sensor_msgs/msg/JointState] (guest_to_host)
+[INFO] [1325376038.642321250] [guest_bridge]: Receive /latency/ball/clock/guest [rosgraph_msgs/msg/Clock] (host_to_guest)
+[INFO] [1325376038.642321250] [guest_bridge]: Send /latency/ball/ready/guest [std_msgs/msg/Bool] (guest_to_host)
+[INFO] [1325376038.642321250] [guest_bridge]: Send /latency/ball/perception_ready/guest [std_msgs/msg/Bool] (guest_to_host)
+[INFO] [1325376038.642321250] [guest_bridge]: Send /latency/guest_events [std_msgs/msg/UInt64MultiArray] (guest_to_host)
+[INFO] [1325376038.782330000] [guest_bridge]: Waiting for guest application ROS endpoints before workbegin
+[INFO] [1325376038.786330250] [guest_bridge]: Guest application ROS endpoints ready
+Can't open /dev/gem5_bridge: No such file or directory
+--> Make sure the gem5_bridge device driver has been properly inserted into the kernel. Otherwise, sudo access required to perform address-mode ops when linking against m5 library.
+[INFO] [1325376038.786330250] [guest_bridge]: Guest bridge ready; entering workbegin barrier
+[INFO] [1325376038.790330500] [guest_bridge]: Authoritative simulation clock ready at 38729573016 ns
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=0 now_ns=2271812 age_ns=2271812 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=0 now_ns=2317382 age_ns=2317382 budget_ns=66666667
+Can't open /dev/gem5_bridge: No such file or directory
+--> Make sure the gem5_bridge device driver has been properly inserted into the kernel. Otherwise, sudo access required to perform address-mode ops when linking against m5 library.
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=0 now_ns=22266228 age_ns=22266228 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=33333333 now_ns=34279446 age_ns=946113 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=33333333 now_ns=34310003 age_ns=976670 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=33333333 now_ns=56384581 age_ns=23051248 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=66666667 now_ns=68302725 age_ns=1636058 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=66666667 now_ns=68334184 age_ns=1667517 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=66666667 now_ns=84636303 age_ns=17969636 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=166666667 now_ns=168306816 age_ns=1640149 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=166666667 now_ns=168338052 age_ns=1671385 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=200000000 now_ns=220390136 age_ns=20390136 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=300000000 now_ns=300282953 age_ns=282953 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=300000000 now_ns=300313931 age_ns=313931 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=300000000 now_ns=321364517 age_ns=21364517 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=400000000 now_ns=400284125 age_ns=284125 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=400000000 now_ns=400315430 age_ns=315430 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=400000000 now_ns=421402005 age_ns=21402005 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=received capture_ns=500000000 now_ns=500297484 age_ns=297484 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=publish_ready capture_ns=500000000 now_ns=500363777 age_ns=363777 budget_ns=66666667
+CHIMAERA_IMAGE component=bridge stage=published capture_ns=533333333 now_ns=556862767 age_ns=23529434 budget_ns=66666667
