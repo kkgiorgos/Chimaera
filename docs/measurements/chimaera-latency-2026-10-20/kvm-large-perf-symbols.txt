@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles:Hu'
+# Event count (approx.): 6220229944
+#
+# Overhead Shared Object Symbol IPC [IPC Coverage]
+# ........ ............................ ....................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................................... ....................
+#
+22.49% gem5.opt [.] gem5::ruby::MessageBuffer::functionalAccess(gem5::Packet*, bool, gem5::ruby::WriteMask*) - -
+4.12% gem5.opt [.] gem5::ruby::Switch::functionalWrite(gem5::Packet*) - -
+4.11% gem5.opt [.] gem5::ruby::CacheMemory::findTagInSet(long, unsigned long) const - -
+3.23% gem5.opt [.] gem5::ruby::SimpleNetwork::functionalWrite(gem5::Packet*) - -
+2.22% gem5.opt [.] gem5::ruby::MESI_Two_Level::L1Cache_Controller::getAccessPermission(unsigned long const&) - -
+1.79% gem5.opt [.] gem5::ruby::RubySystem::functionalWrite(gem5::Packet*) - -
+1.73% gem5.opt [.] gem5::ruby::CacheMemory::lookup(unsigned long) - -
+1.65% libc.so.6 [.] __wmemcmp_evex_movbe - -
+1.57% gem5.opt [.] gem5::PacketQueue::trySatisfyFunctional(gem5::Packet*) - -
+1.35% gem5.opt [.] gem5::PortProxy::readBlobPhys(unsigned long, gem5::Flags<unsigned long>, void*, unsigned long) const - -
+1.29% gem5.opt [.] gem5::PortProxy::writeBlobPhys(unsigned long, gem5::Flags<unsigned long>, void const*, unsigned long) const - -
+1.28% gem5.opt [.] gem5::ruby::CacheMemory::addressToCacheSet(unsigned long) const - -
+1.17% gem5.opt [.] gem5::ruby::RubySystem::simpleFunctionalRead(gem5::Packet*) - -
+1.16% libc.so.6 [.] __wcsnlen_evex - -
+1.05% gem5.opt [.] gem5::ruby::MESI_Two_Level::L2Cache_Controller::getAccessPermission(unsigned long const&) - -
+1.01% gem5.opt [.] gem5::ruby::makeLineAddress(unsigned long, int) - -
+0.94% gem5.opt [.] gem5::ruby::RubyPort::MemResponsePort::recvFunctional(gem5::Packet*) - -
+0.90% gem5.opt [.] gem5::Packet::writeData(unsigned char*) const - -
+0.89% gem5.opt [.] gem5::ruby::MESI_Two_Level::Directory_Controller::getAccessPermission(unsigned long const&) - -
+0.89% gem5.opt [.] gem5::ruby::MESI_Two_Level::Directory_State_to_permission(gem5::ruby::MESI_Two_Level::Directory_State const&) - -
+0.86% gem5.opt [.] std::_Hashtable<std::type_index, std::pair<std::type_index const, pybind11::detail::type_info*>, std::allocator<std::pair<std::type_index const, pybind11::detail::type_info*> >, std::__detail::_Select1st, std::equal_to<std::type_index>, std::hash<std::type_index>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<false, false, true> >::find(std::type_index const&) - -
+0.78% gem5.opt [.] gem5::ruby::RubyPort::functionalWrite(gem5::Packet*) - -
+0.77% libtcmalloc_minimal.so.4.5.9 [.] 0x000000000001d71a - -
+0.73% gem5.opt [.] gem5::memory::MemCtrl::MemoryPort::recvFunctional(gem5::Packet*) - -
+0.67% libpython3.10.so.1.0 [.] 0x0000000000222888 - -
+0.63% libc.so.6 [.] __memcmpeq_evex - -
+0.55% gem5.opt [.] gem5::ruby::MESI_Two_Level::L1Cache_Controller::functionalWriteBuffers(gem5::Packet*&) - -
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

@@ -1,0 +1,26 @@
+CHIMAERA_KERNEL_DIAGNOSTICS_BEGIN
+Linux (none) 5.15.0-142-generic #152-Ubuntu SMP Mon May 19 10:54:31 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
+refined-jiffies
+refined-jiffies jiffies 
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .resolution: 4000000 nsecs
+  .hres_act[    5.056286] random: crng init done
+i[    5.056286] random: 3 urandom warning(s) missed due to ratelimiting
+ve    : 0
+Tick Device: mode:     0
+ mode:           1
+Tick Device: mode:     0
+ mode:           2
+MONOTONIC namespace(implementation='clock_gettime(CLOCK_MONOTONIC)', monotonic=True, adjustable=False, resolution=0.004)
+SLEEP_PROBE {"requested_us": 100, "actual_ns": {"4000250": 20}}
+SLEEP_PROBE {"requested_us": 500, "actual_ns": {"4000250": 20}}
+SLEEP_PROBE {"requested_us": 1000, "actual_ns": {"4000250": 20}}
+SLEEP_PROBE {"requested_us": 5000, "actual_ns": {"8000500": 20}}
+SLEEP_PROBE {"requested_us": 10000, "actual_ns": {"12000750": 20}}
+CHIMAERA_KERNEL_DIAGNOSTICS_END

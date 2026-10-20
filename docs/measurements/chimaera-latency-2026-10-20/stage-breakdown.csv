@@ -1,0 +1,187 @@
+case,path,stage,complete_paths,incomplete_paths,nonmonotonic_paths,maximum_backwards_ms,cohort_mean_ms,count,mean_ms,p50_ms,p95_ms,max_ms
+ball_s5000_p1000_trace,guest_to_host/effort_command,source DDS / guest executor wait,244,0,1,0.225706,8.048821959016394,244,2.3564786844262295,2.145496,4.0824,7.543511
+ball_s5000_p1000_trace,guest_to_host/effort_command,guest adapter / outgoing queue,244,0,1,0.225706,8.048821959016394,244,0.09695118852459017,0.082983,0.139756,0.588629
+ball_s5000_p1000_trace,guest_to_host/effort_command,wait for next guest poll,244,0,1,0.225706,8.048821959016394,244,3.293930893442623,3.021031,5.955904,7.087562
+ball_s5000_p1000_trace,guest_to_host/effort_command,encode / m5 send / host boundary wait,244,0,1,0.225706,8.048821959016394,244,2.3014611926229507,2.082679,4.698401,4.862978
+ball_s5000_p1000_trace,guest_to_host/effort_command,host adapter parse / allocation / copy,244,0,1,0.225706,8.048821959016394,244,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,guest_to_host/effort_command,host publish / DDS / application scheduling,244,0,1,0.225706,8.048821959016394,244,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/joint_states,source DDS / host executor,299,0,0,0.0,7.481830742474917,299,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/joint_states,host adapter / boundary queue,299,0,0,0.0,7.481830742474917,299,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/joint_states,host handoff / polling / transport / decode,299,0,0,0.0,7.481830742474917,299,3.3955053010033445,2.815371,8.475224,10.947634
+ball_s5000_p1000_trace,host_to_guest/joint_states,guest controller delivery,299,0,0,0.0,7.481830742474917,299,0.43699433779264213,0.05233,3.100642,6.447622
+ball_s5000_p1000_trace,host_to_guest/joint_states,guest adapter parse / allocation / copy,299,0,0,0.0,7.481830742474917,299,0.09475466220735786,0.079139,0.141876,1.107489
+ball_s5000_p1000_trace,host_to_guest/joint_states,guest publish / DDS / application scheduling,299,0,0,0.0,7.481830742474917,299,3.554576441471572,2.912047,7.172947,10.855081
+ball_s5000_p1000_trace,host_to_guest/clock,source DDS / host executor,256,0,0,0.0,5.487045890625,256,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/clock,host adapter / boundary queue,256,0,0,0.0,5.487045890625,256,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/clock,host handoff / polling / transport / decode,256,0,0,0.0,5.487045890625,256,2.7246874921875,2.61121,4.960412,8.34672
+ball_s5000_p1000_trace,host_to_guest/clock,guest controller delivery,256,0,0,0.0,5.487045890625,256,0.68288405078125,0.319806,3.339188,6.594008
+ball_s5000_p1000_trace,host_to_guest/clock,guest adapter parse / allocation / copy,256,0,0,0.0,5.487045890625,256,0.094164328125,0.076256,0.165328,1.704236
+ball_s5000_p1000_trace,host_to_guest/clock,guest publish / DDS / application scheduling,256,0,0,0.0,5.487045890625,256,1.98531001953125,1.624819,4.307296,6.188665
+ball_s5000_p1000_trace,host_to_guest/right_image,source DDS / host executor,18,0,0,0.0,9.834434555555555,18,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/right_image,host adapter / boundary queue,18,0,0,0.0,9.834434555555555,18,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/right_image,host handoff / polling / transport / decode,18,0,0,0.0,9.834434555555555,18,4.656944611111111,4.149729,7.81373,7.81373
+ball_s5000_p1000_trace,host_to_guest/right_image,guest controller delivery,18,0,0,0.0,9.834434555555555,18,0.26321294444444443,0.121175,0.632167,0.632167
+ball_s5000_p1000_trace,host_to_guest/right_image,guest adapter parse / allocation / copy,18,0,0,0.0,9.834434555555555,18,1.6878916666666668,1.629673,2.304031,2.304031
+ball_s5000_p1000_trace,host_to_guest/right_image,guest publish / DDS / application scheduling,18,0,0,0.0,9.834434555555555,18,3.2263853333333334,2.843677,8.651812,8.651812
+ball_s5000_p1000_trace,host_to_guest/left_image,source DDS / host executor,18,0,0,0.0,8.502664055555556,18,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/left_image,host adapter / boundary queue,18,0,0,0.0,8.502664055555556,18,0.0,0.0,0.0,0.0
+ball_s5000_p1000_trace,host_to_guest/left_image,host handoff / polling / transport / decode,18,0,0,0.0,8.502664055555556,18,4.452767777777778,4.126895,7.678622,7.678622
+ball_s5000_p1000_trace,host_to_guest/left_image,guest controller delivery,18,0,0,0.0,8.502664055555556,18,0.2786851666666667,0.12313,0.632113,0.632113
+ball_s5000_p1000_trace,host_to_guest/left_image,guest adapter parse / allocation / copy,18,0,0,0.0,8.502664055555556,18,0.608326,0.527098,1.099354,1.099354
+ball_s5000_p1000_trace,host_to_guest/left_image,guest publish / DDS / application scheduling,18,0,0,0.0,8.502664055555556,18,3.162885111111111,3.181701,4.541816,4.541816
+large_s50000_p1000_trace,guest_to_host/synthetic,source DDS / guest executor wait,97,0,0,0.0,33.49926118556701,97,4.834010134020618,4.450987,12.164711,19.268895
+large_s50000_p1000_trace,guest_to_host/synthetic,guest adapter / outgoing queue,97,0,0,0.0,33.49926118556701,97,0.21181986597938143,0.165323,0.39542,1.553632
+large_s50000_p1000_trace,guest_to_host/synthetic,wait for next guest poll,97,0,0,0.0,33.49926118556701,97,4.215731360824742,3.476437,8.199104,8.301649
+large_s50000_p1000_trace,guest_to_host/synthetic,encode / m5 send / host boundary wait,97,0,0,0.0,33.49926118556701,97,24.23769982474227,23.517023,48.81845,49.841857
+large_s50000_p1000_trace,guest_to_host/synthetic,host adapter parse / allocation / copy,97,0,0,0.0,33.49926118556701,97,0.0,0.0,0.0,0.0
+large_s50000_p1000_trace,guest_to_host/synthetic,host publish / DDS / application scheduling,97,0,0,0.0,33.49926118556701,97,0.0,0.0,0.0,0.0
+large_s50000_p1000_trace,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,29.125442103092784,97,0.0,0.0,0.0,0.0
+large_s50000_p1000_trace,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,29.125442103092784,97,0.0,0.0,0.0,0.0
+large_s50000_p1000_trace,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,29.125442103092784,97,4.28509806185567,4.464226,7.818879,7.910601
+large_s50000_p1000_trace,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,29.125442103092784,97,1.5580895257731957,1.456515,3.762871,4.517091
+large_s50000_p1000_trace,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,29.125442103092784,97,0.16644197938144328,0.144225,0.284736,0.584693
+large_s50000_p1000_trace,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,29.125442103092784,97,23.115812536082473,22.726107,44.2369,54.341342
+onecore_s50000_p1000_trace,guest_to_host/synthetic,source DDS / guest executor wait,96,0,0,0.0,30.46282338541667,96,1.1118210416666667,0.719737,3.433802,5.254752
+onecore_s50000_p1000_trace,guest_to_host/synthetic,guest adapter / outgoing queue,96,0,0,0.0,30.46282338541667,96,0.14847722916666667,0.080332,0.261961,1.315301
+onecore_s50000_p1000_trace,guest_to_host/synthetic,wait for next guest poll,96,0,0,0.0,30.46282338541667,96,3.0700887083333335,3.15629,4.560717,5.081632
+onecore_s50000_p1000_trace,guest_to_host/synthetic,encode / m5 send / host boundary wait,96,0,0,0.0,30.46282338541667,96,26.13243640625,27.327761,48.10279,49.747931
+onecore_s50000_p1000_trace,guest_to_host/synthetic,host adapter parse / allocation / copy,96,0,0,0.0,30.46282338541667,96,0.0,0.0,0.0,0.0
+onecore_s50000_p1000_trace,guest_to_host/synthetic,host publish / DDS / application scheduling,96,0,0,0.0,30.46282338541667,96,0.0,0.0,0.0,0.0
+onecore_s50000_p1000_trace,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,13.041328567010309,97,0.0,0.0,0.0,0.0
+onecore_s50000_p1000_trace,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,13.041328567010309,97,0.0,0.0,0.0,0.0
+onecore_s50000_p1000_trace,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,13.041328567010309,97,3.317316731958763,2.94463,6.845194,7.437588
+onecore_s50000_p1000_trace,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,13.041328567010309,97,1.0500203092783507,0.943719,2.600779,3.246981
+onecore_s50000_p1000_trace,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,13.041328567010309,97,0.1287160824742268,0.075069,0.477096,0.852247
+onecore_s50000_p1000_trace,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,13.041328567010309,97,8.54527544329897,8.858908,17.393875,19.361062
+onecore_s5000_p1000_trace,guest_to_host/synthetic,source DDS / guest executor wait,97,0,0,0.0,6.780441731958763,97,0.9367362474226804,0.916269,1.757462,2.950196
+onecore_s5000_p1000_trace,guest_to_host/synthetic,guest adapter / outgoing queue,97,0,0,0.0,6.780441731958763,97,0.11450709278350515,0.080436,0.22062,1.079517
+onecore_s5000_p1000_trace,guest_to_host/synthetic,wait for next guest poll,97,0,0,0.0,6.780441731958763,97,3.1163953092783503,3.172597,4.291661,5.484626
+onecore_s5000_p1000_trace,guest_to_host/synthetic,encode / m5 send / host boundary wait,97,0,0,0.0,6.780441731958763,97,2.6128030824742265,2.520456,4.730023,6.617428
+onecore_s5000_p1000_trace,guest_to_host/synthetic,host adapter parse / allocation / copy,97,0,0,0.0,6.780441731958763,97,0.0,0.0,0.0,0.0
+onecore_s5000_p1000_trace,guest_to_host/synthetic,host publish / DDS / application scheduling,97,0,0,0.0,6.780441731958763,97,0.0,0.0,0.0,0.0
+onecore_s5000_p1000_trace,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,5.86998643298969,97,0.0,0.0,0.0,0.0
+onecore_s5000_p1000_trace,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,5.86998643298969,97,0.0,0.0,0.0,0.0
+onecore_s5000_p1000_trace,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,5.86998643298969,97,3.5658010412371137,3.628228,7.031127,8.827648
+onecore_s5000_p1000_trace,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,5.86998643298969,97,0.0391210618556701,0.025926,0.051846,0.782268
+onecore_s5000_p1000_trace,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,5.86998643298969,97,0.09638859793814433,0.077658,0.20566,0.632994
+onecore_s5000_p1000_trace,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,5.86998643298969,97,2.168675731958763,2.816701,4.300886,4.397533
+small_s1000_p100_trace_r1,guest_to_host/synthetic,source DDS / guest executor wait,90,0,7,0.244069,5.800442944444444,90,1.9229512222222223,1.673792,4.520718,5.303567
+small_s1000_p100_trace_r1,guest_to_host/synthetic,guest adapter / outgoing queue,90,0,7,0.244069,5.800442944444444,90,0.15902336666666667,0.085774,0.619962,1.304172
+small_s1000_p100_trace_r1,guest_to_host/synthetic,wait for next guest poll,90,0,7,0.244069,5.800442944444444,90,2.901254011111111,2.998017,4.52983,8.60759
+small_s1000_p100_trace_r1,guest_to_host/synthetic,encode / m5 send / host boundary wait,90,0,7,0.244069,5.800442944444444,90,0.8172143444444444,0.812962,0.87689,2.703257
+small_s1000_p100_trace_r1,guest_to_host/synthetic,host adapter parse / allocation / copy,90,0,7,0.244069,5.800442944444444,90,0.0,0.0,0.0,0.0
+small_s1000_p100_trace_r1,guest_to_host/synthetic,host publish / DDS / application scheduling,90,0,7,0.244069,5.800442944444444,90,0.0,0.0,0.0,0.0
+small_s1000_p100_trace_r1,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,6.127939474226804,97,0.0,0.0,0.0,0.0
+small_s1000_p100_trace_r1,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,6.127939474226804,97,0.0,0.0,0.0,0.0
+small_s1000_p100_trace_r1,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,6.127939474226804,97,3.259194432989691,2.47202,7.795295,9.36161
+small_s1000_p100_trace_r1,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,6.127939474226804,97,0.029142917525773197,0.026374,0.062536,0.10059
+small_s1000_p100_trace_r1,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,6.127939474226804,97,0.1057439175257732,0.078135,0.267871,0.542458
+small_s1000_p100_trace_r1,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,6.127939474226804,97,2.7338582061855674,2.330643,6.743353,10.722541
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,source DDS / guest executor wait,97,0,0,0.0,260.95647729896905,97,223.1355035154639,233.433457,312.668445,328.523184
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,guest adapter / outgoing queue,97,0,0,0.0,260.95647729896905,97,0.16523827835051547,0.081771,0.413765,1.777635
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,wait for next guest poll,97,0,0,0.0,260.95647729896905,97,11.50145917525773,11.450535,14.411875,15.363304
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,encode / m5 send / host boundary wait,97,0,0,0.0,260.95647729896905,97,26.15427632989691,25.757422,49.531172,49.822979
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,host adapter parse / allocation / copy,97,0,0,0.0,260.95647729896905,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r1,guest_to_host/synthetic,host publish / DDS / application scheduling,97,0,0,0.0,260.95647729896905,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,16.520531783505156,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,16.520531783505156,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,16.520531783505156,97,5.4961154020618554,4.134641,11.399252,11.703698
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,16.520531783505156,97,1.121272268041237,0.923934,3.044721,4.392812
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,16.520531783505156,97,0.11900558762886598,0.075776,0.333489,1.078345
+small_s50000_p10000_trace_r1,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,16.520531783505156,97,9.784138525773196,8.846018,18.840164,29.325947
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,source DDS / guest executor wait,98,0,0,0.0,220.70005627551018,98,182.73802610204083,172.93473,294.313833,306.347335
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,guest adapter / outgoing queue,98,0,0,0.0,220.70005627551018,98,0.12419809183673469,0.080775,0.461207,0.791461
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,wait for next guest poll,98,0,0,0.0,220.70005627551018,98,11.375825214285715,11.37918,13.987756,15.534375
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,encode / m5 send / host boundary wait,98,0,0,0.0,220.70005627551018,98,26.46200686734694,24.406129,47.842649,48.825867
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,host adapter parse / allocation / copy,98,0,0,0.0,220.70005627551018,98,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r2,guest_to_host/synthetic,host publish / DDS / application scheduling,98,0,0,0.0,220.70005627551018,98,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,15.165989103092784,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,15.165989103092784,97,0.0,0.0,0.0,0.0
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,15.165989103092784,97,5.760452670103093,5.344396,11.661592,11.7494
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,15.165989103092784,97,1.4730954329896906,0.972956,6.138867,10.205144
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,15.165989103092784,97,0.21906976288659796,0.075274,0.828008,3.774283
+small_s50000_p10000_trace_r2,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,15.165989103092784,97,7.713371237113402,7.083571,17.094865,22.014053
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,source DDS / guest executor wait,95,0,2,0.187048,33.67257682105263,95,3.417516263157895,3.112603,7.931495,9.902014
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,guest adapter / outgoing queue,95,0,2,0.187048,33.67257682105263,95,0.10331108421052632,0.079406,0.202886,0.707413
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,wait for next guest poll,95,0,2,0.187048,33.67257682105263,95,4.918030305263158,4.581501,7.613816,8.639123
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,encode / m5 send / host boundary wait,95,0,2,0.187048,33.67257682105263,95,25.233719168421054,25.89201,46.89081,49.820491
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,host adapter parse / allocation / copy,95,0,2,0.187048,33.67257682105263,95,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r1,guest_to_host/synthetic,host publish / DDS / application scheduling,95,0,2,0.187048,33.67257682105263,95,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,14.17960406185567,97,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,14.17960406185567,97,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,14.17960406185567,97,4.1815711958762884,3.623541,7.402036,7.504251
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,14.17960406185567,97,0.8853979484536082,0.832421,2.049046,3.690558
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,14.17960406185567,97,0.11050218556701032,0.072526,0.223311,1.527534
+small_s50000_p1000_trace_r1,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,14.17960406185567,97,9.002132731958763,8.037169,18.244092,23.163318
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,source DDS / guest executor wait,94,0,3,0.23017,33.71373688297872,94,3.390106138297872,3.170032,6.744403,8.881032
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,guest adapter / outgoing queue,94,0,3,0.23017,33.71373688297872,94,0.10756951063829787,0.079535,0.338397,0.699097
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,wait for next guest poll,94,0,3,0.23017,33.71373688297872,94,4.8155445,4.518939,7.586482,8.542565
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,encode / m5 send / host boundary wait,94,0,3,0.23017,33.71373688297872,94,25.40051673404255,24.897131,46.864899,47.859924
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,host adapter parse / allocation / copy,94,0,3,0.23017,33.71373688297872,94,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r2,guest_to_host/synthetic,host publish / DDS / application scheduling,94,0,3,0.23017,33.71373688297872,94,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,12.96485618556701,97,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,12.96485618556701,97,0.0,0.0,0.0,0.0
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,12.96485618556701,97,3.7114737319587627,3.585073,8.525922,8.671063
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,12.96485618556701,97,0.6831715360824743,0.668226,1.440704,2.881867
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,12.96485618556701,97,0.09354569072164949,0.073505,0.242862,0.442738
+small_s50000_p1000_trace_r2,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,12.96485618556701,97,8.476665226804124,8.286784,16.420187,21.528805
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,source DDS / guest executor wait,94,0,3,0.101701,10.700669478723405,94,3.258974489361702,3.383772,7.654691,9.34196
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,guest adapter / outgoing queue,94,0,3,0.101701,10.700669478723405,94,0.11309129787234043,0.081806,0.194887,1.302806
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,wait for next guest poll,94,0,3,0.101701,10.700669478723405,94,4.827488563829787,4.810063,7.370906,8.418459
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,encode / m5 send / host boundary wait,94,0,3,0.101701,10.700669478723405,94,2.5011151276595744,2.634985,4.805979,4.872632
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,host adapter parse / allocation / copy,94,0,3,0.101701,10.700669478723405,94,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r1,guest_to_host/synthetic,host publish / DDS / application scheduling,94,0,3,0.101701,10.700669478723405,94,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,source DDS / host executor,96,0,1,0.125023,5.59853428125,96,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,host adapter / boundary queue,96,0,1,0.125023,5.59853428125,96,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,host handoff / polling / transport / decode,96,0,1,0.125023,5.59853428125,96,3.7529964479166664,3.45305,8.225322,10.555003
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,guest controller delivery,96,0,1,0.125023,5.59853428125,96,0.036807729166666664,0.02624,0.070013,0.516922
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,guest adapter parse / allocation / copy,96,0,1,0.125023,5.59853428125,96,0.1055591875,0.077913,0.22092,0.857407
+small_s5000_p1000_trace_r1,host_to_guest/synthetic,guest publish / DDS / application scheduling,96,0,1,0.125023,5.59853428125,96,1.7031709166666666,1.425382,4.829821,5.521466
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,source DDS / guest executor wait,91,0,6,0.480608,8.61419689010989,91,2.6442939670329673,2.140742,6.345886,11.964525
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,guest adapter / outgoing queue,91,0,6,0.480608,8.61419689010989,91,0.11675446153846153,0.083285,0.221336,0.762052
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,wait for next guest poll,91,0,6,0.480608,8.61419689010989,91,3.3694696373626374,3.19158,6.636499,16.62945
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,encode / m5 send / host boundary wait,91,0,6,0.480608,8.61419689010989,91,2.483678824175824,2.655619,4.822884,5.636614
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,host adapter parse / allocation / copy,91,0,6,0.480608,8.61419689010989,91,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r2,guest_to_host/synthetic,host publish / DDS / application scheduling,91,0,6,0.480608,8.61419689010989,91,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,source DDS / host executor,97,0,0,0.0,6.333139618556701,97,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,host adapter / boundary queue,97,0,0,0.0,6.333139618556701,97,0.0,0.0,0.0,0.0
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,host handoff / polling / transport / decode,97,0,0,0.0,6.333139618556701,97,4.1884901237113406,3.56359,8.887456,22.122503
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,guest controller delivery,97,0,0,0.0,6.333139618556701,97,0.05279709278350515,0.025825,0.225641,0.783443
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,guest adapter parse / allocation / copy,97,0,0,0.0,6.333139618556701,97,0.12121454639175258,0.076631,0.361037,1.8127
+small_s5000_p1000_trace_r2,host_to_guest/synthetic,guest publish / DDS / application scheduling,97,0,0,0.0,6.333139618556701,97,1.9706378556701032,1.698733,4.192301,9.60626
+kernel_diagnostics,guest_to_host/synthetic,source DDS / guest executor wait,39,0,0,0.0,6.370213717948718,39,0.9200589230769232,0.923458,2.502767,3.019147
+kernel_diagnostics,guest_to_host/synthetic,guest adapter / outgoing queue,39,0,0,0.0,6.370213717948718,39,0.10540884615384616,0.078375,0.456972,0.484598
+kernel_diagnostics,guest_to_host/synthetic,wait for next guest poll,39,0,0,0.0,6.370213717948718,39,3.028201923076923,3.134867,3.787506,4.725596
+kernel_diagnostics,guest_to_host/synthetic,encode / m5 send / host boundary wait,39,0,0,0.0,6.370213717948718,39,2.3165440256410257,2.383597,4.712628,4.723224
+kernel_diagnostics,guest_to_host/synthetic,host adapter parse / allocation / copy,39,0,0,0.0,6.370213717948718,39,0.0,0.0,0.0,0.0
+kernel_diagnostics,guest_to_host/synthetic,host publish / DDS / application scheduling,39,0,0,0.0,6.370213717948718,39,0.0,0.0,0.0,0.0
+kernel_diagnostics,host_to_guest/synthetic,source DDS / host executor,39,0,0,0.0,5.611323615384615,39,0.0,0.0,0.0,0.0
+kernel_diagnostics,host_to_guest/synthetic,host adapter / boundary queue,39,0,0,0.0,5.611323615384615,39,0.0,0.0,0.0,0.0
+kernel_diagnostics,host_to_guest/synthetic,host handoff / polling / transport / decode,39,0,0,0.0,5.611323615384615,39,3.373207358974359,2.82043,7.979155,8.963279
+kernel_diagnostics,host_to_guest/synthetic,guest controller delivery,39,0,0,0.0,5.611323615384615,39,0.02845676923076923,0.025553,0.040653,0.119943
+kernel_diagnostics,host_to_guest/synthetic,guest adapter parse / allocation / copy,39,0,0,0.0,5.611323615384615,39,0.09994382051282051,0.07658,0.2942,0.361691
+kernel_diagnostics,host_to_guest/synthetic,guest publish / DDS / application scheduling,39,0,0,0.0,5.611323615384615,39,2.1097156666666663,3.023564,3.560096,4.362911
+slow_source_p10000_trace,guest_to_host/synthetic,source DDS / guest executor wait,55,0,0,0.0,40.45176096363636,55,4.857328909090909,3.471911,12.497013,14.13315
+slow_source_p10000_trace,guest_to_host/synthetic,guest adapter / outgoing queue,55,0,0,0.0,40.45176096363636,55,0.08703198181818181,0.077582,0.148114,0.27452
+slow_source_p10000_trace,guest_to_host/synthetic,wait for next guest poll,55,0,0,0.0,40.45176096363636,55,11.796784654545455,11.530288,15.723212,16.499007
+slow_source_p10000_trace,guest_to_host/synthetic,encode / m5 send / host boundary wait,55,0,0,0.0,40.45176096363636,55,23.710615418181817,23.761974,47.746396,48.701448
+slow_source_p10000_trace,guest_to_host/synthetic,host adapter parse / allocation / copy,55,0,0,0.0,40.45176096363636,55,0.0,0.0,0.0,0.0
+slow_source_p10000_trace,guest_to_host/synthetic,host publish / DDS / application scheduling,55,0,0,0.0,40.45176096363636,55,0.0,0.0,0.0,0.0
+slow_source_p10000_trace,host_to_guest/synthetic,source DDS / host executor,56,0,0,0.0,10.112680089285714,56,0.0,0.0,0.0,0.0
+slow_source_p10000_trace,host_to_guest/synthetic,host adapter / boundary queue,56,0,0,0.0,10.112680089285714,56,0.0,0.0,0.0,0.0
+slow_source_p10000_trace,host_to_guest/synthetic,host handoff / polling / transport / decode,56,0,0,0.0,10.112680089285714,56,6.406031910714286,5.520418,12.594802,18.456257
+slow_source_p10000_trace,host_to_guest/synthetic,guest controller delivery,56,0,0,0.0,10.112680089285714,56,0.20831557142857143,0.05288,0.530635,0.591012
+slow_source_p10000_trace,host_to_guest/synthetic,guest adapter parse / allocation / copy,56,0,0,0.0,10.112680089285714,56,0.09344026785714285,0.074784,0.198912,0.320985
+slow_source_p10000_trace,host_to_guest/synthetic,guest publish / DDS / application scheduling,56,0,0,0.0,10.112680089285714,56,3.404892339285714,2.41675,8.176507,11.010915
+timing_small_trace,guest_to_host/synthetic,source DDS / guest executor wait,15,0,0,0.0,10.070100133333332,15,3.2802343333333335,3.578348,4.274475,4.274475
+timing_small_trace,guest_to_host/synthetic,guest adapter / outgoing queue,15,0,0,0.0,10.070100133333332,15,0.0170208,0.015377,0.036609,0.036609
+timing_small_trace,guest_to_host/synthetic,wait for next guest poll,15,0,0,0.0,10.070100133333332,15,3.6665266,3.683582,4.03052,4.03052
+timing_small_trace,guest_to_host/synthetic,encode / m5 send / host boundary wait,15,0,0,0.0,10.070100133333332,15,3.1063183999999997,3.779892,4.798878,4.798878
+timing_small_trace,guest_to_host/synthetic,host adapter parse / allocation / copy,15,0,0,0.0,10.070100133333332,15,0.0,0.0,0.0,0.0
+timing_small_trace,guest_to_host/synthetic,host publish / DDS / application scheduling,15,0,0,0.0,10.070100133333332,15,0.0,0.0,0.0,0.0
+timing_small_trace,host_to_guest/synthetic,source DDS / host executor,14,0,0,0.0,2.287928,14,0.0,0.0,0.0,0.0
+timing_small_trace,host_to_guest/synthetic,host adapter / boundary queue,14,0,0,0.0,2.287928,14,0.0,0.0,0.0,0.0
+timing_small_trace,host_to_guest/synthetic,host handoff / polling / transport / decode,14,0,0,0.0,2.287928,14,1.6549085714285714,1.213265,7.237668,7.237668
+timing_small_trace,host_to_guest/synthetic,guest controller delivery,14,0,0,0.0,2.287928,14,0.0064517142857142855,0.004976,0.025785,0.025785
+timing_small_trace,host_to_guest/synthetic,guest adapter parse / allocation / copy,14,0,0,0.0,2.287928,14,0.012817,0.013107,0.013555,0.013555
+timing_small_trace,host_to_guest/synthetic,guest publish / DDS / application scheduling,14,0,0,0.0,2.287928,14,0.6137507142857144,0.588076,0.955604,0.955604

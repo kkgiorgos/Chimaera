@@ -1,5 +1,10 @@
 # Chimaera message latency benchmark
 
+The [20 October 2026 stack profile](chimaera-latency-profile-2026-10-20.md)
+attributes delivery delay to guest timers, callback queues, polling, synchronization
+boundaries and bulk memory transfers, with per-message traces and CPU samples from
+the `ubuntu-george` deployment.
+
 The benchmark measures **application publish to receiving callback in simulation
 time**, separately for host-to-guest and guest-to-host traffic. Independent
 periodic sources run concurrently with adjustable body size, rate and QoS:

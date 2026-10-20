@@ -1,0 +1,23 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 366  of event 'cycles:Hu'
+# Event count (approx.): 369799219
+#
+# Overhead  Shared Object               
+# ........  ............................
+#
+    53.09%  libpython3.10.so.1.0        
+    31.32%  gem5.opt                    
+     9.36%  libc.so.6                   
+     3.01%  libstdc++.so.6.0.30         
+     2.42%  libtcmalloc_minimal.so.4.5.9
+     0.54%  [unknown]                   
+     0.26%  [vdso]                      
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

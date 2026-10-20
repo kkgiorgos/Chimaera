@@ -1,0 +1,281 @@
+{
+  "date": "2026-10-20",
+  "host": "ubuntu-george",
+  "planned_cases": 31,
+  "completed_cases": 31,
+  "environment": {
+    "collected_utc": "2026-10-20T10:26:00.615241+00:00",
+    "hostname": "ubuntu-george",
+    "kernel": "6.8.0-147-generic",
+    "loadavg": [
+      3.09521484375,
+      5.015625,
+      8.8740234375
+    ],
+    "lscpu": {
+      "lscpu": [
+        {
+          "field": "Architecture:",
+          "data": "x86_64"
+        },
+        {
+          "field": "CPU op-mode(s):",
+          "data": "32-bit, 64-bit"
+        },
+        {
+          "field": "Address sizes:",
+          "data": "39 bits physical, 48 bits virtual"
+        },
+        {
+          "field": "Byte Order:",
+          "data": "Little Endian"
+        },
+        {
+          "field": "CPU(s):",
+          "data": "6"
+        },
+        {
+          "field": "On-line CPU(s) list:",
+          "data": "0-5"
+        },
+        {
+          "field": "Vendor ID:",
+          "data": "GenuineIntel"
+        },
+        {
+          "field": "Model name:",
+          "data": "Intel(R) Core(TM) i5-9600K CPU @ 3.70GHz"
+        },
+        {
+          "field": "CPU family:",
+          "data": "6"
+        },
+        {
+          "field": "Model:",
+          "data": "158"
+        },
+        {
+          "field": "Thread(s) per core:",
+          "data": "1"
+        },
+        {
+          "field": "Core(s) per socket:",
+          "data": "6"
+        },
+        {
+          "field": "Socket(s):",
+          "data": "1"
+        },
+        {
+          "field": "Stepping:",
+          "data": "12"
+        },
+        {
+          "field": "CPU(s) scaling MHz:",
+          "data": "93%"
+        },
+        {
+          "field": "CPU max MHz:",
+          "data": "4600.0000"
+        },
+        {
+          "field": "CPU min MHz:",
+          "data": "800.0000"
+        },
+        {
+          "field": "BogoMIPS:",
+          "data": "7399.70"
+        },
+        {
+          "field": "Flags:",
+          "data": "fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities ibpb_exit_to_user"
+        },
+        {
+          "field": "Virtualization:",
+          "data": "VT-x"
+        },
+        {
+          "field": "L1d cache:",
+          "data": "192 KiB (6 instances)"
+        },
+        {
+          "field": "L1i cache:",
+          "data": "192 KiB (6 instances)"
+        },
+        {
+          "field": "L2 cache:",
+          "data": "1.5 MiB (6 instances)"
+        },
+        {
+          "field": "L3 cache:",
+          "data": "9 MiB (1 instance)"
+        },
+        {
+          "field": "NUMA node(s):",
+          "data": "1"
+        },
+        {
+          "field": "NUMA node0 CPU(s):",
+          "data": "0-5"
+        },
+        {
+          "field": "Vulnerability Gather data sampling:",
+          "data": "Mitigation; Microcode"
+        },
+        {
+          "field": "Vulnerability Indirect target selection:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Itlb multihit:",
+          "data": "KVM: Mitigation: VMX disabled"
+        },
+        {
+          "field": "Vulnerability L1tf:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Mds:",
+          "data": "Mitigation; Clear CPU buffers; SMT disabled"
+        },
+        {
+          "field": "Vulnerability Meltdown:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Mmio stale data:",
+          "data": "Mitigation; Clear CPU buffers; SMT disabled"
+        },
+        {
+          "field": "Vulnerability Reg file data sampling:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Retbleed:",
+          "data": "Mitigation; IBRS"
+        },
+        {
+          "field": "Vulnerability Spec rstack overflow:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Spec store bypass:",
+          "data": "Mitigation; Speculative Store Bypass disabled via prctl"
+        },
+        {
+          "field": "Vulnerability Spectre v1:",
+          "data": "Mitigation; usercopy/swapgs barriers and __user pointer sanitization"
+        },
+        {
+          "field": "Vulnerability Spectre v2:",
+          "data": "Mitigation; IBRS; IBPB conditional; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected"
+        },
+        {
+          "field": "Vulnerability Srbds:",
+          "data": "Mitigation; Microcode"
+        },
+        {
+          "field": "Vulnerability Tsa:",
+          "data": "Not affected"
+        },
+        {
+          "field": "Vulnerability Tsx async abort:",
+          "data": "Mitigation; TSX disabled"
+        },
+        {
+          "field": "Vulnerability Vmscape:",
+          "data": "Mitigation; IBPB before exit to userspace"
+        }
+      ]
+    },
+    "image_id": "sha256:642cd426444f5fe6e0ba2c586ca94937e744590b74511c6a55640b657ec35e93",
+    "container_id": "a5ce29edfdbdf4f56485aef64fed5aa4cd7b45d04d92e91b860a6f8a64f14763",
+    "cpu_limit": 2.0,
+    "memory_limit": 3221225472,
+    "network": "none",
+    "mounts": [
+      {
+        "Type": "bind",
+        "Source": "/home/kkgiorgos/Chimaera/.chimaera-profile/20261020",
+        "Destination": "/profile",
+        "Mode": "",
+        "RW": true,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/assets/ball-catching-5e50830490bb65fe6893.img",
+        "Destination": "/assets/guest.img",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      },
+      {
+        "Type": "bind",
+        "Source": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/assets/x86-linux-kernel-5.15.180",
+        "Destination": "/assets/kernel",
+        "Mode": "",
+        "RW": false,
+        "Propagation": "rprivate"
+      }
+    ],
+    "instrumented_source_sha256": {
+      "gem5-transport/include/chimaera/profile.hpp": "9e83b33fea4dfe58f64cb45a080e9c40bdd1d7135249cbf8d9d6113131fad810",
+      "gem5-transport/src/gem5_host_controller.cpp": "da799dad973a4c1b62effc91e7c326926b2bee3b04e2f493f51e4113a1a49e0a",
+      "gem5-transport/src/gem5_guest_controller.cpp": "9065f9b0ebfb57451304fd8894fa87273906014f2fdfff0e5d1ce953b4bfcf17",
+      "ros/chimaera_ros_ws/src/chimaera_ros_bridge/include/chimaera_ros_bridge/bridge.hpp": "835d46daca430b626428c0c86ecbfb35915467a94145f0db2a4e4f38683041de",
+      "ros/chimaera_ros_ws/src/chimaera_ros_bridge/include/chimaera_ros_bridge/gazebo_timing_controller.hpp": "53c9ac8d5b9844ee36500c302b8e1ac03ffb9323e606c92000a9827826ff703e",
+      "ros/chimaera_ros_ws/src/chimaera_ros_bridge/src/guest_bridge.cpp": "779042e7af02c7300c7cc3a0a0259ae4d457efbfabbfcae71a2d8440546cd354",
+      "ros/chimaera_ros_ws/src/chimaera_ros_bridge/benchmark/driver.cpp": "0460e4ac65f3d9a1d33d4d782830c1f586bba68e9ae27e88bd43f91f817a4e18"
+    }
+  },
+  "artifacts": {
+    "profiles.tar.gz": {
+      "bytes": 2908488,
+      "sha256": "6acb28b0d47852d0c4e8f758edba710ee8e998e91b1e4b7cce06f4e060734b8b"
+    },
+    "cpu-samples.tar.gz": {
+      "bytes": 1113387,
+      "sha256": "b35504e2795e6d0419a50a21d65ee60bc0ad1e5344f7a00d498b67cbe47ea3cf"
+    },
+    "deployed-source.tar.gz": {
+      "bytes": 225242,
+      "sha256": "f708cf9c2ce28e1c897b86ad257ead0cbdbbdd90959fddd433126492dccde505"
+    },
+    "existing-results.tar.gz": {
+      "bytes": 5246669,
+      "sha256": "0dfdef1145328ea1f3c912b927089037306f3e8631c83d1654401c9720502c8a"
+    }
+  },
+  "cpu_captures": [
+    {
+      "case": "small_s1000_p100_trace_r1",
+      "event": "cycles:Hu",
+      "frequency_hz": 999,
+      "requested_wall_seconds": 30,
+      "samples": 366,
+      "return_code": 0,
+      "lost_samples": 0
+    },
+    {
+      "case": "large_s50000_p1000_original",
+      "event": "cycles:Hu",
+      "frequency_hz": 999,
+      "requested_wall_seconds": 10,
+      "samples": 2014,
+      "return_code": 241,
+      "lost_samples": 0,
+      "interpretation": "Saved sample decoded successfully; nonzero capture exit, exploratory hotspot identification"
+    }
+  ],
+  "validation": {
+    "ctest_targets": 11,
+    "ctest_failed": 0,
+    "commands": [
+      "ctest --test-dir /profile/build --output-on-failure",
+      "python3 -m unittest discover -s profiling/chimaera_latency -p test_*.py -v"
+    ],
+    "analysis_tests": 4,
+    "instrumented_source_reproduction_matches": true
+  }
+}
