@@ -27,6 +27,9 @@ class MatchedControls(unittest.TestCase):
                 summarize(changed)
         for field, value in (('rate_hz', 60), ('payload_bytes', 640 * 480), ('duration', 2),
                              ('dds_shm_bytes', 16777216), ('delivery_policy', 'lossless'),
+                             ('transport_backend', 'dma'), ('dds_tuning', 'large_shm_only'),
+                             ('dds_max_message_bytes', 4194304),
+                             ('artifact_sha256', {'/runtime/latency_driver': 'different'}),
                              ('artifact_sha256', {'/runtime/latency_endpoint': 'different'})):
             changed = copy.deepcopy(candidates)
             changed[1]['config'][field] = value

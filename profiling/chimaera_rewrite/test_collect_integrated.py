@@ -17,9 +17,13 @@ class Attempts(unittest.TestCase):
                 (case / 'profile-provenance.json').write_text(json.dumps({'result': status}))
                 # Even a stale summary cannot turn an explicitly failed case into success.
                 (case / 'summary.json').write_text(json.dumps(dict(config={}, directions={})))
+            (root / 'complete/dds-overlay.json').write_text(json.dumps(
+                dict(tuning='large_shm_only', max_message_bytes=4194304)))
             attempts, measurements = collect([root])
             self.assertEqual({a['result'] for a in attempts}, {'failed', 'cancelled', 'complete'})
             self.assertEqual([m['path'] for m in measurements], ['matrix/complete'])
+            self.assertEqual(next(a for a in attempts if a['result'] == 'complete')
+                             ['dds-overlay.json']['max_message_bytes'], 4194304)
 
 
 if __name__ == '__main__':

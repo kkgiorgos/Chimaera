@@ -18,6 +18,8 @@ def main():
     parser.add_argument('bundle', type=Path)
     parser.add_argument('m5', type=Path)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--export-helper', type=Path,
+                        help='Use the gem5-time/inotify exporter instead of a Linux timer')
     args = parser.parse_args()
     if args.output.exists():
         parser.error('Refusing to overwrite a diagnostic bundle')
@@ -31,10 +33,18 @@ def main():
 ) &
 '''
     utility = args.m5.read_bytes()
+    if args.export_helper:
+        wrapper = '''exec 2>/dev/shm/chimaera-image-trace.log
+/opt/chimaera/latency/trace_exporter &
+'''
     metadata = dict(diagnostic_only=True,
                     base_bundle_sha256=hashlib.sha256(args.bundle.read_bytes()).hexdigest(),
                     utility_sha256=hashlib.sha256(utility).hexdigest(),
                     export_sleep_seconds=.75, destination='/dev/shm/chimaera-image-trace.log')
+    if args.export_helper:
+        metadata.update(export_clock='gem5 elapsed', export_elapsed_ns=700000000,
+                        export_helper_sha256=hashlib.sha256(args.export_helper.read_bytes()).hexdigest())
+        del metadata['export_sleep_seconds']
     found = False
     with tarfile.open(args.bundle, 'r:gz') as source, tarfile.open(args.output, 'x:gz') as output:
         for member in source:
@@ -53,8 +63,11 @@ def main():
             output.addfile(member, data)
         if not found:
             raise ValueError('Guest startup was not found')
-        for name, value, mode in [('trace_m5', utility, 0o755),
-                                   ('trace-bundle.json', (json.dumps(metadata, indent=2) + '\n').encode(), 0o644)]:
+        additions = [('trace_m5', utility, 0o755),
+                     ('trace-bundle.json', (json.dumps(metadata, indent=2) + '\n').encode(), 0o644)]
+        if args.export_helper:
+            additions.append(('trace_exporter', args.export_helper.read_bytes(), 0o755))
+        for name, value, mode in additions:
             member = tarfile.TarInfo(root + name)
             member.size, member.mode = len(value), mode
             output.addfile(member, io.BytesIO(value))

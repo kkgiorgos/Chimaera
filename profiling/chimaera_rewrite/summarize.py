@@ -12,7 +12,7 @@ MATCH_FIELDS = (
     'workload', 'payload_bytes', 'rate_hz', 'duration', 'warmup', 'drain',
     'physics_step_ns', 'interval_us', 'poll_us', 'reliability', 'depth', 'ball_catching',
     'delivery_policy', 'verify_payload',
-    'dds_shm_bytes',
+    'transport_backend', 'dds_shm_bytes', 'dds_tuning', 'dds_max_message_bytes',
     'rmw',
 )
 
@@ -23,7 +23,8 @@ def identity(config):
 
 def fingerprints(config):
     return {Path(path).name: digest for path, digest in config.get('artifact_sha256', {}).items()
-            if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so', 'dds.xml')}
+            if Path(path).name in ('latency_endpoint', 'latency_driver',
+                                   'libchimaera_latency_clock.so', 'dds.xml')}
 
 
 def collect(root):

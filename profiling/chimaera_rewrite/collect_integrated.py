@@ -27,7 +27,7 @@ def collect(roots):
                            result=status, metadata=metadata, provenance=provenance,
                            summary=summary,
                            cpu_origin=read(directory / 'gem5/latency_clock_origin.json'))
-            for name in ('diagnostic-stop.json', 'stop-reason.json'):
+            for name in ('diagnostic-stop.json', 'stop-reason.json', 'dds-overlay.json'):
                 value = read(directory / name)
                 if value is not None:
                     attempt[name] = value

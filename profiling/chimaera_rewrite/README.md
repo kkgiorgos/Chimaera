@@ -157,6 +157,54 @@ Serial-console tracing can add modeled delay. `make_tmpfs_trace_bundle.py
 BASE_BUNDLE M5_UTILITY NEW_BUNDLE` keeps runtime binaries unchanged, redirects
 guest stderr into RAM, and exports the file during drain with address-mode m5.
 Use it only for diagnostics: the source window must end before 0.75 s and drain
-must continue past 0.9 s. The retained RAM-profile matrix uses 0.05 s warmup,
+must continue past 0.9 s. The retained RAM-profile matrix uses 0.35 s warmup,
 0.2 s source and 1 s drain. Exported `chimaera-image-trace.log` is read alongside
 device traces. Native controls use the same endpoint/clock/DDS binaries.
+
+The first timer-based RAM attempt completed its ROS measurements but did not
+export a file; retain it without attributing ROS stages. Prefer the corrected
+exporter, which waits for the origin file with inotify, checks gem5 elapsed time,
+and exports at 0.7 s. Its 1 ms Linux sleeps only pace rechecks; they do not define
+the export deadline. It also exports guest kernel and middleware versions.
+This helper adds modeled work and remains diagnostic-only:
+
+```bash
+c++ -std=c++20 -O2 -no-pie -Igem5/include -Igem5/util/m5/src \
+  profiling/chimaera_rewrite/trace_exporter.cpp \
+  gem5/util/m5/build/x86/out/libm5.a -o /tmp/trace-exporter
+python3 profiling/chimaera_rewrite/make_tmpfs_trace_bundle.py \
+  BASE_BUNDLE gem5/util/m5/build/x86/out/m5 NEW_BUNDLE \
+  --export-helper /tmp/trace-exporter
+```
+
+`dds_large_messages.py` is a separate profiling adapter. It interprets
+`dds_tuning: "large_shm_only"` and `dds_max_message_bytes: 4194304`, generating
+a SHM-only 16 MiB segment with a 4 MiB message limit. Keeping a default UDP
+transport also retains its smaller global message limit in Fast DDS 2.6.
+This local-participant experiment removes that constraint; it cannot serve
+remote DDS participants. Runtime, guest and simulator binaries stay unchanged.
+The ordinary case runner does **not** interpret these two experiment fields.
+Use the adapter explicitly and compare against native controls with its same XML:
+
+```bash
+python3 profiling/chimaera_rewrite/dds_large_messages.py \
+  profiling/chimaera_latency/run_cases.py EXPERIMENT_CASES OUTPUT \
+  --runtime RUNTIME --bundle BUNDLE --gem5-root SDK \
+  --source-snapshot SOURCE_ARCHIVE
+```
+
+Each case retains `dds-overlay.json` with the adapter hash and settings, and
+the exporter requires matching tuning/backend fields as well as DDS bytes.
+`dds_profile_probe.cpp` independently checks the middleware's parsed default
+participant settings without creating a participant or consuming a socket:
+
+```bash
+c++ -std=c++17 -O2 -I/opt/ros/humble/include/fastrtps \
+  -I/opt/ros/humble/include/fastcdr profiling/chimaera_rewrite/dds_profile_probe.cpp \
+  -L/opt/ros/humble/lib -lfastrtps -lfastcdr -o /tmp/dds-profile-probe
+LD_LIBRARY_PATH=/opt/ros/humble/lib /tmp/dds-profile-probe OUTPUT/CASE/dds.xml
+```
+
+The probe exits successfully only for the experiment's single SHM transport,
+disabled builtins, 4 MiB message limit and 16 MiB segment. Run it against the
+actual benchmark middleware installation and retain its output.
