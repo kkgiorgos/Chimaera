@@ -1,0 +1,3739 @@
+[
+  {
+    "case": "dma-kvm-final",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.1494140625,
+        2.55224609375,
+        2.67431640625
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "27f9094e41f727e5031748eb98073318a3406e57e05786f1010ffc4c8084e405",
+      "probe_sha256": "5f6fd307b93aa9ea7baab58d8f9b826b777e4a2f511dbcea037ff195673ee02d",
+      "module_sha256": "a276f70f4e878c2c0ccf362f43343f84fdcafeea6c68d4abbc52f437c24e7fdc",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 64,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 5.855009824008448
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 262,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 32,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 291,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 28,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 19,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 19,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 982,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 100,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 181,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 98,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 152570,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 56276,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 289375,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 263209,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 234862,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 219793,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1088773,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1058254,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "kvm",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 4429087,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 2658803,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 3447058,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 2403555,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 1964894,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 5185893,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 2535740,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 2607354,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 2862984,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 2625973,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 2380768,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 1510510,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 1632263,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 1473380,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 1366407,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 1696330,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 2239489,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 2051909,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2878665479,
+      "cpu": "kvm",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 64,
+      "direct_dma": false,
+      "active_cpus": [
+        "X86KvmCPU",
+        "X86KvmCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-merge.opt",
+      "--outdir=/rewrite/dma-kvm-final/gem5",
+      "/rewrite/dma-kvm-final/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-drain.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-final-errors",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-final/timing.sock",
+      "--dma-window",
+      "64"
+    ]
+  },
+  {
+    "case": "dma-kvm-r1",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        3.24951171875,
+        3.2744140625,
+        2.9248046875
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 127",
+      "wall_seconds": 0.20090562201221474
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 454,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 27,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1611,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 100,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 180784,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54097,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 344472,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 247604,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1164926,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1162627,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r1/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r1/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r2",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.904296875,
+        3.18115234375,
+        2.90478515625
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 0.4009406190016307
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 159,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 30,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 856,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 96,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 143760,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 57431,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 291742,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 214096,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1251298,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1906567,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r2/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r2/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r3",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.65673828125,
+        3.08544921875,
+        2.8818359375
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 0.6011893530085217
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 164,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 25,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 850,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 102,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 125946,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 78854,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 389249,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 317190,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1448266,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1632912,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r3/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r3/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r4",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.9072265625,
+        3.1181640625,
+        2.9013671875
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 0.6009218870021868
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 201,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 35,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 925,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 113,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 128775,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54235,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 276286,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 210002,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1042448,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 998019,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r4/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r4/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r5",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.67431640625,
+        3.02880859375,
+        2.8779296875
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 0.6009491500153672
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 543,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 32,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1067,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 109,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 147098,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 59330,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 309185,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 207505,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1065527,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1235081,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r5/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r5/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r6",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.24072265625,
+        2.8369140625,
+        2.8232421875
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "65171896cc2f2f555dfc2514c98d44b9a252036e667db5a6da2474d66c48758a",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 5.80825827998342
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 245,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 44,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 987,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 104,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 138167,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 59040,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 436441,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 346116,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1050526,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1009068,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r6/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r6/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r7",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.1962890625,
+        2.724609375,
+        2.7861328125
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "7a6dd772e67284d27ee306dfc278673ff198a2541d66dca172f30ef25f0718b6",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: 1",
+      "wall_seconds": 5.808900158997858
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 244,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 31,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 778,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 102,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 124740,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54102,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 286153,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 266996,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1455032,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1063636,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r7/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r7/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r8",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.8720703125,
+        2.759765625,
+        2.7890625
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "a8bd3594593364da4d430746e9d4bbae759035809213aa323d2e5693919ed0b6",
+      "probe_sha256": "7a6dd772e67284d27ee306dfc278673ff198a2541d66dca172f30ef25f0718b6",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "gem5 exited during startup: -6",
+      "wall_seconds": 5.60824190499261
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 207,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 42,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 890,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 96,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 133608,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54622,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 306990,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 216191,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1047572,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1054932,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5.opt",
+      "--outdir=/rewrite/dma-kvm-r8/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r8/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-kvm-r9",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.3837890625,
+        2.5751953125,
+        2.70654296875
+      ],
+      "cpu": "kvm",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "7a6dd772e67284d27ee306dfc278673ff198a2541d66dca172f30ef25f0718b6",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 5.920804041001247
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 274,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 32,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 845,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 96,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 154426,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 66920,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 578179,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 448433,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 2382087,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1909002,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "kvm",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 2930682,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 1950212,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 2932447,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 2029832,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 1909941,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 2802653,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 2808885,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 2983632,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1197207,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 2461448,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--outdir=/rewrite/dma-kvm-r9/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "kvm",
+      "--socket-path",
+      "/rewrite/dma-kvm-r9/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-mailbox-timing-final",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.421875,
+        2.63232421875,
+        2.697265625
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "27f9094e41f727e5031748eb98073318a3406e57e05786f1010ffc4c8084e405",
+      "probe_sha256": "5f6fd307b93aa9ea7baab58d8f9b826b777e4a2f511dbcea037ff195673ee02d",
+      "module_sha256": "a276f70f4e878c2c0ccf362f43343f84fdcafeea6c68d4abbc52f437c24e7fdc",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 64,
+      "direct_dma": false,
+      "host_mailbox_echo": true,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 124.46626687300159
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 135,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 20,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 101,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 32,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 18,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 18,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 899,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 96,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 191,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 94,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 145882,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 55582,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 281537,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 211364,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 229751,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 200177,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1024998,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 995787,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "timing",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 1436098,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 1981008,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 1993718,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 1990341,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 1993192,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 1992559,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1993134,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 1983581,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 1982139,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 1983950,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 2064987,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 1986765,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 2070082,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 2075175,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 2081978,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 2067324,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 2573305,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 2690092,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2788759344,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 64,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-merge.opt",
+      "--outdir=/rewrite/dma-mailbox-timing-final/gem5",
+      "/rewrite/dma-mailbox-timing-final/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-drain.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-final-errors",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-mailbox-timing-final/timing.sock",
+      "--dma-window",
+      "64",
+      "--mailbox-h2g",
+      "/rewrite/dma-mailbox-timing-final/h2g.mailbox",
+      "--mailbox-g2h",
+      "/rewrite/dma-mailbox-timing-final/g2h.mailbox"
+    ]
+  },
+  {
+    "case": "dma-mailbox-timing-r1",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        1.23974609375,
+        1.8603515625,
+        2.28369140625
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "f09b075203fc6193138c59191cb470f4c0ac9dfa691095dfeda2f0ff9cda43a7",
+      "module_sha256": "161b859e53d09c6e7f00b7c07a01d070f441da6cef4460d6e3be08dfd8099709",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 1,
+      "direct_dma": false,
+      "host_mailbox_echo": true,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 115.79876569699263
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 377,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 20,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 881,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 98,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 127839,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 56675,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 303175,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 255307,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1266640,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1268037,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "timing",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 1221242,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 1986740,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1994493,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 1984350,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 2221346,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 1974233,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 2206104,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 2043133,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 7476904,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 8625624,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2846589241,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 1,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--outdir=/rewrite/dma-mailbox-timing-r1/gem5",
+      "/rewrite/dma-mailbox-timing-r1/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-bounded.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-smallpool",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-mailbox-timing-r1/timing.sock",
+      "--dma-window",
+      "1",
+      "--mailbox-h2g",
+      "/rewrite/dma-mailbox-timing-r1/h2g.mailbox",
+      "--mailbox-g2h",
+      "/rewrite/dma-mailbox-timing-r1/g2h.mailbox"
+    ]
+  },
+  {
+    "case": "dma-timing-r1",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.57470703125,
+        2.5830078125,
+        2.7021484375
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "7a6dd772e67284d27ee306dfc278673ff198a2541d66dca172f30ef25f0718b6",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "kind": "DMA loopback microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "timing server closed connection",
+      "wall_seconds": 10.416819767997367
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 626,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 30,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 887,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 101,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 133127,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54329,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 280482,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 245430,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1395298,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1176457,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": null,
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--outdir=/rewrite/dma-timing-r1/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r1/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-timing-r10",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.47021484375,
+        2.65966796875,
+        2.59375
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "20ff3a7f5545b521e7bfbe2b1a435a80210998433b4ef27b9c04d48cfc68ec95",
+      "probe_sha256": "e54ea0642ff7434ee3f9ded3ddd77c3b933d07acab88fddf5d2cc1ffd6820741",
+      "module_sha256": "a276f70f4e878c2c0ccf362f43343f84fdcafeea6c68d4abbc52f437c24e7fdc",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 64,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "[Errno 2] No such file or directory: '/rewrite/dma-timing-r10/gem5/chimaera-dma-probe.json'",
+      "wall_seconds": 69.66840460599633
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 160,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 47,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 224,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 34,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 20,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 20,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1108,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 106,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 184,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 104,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 124492,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 60539,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 272929,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 206388,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 222537,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 198372,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1164229,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1036929,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2787427511,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 64,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-progress.opt",
+      "--outdir=/rewrite/dma-timing-r10/gem5",
+      "/rewrite/dma-timing-r10/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-drain.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-final",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r10/timing.sock",
+      "--dma-window",
+      "64"
+    ]
+  },
+  {
+    "case": "dma-timing-r11",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        3.85302734375,
+        3.21875,
+        2.81787109375
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "20ff3a7f5545b521e7bfbe2b1a435a80210998433b4ef27b9c04d48cfc68ec95",
+      "probe_sha256": "5f6fd307b93aa9ea7baab58d8f9b826b777e4a2f511dbcea037ff195673ee02d",
+      "module_sha256": "a276f70f4e878c2c0ccf362f43343f84fdcafeea6c68d4abbc52f437c24e7fdc",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 64,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "guest DMA probe failed: DMA overwrote receive guard: Invalid argument",
+      "wall_seconds": 73.04832300398266
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 125,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 32,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 172,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 33,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 18,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 19,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1095,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 102,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 199,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 96,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 127938,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 51798,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 278476,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 215970,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 219305,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 217789,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1028798,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1171898,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2775289446,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 64,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-progress.opt",
+      "--outdir=/rewrite/dma-timing-r11/gem5",
+      "/rewrite/dma-timing-r11/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-drain.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-final-errors",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r11/timing.sock",
+      "--dma-window",
+      "64"
+    ]
+  },
+  {
+    "case": "dma-timing-r12",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.13818359375,
+        2.7255859375,
+        2.72607421875
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "27f9094e41f727e5031748eb98073318a3406e57e05786f1010ffc4c8084e405",
+      "probe_sha256": "5f6fd307b93aa9ea7baab58d8f9b826b777e4a2f511dbcea037ff195673ee02d",
+      "module_sha256": "a276f70f4e878c2c0ccf362f43343f84fdcafeea6c68d4abbc52f437c24e7fdc",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 64,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 131.09436657099286
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 142,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 39,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 379,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 25,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 25,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 26,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1447,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 108,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 202,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 98,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 150329,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 58255,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 290526,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 228089,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 226385,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 205636,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1030772,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1015002,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "timing",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 0,
+          "repeat": 0,
+          "roundtrip_ns": 25956,
+          "verified": true
+        },
+        {
+          "bytes": 0,
+          "repeat": 1,
+          "roundtrip_ns": 8498,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 0,
+          "roundtrip_ns": 8223,
+          "verified": true
+        },
+        {
+          "bytes": 63,
+          "repeat": 1,
+          "roundtrip_ns": 8161,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 8211,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 8146,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 8231,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 8639,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 0,
+          "roundtrip_ns": 8616,
+          "verified": true
+        },
+        {
+          "bytes": 4097,
+          "repeat": 1,
+          "roundtrip_ns": 8403,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 192053,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 199506,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 380999,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 381132,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 0,
+          "roundtrip_ns": 381228,
+          "verified": true
+        },
+        {
+          "bytes": 1843337,
+          "repeat": 1,
+          "roundtrip_ns": 380892,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1470154,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1483054,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2620256692,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 64,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-merge.opt",
+      "--outdir=/rewrite/dma-timing-r12/gem5",
+      "/rewrite/dma-timing-r12/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-drain.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-final-errors",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r12/timing.sock",
+      "--dma-window",
+      "64"
+    ]
+  },
+  {
+    "case": "dma-timing-r2",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.13232421875,
+        2.53125,
+        2.67919921875
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "bbc153f3a01d1e4750f66c4e845036389ef2a819e35d699038675822225137a5",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "active guest CPU provenance does not match requested model",
+      "wall_seconds": 5.408869123988552
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 197,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 29,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1025,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 100,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 146576,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54635,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 307272,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 215911,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1070954,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1044274,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2774153551,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r2/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-stage",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r2/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-timing-r3",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.126953125,
+        2.4765625,
+        2.65234375
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "bbc153f3a01d1e4750f66c4e845036389ef2a819e35d699038675822225137a5",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "timing server closed connection",
+      "wall_seconds": 10.452890618995298
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 240,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 35,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 819,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 101,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 139017,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 55171,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 309606,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 237896,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1269252,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1231517,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 3030407959,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r3/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-stage",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r3/timing.sock"
+    ]
+  },
+  {
+    "case": "dma-timing-r4",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.7021484375,
+        2.54833984375,
+        2.6591796875
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "bbc153f3a01d1e4750f66c4e845036389ef2a819e35d699038675822225137a5",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 8,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "timing server closed connection",
+      "wall_seconds": 10.235121832985897
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 157,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 30,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1131,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 101,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 137362,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54459,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 280821,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 217197,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1046003,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1128670,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2764798097,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 8,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r4/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-stage",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r4/timing.sock",
+      "--dma-window",
+      "8"
+    ]
+  },
+  {
+    "case": "dma-timing-r5",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        3.6220703125,
+        2.7841796875,
+        2.73291015625
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "bbc153f3a01d1e4750f66c4e845036389ef2a819e35d699038675822225137a5",
+      "module_sha256": "0ad5cecd0151a7d2b9a60649f8547e5a24242510029df3844ca430bfd98318bb",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 1,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "cancelled",
+      "error": "timing server closed connection",
+      "wall_seconds": 571.6911566969939,
+      "cancellation_reason": "Oversized ProtocolTrace and untimed 96 MiB pool reopen; replaced by completed bounded-pool run dma-timing-r7"
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 236,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 25,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 840,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 112,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 127085,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 52584,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 274941,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 215169,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1785928,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1302210,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2983901292,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 1,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma,ProtocolTrace",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r5/gem5",
+      "/rewrite/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-stage",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r5/timing.sock",
+      "--dma-window",
+      "1"
+    ]
+  },
+  {
+    "case": "dma-timing-r6",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.31201171875,
+        2.39111328125,
+        2.53173828125
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "f09b075203fc6193138c59191cb470f4c0ac9dfa691095dfeda2f0ff9cda43a7",
+      "module_sha256": "161b859e53d09c6e7f00b7c07a01d070f441da6cef4460d6e3be08dfd8099709",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 8,
+      "direct_dma": true,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "timing server closed connection",
+      "wall_seconds": 11.313105726003414
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 212,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 39,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 860,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 102,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 142094,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54526,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 280398,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 237099,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1036606,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1002960,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2832861987,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 8,
+      "direct_dma": true,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r6/gem5",
+      "/rewrite/dma-timing-r6/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-bounded.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-smallpool",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r6/timing.sock",
+      "--dma-window",
+      "8",
+      "--direct-dma"
+    ]
+  },
+  {
+    "case": "dma-timing-r7",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        2.5947265625,
+        2.4375,
+        2.53955078125
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "f09b075203fc6193138c59191cb470f4c0ac9dfa691095dfeda2f0ff9cda43a7",
+      "module_sha256": "161b859e53d09c6e7f00b7c07a01d070f441da6cef4460d6e3be08dfd8099709",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 1,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 115.25731390502187
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 174,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 31,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 1150,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 99,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 133280,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 54474,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 319299,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 215053,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1059888,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1074708,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "timing",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 21645,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 6725,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 23499,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 9843,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 933219,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 898203,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 1812320,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 1823538,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 7361345,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 7367177,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2731547900,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 1,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--outdir=/rewrite/dma-timing-r7/gem5",
+      "/rewrite/dma-timing-r7/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-bounded.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-smallpool",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r7/timing.sock",
+      "--dma-window",
+      "1"
+    ]
+  },
+  {
+    "case": "dma-timing-r8",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        1.306640625,
+        2.0595703125,
+        2.38671875
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "b3909bf2f424b65dad60a24d157a69592b36b84be4dc3da9f34c30ff0f2b4d6f",
+      "probe_sha256": "f09b075203fc6193138c59191cb470f4c0ac9dfa691095dfeda2f0ff9cda43a7",
+      "module_sha256": "161b859e53d09c6e7f00b7c07a01d070f441da6cef4460d6e3be08dfd8099709",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 8,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "failed",
+      "error": "timing server closed connection",
+      "wall_seconds": 41.82004513501306
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 181,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 34,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 959,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 109,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 129963,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 55211,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 369390,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 305862,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1112953,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1014397,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": null,
+    "origin": {
+      "origin_ns": 2837237740,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 8,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-apic.opt",
+      "--debug-flags=RubyDma,ProtocolTrace",
+      "--debug-file=dma-debug.log",
+      "--outdir=/rewrite/dma-timing-r8/gem5",
+      "/rewrite/dma-timing-r8/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-bounded.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-smallpool",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r8/timing.sock",
+      "--dma-window",
+      "8"
+    ]
+  },
+  {
+    "case": "dma-timing-r9",
+    "provenance": {
+      "host": "21ce69cd9552",
+      "loadavg": [
+        4.28271484375,
+        3.2587890625,
+        2.70751953125
+      ],
+      "cpu": "timing",
+      "gem5_sha256": "20ff3a7f5545b521e7bfbe2b1a435a80210998433b4ef27b9c04d48cfc68ec95",
+      "probe_sha256": "f09b075203fc6193138c59191cb470f4c0ac9dfa691095dfeda2f0ff9cda43a7",
+      "module_sha256": "161b859e53d09c6e7f00b7c07a01d070f441da6cef4460d6e3be08dfd8099709",
+      "fresh_boot": true,
+      "step_us": 2000,
+      "dma_window": 8,
+      "direct_dma": false,
+      "host_mailbox_echo": false,
+      "kind": "DMA microbenchmark; not end-to-end ROS latency",
+      "result": "complete",
+      "wall_seconds": 116.30919317700318
+    },
+    "native": {
+      "mode": "native",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 363,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 25,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 2719,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 97,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 335623,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 71274,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 579026,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 299481,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1372660,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1543528,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "n/a"
+    },
+    "guest": {
+      "mode": "timing",
+      "kernel_abi": 1,
+      "slot_bytes": 8388608,
+      "samples": [
+        {
+          "bytes": 64,
+          "repeat": 0,
+          "roundtrip_ns": 24580,
+          "verified": true
+        },
+        {
+          "bytes": 64,
+          "repeat": 1,
+          "roundtrip_ns": 8374,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 0,
+          "roundtrip_ns": 8216,
+          "verified": true
+        },
+        {
+          "bytes": 4096,
+          "repeat": 1,
+          "roundtrip_ns": 8458,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 0,
+          "roundtrip_ns": 199022,
+          "verified": true
+        },
+        {
+          "bytes": 921600,
+          "repeat": 1,
+          "roundtrip_ns": 209905,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 0,
+          "roundtrip_ns": 397902,
+          "verified": true
+        },
+        {
+          "bytes": 1843200,
+          "repeat": 1,
+          "roundtrip_ns": 397237,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 0,
+          "roundtrip_ns": 1526671,
+          "verified": true
+        },
+        {
+          "bytes": 7372800,
+          "repeat": 1,
+          "roundtrip_ns": 1532643,
+          "verified": true
+        }
+      ],
+      "integrity": "pass",
+      "reset_reopen": "pass"
+    },
+    "origin": {
+      "origin_ns": 2902704393,
+      "cpu": "timing",
+      "cpu_clock": "3GHz",
+      "num_cores": 2,
+      "dma_window": 8,
+      "direct_dma": false,
+      "active_cpus": [
+        "BaseTimingSimpleCPU",
+        "BaseTimingSimpleCPU"
+      ]
+    },
+    "command": [
+      "/rewrite/chimaera-dma-gem5-progress.opt",
+      "--outdir=/rewrite/dma-timing-r9/gem5",
+      "/rewrite/dma-timing-r9/gem5_dma_probe.py",
+      "--runtime",
+      "/rewrite/runtime-v2",
+      "--image",
+      "/assets/guest.img",
+      "--kernel",
+      "/assets/kernel",
+      "--module",
+      "/rewrite/chimaera_dma-bounded.ko",
+      "--probe",
+      "/rewrite/chimaera-dma-probe-smallpool",
+      "--cpu-type",
+      "timing",
+      "--socket-path",
+      "/rewrite/dma-timing-r9/timing.sock",
+      "--dma-window",
+      "8"
+    ]
+  }
+]

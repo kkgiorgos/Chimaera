@@ -1,0 +1,197 @@
+Eight-request DMA failure before the L2 recycling fix
+Pending: {'0x7d0bbc0': '2840902541379', '0x7d0bc00': '2840902542711', '0x7d0bc40': '2840902549704', '0x7d0bc80': '2840902551036', '0x7d0bcc0': '2840902577343', '0x7d0bd00': '2840902721199', '0x7d0bd40': '2840903446140', '0x7d0bd80': '2840903451135'}
+ADDRESS 0x35acec0
+2837956616919   1    L1Cache                Load     NP>IS     [0x35acec0, line 0x35acec0]
+2837956618917   0    L2Cache             L1_GETS     MT>MT_IIB [0x35acec0, line 0x35acec0]
+2837956620582   0    L1Cache            Fwd_GETS      E>S      [0x35acec0, line 0x35acec0]
+2837956622580   1        Seq                Done       >       [0x35acec8, line 0x35acec0] 18 cycles
+2837956622580   1    L1Cache        DataS_fromL1     IS>S      [0x35acec0, line 0x35acec0]
+2837956622580   0    L2Cache       WB_Data_clean MT_IIB>MT_SB  [0x35acec0, line 0x35acec0]
+2837956622913   1        Seq               Begin       >       [0x35acec0, line 0x35acec0] LD
+2837956623246   1        Seq                Done       >       [0x35acec0, line 0x35acec0] 1 cycles
+2837956623246   1    L1Cache                Load      S>S      [0x35acec0, line 0x35acec0]
+2837956624245   0    L2Cache             Unblock  MT_SB>SS     [0x35acec0, line 0x35acec0]
+2838008218599   1    L1Cache      L1_Replacement      S>I      [0x35acec0, line 0x35acec0]
+2838258198702   0    L2CacheL2_Replacement_clean     SS>I_I    [0x35acec0, line 0x35acec0]
+2838258200367   0    L1Cache                 Inv      S>I      [0x35acec0, line 0x35acec0]
+2838258200367   1    L1Cache                 Inv     NP>NP     [0x35acec0, line 0x35acec0]
+2838258202365   0    L2Cache                 Ack    I_I>I_I    [0x35acec0, line 0x35acec0] 1 p: 1
+2838258202365   0    L2Cache             Ack_all    I_I>M_I    [0x35acec0, line 0x35acec0]
+2838258204363   0  Directory    CleanReplacement      M>I      [0x35acec0, line 0x35acec0]
+2838258206028   0    L2Cache             Mem_Ack    M_I>NP     [0x35acec0, line 0x35acec0]
+2841955913952   0        Seq               Begin       >       [0x35acec8, line 0x35acec0] LD
+2841955914285   0    L1Cache                Load      I>IS     [0x35acec0, line 0x35acec0]
+2842122413286   0    L2Cache             L1_GETS     NP>ISS    [0x35acec0, line 0x35acec0] Resource Stall
+2842122413619   0    L2Cache             L1_GETS     NP>ISS    [0x35acec0, line 0x35acec0] Resource Stall
+2842122413952   0    L2Cache             L1_GETS     NP>ISS    [0x35acec0, line 0x35acec0] Resource Stall
+ADDRESS 0x7d0bbc0
+2840650993179   1        Seq               Begin       >       [0x7d0bbd8, line 0x7d0bbc0] LD
+2840650993512   1        Seq                Done       >       [0x7d0bbd8, line 0x7d0bbc0] 1 cycles
+2840650993512   1    L1Cache                Load      E>E      [0x7d0bbc0, line 0x7d0bbc0]
+2840650995177   1        Seq               Begin       >       [0x7d0bbe0, line 0x7d0bbc0] LD
+2840650995510   1        Seq                Done       >       [0x7d0bbe0, line 0x7d0bbc0] 1 cycles
+2840650995510   1    L1Cache                Load      E>E      [0x7d0bbc0, line 0x7d0bbc0]
+2840650995843   1        Seq               Begin       >       [0x7d0bbe8, line 0x7d0bbc0] LD
+2840650996176   1        Seq                Done       >       [0x7d0bbe8, line 0x7d0bbc0] 1 cycles
+2840650996176   1    L1Cache                Load      E>E      [0x7d0bbc0, line 0x7d0bbc0]
+2840651054784   1        Seq               Begin       >       [0x7d0bbf0, line 0x7d0bbc0] LD
+2840651055117   1        Seq                Done       >       [0x7d0bbf0, line 0x7d0bbc0] 1 cycles
+2840651055117   1    L1Cache                Load      E>E      [0x7d0bbc0, line 0x7d0bbc0]
+2840651055450   1        Seq               Begin       >       [0x7d0bbf8, line 0x7d0bbc0] LD
+2840651055783   1        Seq                Done       >       [0x7d0bbf8, line 0x7d0bbc0] 1 cycles
+2840651055783   1    L1Cache                Load      E>E      [0x7d0bbc0, line 0x7d0bbc0]
+2840667751071   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bbc0, line 0x7d0bbc0]
+2840667753069   0    L2Cache             L1_PUTX     MT>M      [0x7d0bbc0, line 0x7d0bbc0]
+2840667754734   1    L1Cache              WB_Ack    M_I>I      [0x7d0bbc0, line 0x7d0bbc0]
+2840902541712   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bbc0, line 0x7d0bbc0]
+2840902545042   0  Directory            DMA_READ      M>M_DRD  [0x7d0bbc0, line 0x7d0bbc0]
+2842122413286   0    L2Cache             MEM_Inv      M>M_I    [0x7d0bbc0, line 0x7d0bbc0] Resource Stall
+2842122413619   0    L2Cache             MEM_Inv      M>M_I    [0x7d0bbc0, line 0x7d0bbc0] Resource Stall
+2842122413952   0    L2Cache             MEM_Inv      M>M_I    [0x7d0bbc0, line 0x7d0bbc0] Resource Stall
+ADDRESS 0x7d0bc00
+2840651117721   1        Seq               Begin       >       [0x7d0bc18, line 0x7d0bc00] LD
+2840651118054   1        Seq                Done       >       [0x7d0bc18, line 0x7d0bc00] 1 cycles
+2840651118054   1    L1Cache                Load      E>E      [0x7d0bc00, line 0x7d0bc00]
+2840651119719   1        Seq               Begin       >       [0x7d0bc20, line 0x7d0bc00] LD
+2840651120052   1        Seq                Done       >       [0x7d0bc20, line 0x7d0bc00] 1 cycles
+2840651120052   1    L1Cache                Load      E>E      [0x7d0bc00, line 0x7d0bc00]
+2840651120385   1        Seq               Begin       >       [0x7d0bc28, line 0x7d0bc00] LD
+2840651120718   1        Seq                Done       >       [0x7d0bc28, line 0x7d0bc00] 1 cycles
+2840651120718   1    L1Cache                Load      E>E      [0x7d0bc00, line 0x7d0bc00]
+2840651179326   1        Seq               Begin       >       [0x7d0bc30, line 0x7d0bc00] LD
+2840651179659   1        Seq                Done       >       [0x7d0bc30, line 0x7d0bc00] 1 cycles
+2840651179659   1    L1Cache                Load      E>E      [0x7d0bc00, line 0x7d0bc00]
+2840651179992   1        Seq               Begin       >       [0x7d0bc38, line 0x7d0bc00] LD
+2840651180325   1        Seq                Done       >       [0x7d0bc38, line 0x7d0bc00] 1 cycles
+2840651180325   1    L1Cache                Load      E>E      [0x7d0bc00, line 0x7d0bc00]
+2840667875613   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bc00, line 0x7d0bc00]
+2840667877611   0    L2Cache             L1_PUTX     MT>M      [0x7d0bc00, line 0x7d0bc00]
+2840667879276   1    L1Cache              WB_Ack    M_I>I      [0x7d0bc00, line 0x7d0bc00]
+2840902543044   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bc00, line 0x7d0bc00]
+2840902546374   0  Directory            DMA_READ      M>M_DRD  [0x7d0bc00, line 0x7d0bc00]
+ADDRESS 0x7d0bc40
+2840651242263   1        Seq               Begin       >       [0x7d0bc58, line 0x7d0bc40] LD
+2840651242596   1        Seq                Done       >       [0x7d0bc58, line 0x7d0bc40] 1 cycles
+2840651242596   1    L1Cache                Load      E>E      [0x7d0bc40, line 0x7d0bc40]
+2840651244261   1        Seq               Begin       >       [0x7d0bc60, line 0x7d0bc40] LD
+2840651244594   1        Seq                Done       >       [0x7d0bc60, line 0x7d0bc40] 1 cycles
+2840651244594   1    L1Cache                Load      E>E      [0x7d0bc40, line 0x7d0bc40]
+2840651244927   1        Seq               Begin       >       [0x7d0bc68, line 0x7d0bc40] LD
+2840651245260   1        Seq                Done       >       [0x7d0bc68, line 0x7d0bc40] 1 cycles
+2840651245260   1    L1Cache                Load      E>E      [0x7d0bc40, line 0x7d0bc40]
+2840651303868   1        Seq               Begin       >       [0x7d0bc70, line 0x7d0bc40] LD
+2840651304201   1        Seq                Done       >       [0x7d0bc70, line 0x7d0bc40] 1 cycles
+2840651304201   1    L1Cache                Load      E>E      [0x7d0bc40, line 0x7d0bc40]
+2840651304534   1        Seq               Begin       >       [0x7d0bc78, line 0x7d0bc40] LD
+2840651304867   1        Seq                Done       >       [0x7d0bc78, line 0x7d0bc40] 1 cycles
+2840651304867   1    L1Cache                Load      E>E      [0x7d0bc40, line 0x7d0bc40]
+2840668000155   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bc40, line 0x7d0bc40]
+2840668002153   0    L2Cache             L1_PUTX     MT>M      [0x7d0bc40, line 0x7d0bc40]
+2840668003818   1    L1Cache              WB_Ack    M_I>I      [0x7d0bc40, line 0x7d0bc40]
+2840902550037   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bc40, line 0x7d0bc40]
+2840902553367   0  Directory            DMA_READ      M>M_DRD  [0x7d0bc40, line 0x7d0bc40]
+ADDRESS 0x7d0bc80
+2840651366805   1        Seq               Begin       >       [0x7d0bc98, line 0x7d0bc80] LD
+2840651367138   1        Seq                Done       >       [0x7d0bc98, line 0x7d0bc80] 1 cycles
+2840651367138   1    L1Cache                Load      E>E      [0x7d0bc80, line 0x7d0bc80]
+2840651368803   1        Seq               Begin       >       [0x7d0bca0, line 0x7d0bc80] LD
+2840651369136   1        Seq                Done       >       [0x7d0bca0, line 0x7d0bc80] 1 cycles
+2840651369136   1    L1Cache                Load      E>E      [0x7d0bc80, line 0x7d0bc80]
+2840651369469   1        Seq               Begin       >       [0x7d0bca8, line 0x7d0bc80] LD
+2840651369802   1        Seq                Done       >       [0x7d0bca8, line 0x7d0bc80] 1 cycles
+2840651369802   1    L1Cache                Load      E>E      [0x7d0bc80, line 0x7d0bc80]
+2840651428410   1        Seq               Begin       >       [0x7d0bcb0, line 0x7d0bc80] LD
+2840651428743   1        Seq                Done       >       [0x7d0bcb0, line 0x7d0bc80] 1 cycles
+2840651428743   1    L1Cache                Load      E>E      [0x7d0bc80, line 0x7d0bc80]
+2840651429076   1        Seq               Begin       >       [0x7d0bcb8, line 0x7d0bc80] LD
+2840651429409   1        Seq                Done       >       [0x7d0bcb8, line 0x7d0bc80] 1 cycles
+2840651429409   1    L1Cache                Load      E>E      [0x7d0bc80, line 0x7d0bc80]
+2840668152003   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bc80, line 0x7d0bc80]
+2840668154001   0    L2Cache             L1_PUTX     MT>M      [0x7d0bc80, line 0x7d0bc80]
+2840668155666   1    L1Cache              WB_Ack    M_I>I      [0x7d0bc80, line 0x7d0bc80]
+2840902551369   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bc80, line 0x7d0bc80]
+2840902554699   0  Directory            DMA_READ      M>M_DRD  [0x7d0bc80, line 0x7d0bc80]
+ADDRESS 0x7d0bcc0
+2840651491347   1        Seq               Begin       >       [0x7d0bcd8, line 0x7d0bcc0] LD
+2840651491680   1        Seq                Done       >       [0x7d0bcd8, line 0x7d0bcc0] 1 cycles
+2840651491680   1    L1Cache                Load      E>E      [0x7d0bcc0, line 0x7d0bcc0]
+2840651493345   1        Seq               Begin       >       [0x7d0bce0, line 0x7d0bcc0] LD
+2840651493678   1        Seq                Done       >       [0x7d0bce0, line 0x7d0bcc0] 1 cycles
+2840651493678   1    L1Cache                Load      E>E      [0x7d0bcc0, line 0x7d0bcc0]
+2840651494011   1        Seq               Begin       >       [0x7d0bce8, line 0x7d0bcc0] LD
+2840651494344   1        Seq                Done       >       [0x7d0bce8, line 0x7d0bcc0] 1 cycles
+2840651494344   1    L1Cache                Load      E>E      [0x7d0bcc0, line 0x7d0bcc0]
+2840651552952   1        Seq               Begin       >       [0x7d0bcf0, line 0x7d0bcc0] LD
+2840651553285   1        Seq                Done       >       [0x7d0bcf0, line 0x7d0bcc0] 1 cycles
+2840651553285   1    L1Cache                Load      E>E      [0x7d0bcc0, line 0x7d0bcc0]
+2840651553618   1        Seq               Begin       >       [0x7d0bcf8, line 0x7d0bcc0] LD
+2840651553951   1        Seq                Done       >       [0x7d0bcf8, line 0x7d0bcc0] 1 cycles
+2840651553951   1    L1Cache                Load      E>E      [0x7d0bcc0, line 0x7d0bcc0]
+2840668276545   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bcc0, line 0x7d0bcc0]
+2840668278543   0    L2Cache             L1_PUTX     MT>M      [0x7d0bcc0, line 0x7d0bcc0]
+2840668280208   1    L1Cache              WB_Ack    M_I>I      [0x7d0bcc0, line 0x7d0bcc0]
+2840902577676   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bcc0, line 0x7d0bcc0]
+2840902581006   0  Directory            DMA_READ      M>M_DRD  [0x7d0bcc0, line 0x7d0bcc0]
+ADDRESS 0x7d0bd00
+2840651615889   1        Seq               Begin       >       [0x7d0bd18, line 0x7d0bd00] LD
+2840651616222   1        Seq                Done       >       [0x7d0bd18, line 0x7d0bd00] 1 cycles
+2840651616222   1    L1Cache                Load      E>E      [0x7d0bd00, line 0x7d0bd00]
+2840651617887   1        Seq               Begin       >       [0x7d0bd20, line 0x7d0bd00] LD
+2840651618220   1        Seq                Done       >       [0x7d0bd20, line 0x7d0bd00] 1 cycles
+2840651618220   1    L1Cache                Load      E>E      [0x7d0bd00, line 0x7d0bd00]
+2840651618553   1        Seq               Begin       >       [0x7d0bd28, line 0x7d0bd00] LD
+2840651618886   1        Seq                Done       >       [0x7d0bd28, line 0x7d0bd00] 1 cycles
+2840651618886   1    L1Cache                Load      E>E      [0x7d0bd00, line 0x7d0bd00]
+2840651677494   1        Seq               Begin       >       [0x7d0bd30, line 0x7d0bd00] LD
+2840651677827   1        Seq                Done       >       [0x7d0bd30, line 0x7d0bd00] 1 cycles
+2840651677827   1    L1Cache                Load      E>E      [0x7d0bd00, line 0x7d0bd00]
+2840651678160   1        Seq               Begin       >       [0x7d0bd38, line 0x7d0bd00] LD
+2840651678493   1        Seq                Done       >       [0x7d0bd38, line 0x7d0bd00] 1 cycles
+2840651678493   1    L1Cache                Load      E>E      [0x7d0bd00, line 0x7d0bd00]
+2840668401087   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bd00, line 0x7d0bd00]
+2840668403085   0    L2Cache             L1_PUTX     MT>M      [0x7d0bd00, line 0x7d0bd00]
+2840668404750   1    L1Cache              WB_Ack    M_I>I      [0x7d0bd00, line 0x7d0bd00]
+2840902721532   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bd00, line 0x7d0bd00]
+2840902724862   0  Directory            DMA_READ      M>M_DRD  [0x7d0bd00, line 0x7d0bd00]
+ADDRESS 0x7d0bd40
+2840651740431   1        Seq               Begin       >       [0x7d0bd58, line 0x7d0bd40] LD
+2840651740764   1        Seq                Done       >       [0x7d0bd58, line 0x7d0bd40] 1 cycles
+2840651740764   1    L1Cache                Load      E>E      [0x7d0bd40, line 0x7d0bd40]
+2840651742429   1        Seq               Begin       >       [0x7d0bd60, line 0x7d0bd40] LD
+2840651742762   1        Seq                Done       >       [0x7d0bd60, line 0x7d0bd40] 1 cycles
+2840651742762   1    L1Cache                Load      E>E      [0x7d0bd40, line 0x7d0bd40]
+2840651743095   1        Seq               Begin       >       [0x7d0bd68, line 0x7d0bd40] LD
+2840651743428   1        Seq                Done       >       [0x7d0bd68, line 0x7d0bd40] 1 cycles
+2840651743428   1    L1Cache                Load      E>E      [0x7d0bd40, line 0x7d0bd40]
+2840651802036   1        Seq               Begin       >       [0x7d0bd70, line 0x7d0bd40] LD
+2840651802369   1        Seq                Done       >       [0x7d0bd70, line 0x7d0bd40] 1 cycles
+2840651802369   1    L1Cache                Load      E>E      [0x7d0bd40, line 0x7d0bd40]
+2840651802702   1        Seq               Begin       >       [0x7d0bd78, line 0x7d0bd40] LD
+2840651803035   1        Seq                Done       >       [0x7d0bd78, line 0x7d0bd40] 1 cycles
+2840651803035   1    L1Cache                Load      E>E      [0x7d0bd40, line 0x7d0bd40]
+2840668525629   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bd40, line 0x7d0bd40]
+2840668527627   0    L2Cache             L1_PUTX     MT>M      [0x7d0bd40, line 0x7d0bd40]
+2840668529292   1    L1Cache              WB_Ack    M_I>I      [0x7d0bd40, line 0x7d0bd40]
+2840903446473   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bd40, line 0x7d0bd40]
+2840903449803   0  Directory            DMA_READ      M>M_DRD  [0x7d0bd40, line 0x7d0bd40]
+ADDRESS 0x7d0bd80
+2840651864973   1        Seq               Begin       >       [0x7d0bd98, line 0x7d0bd80] LD
+2840651865306   1        Seq                Done       >       [0x7d0bd98, line 0x7d0bd80] 1 cycles
+2840651865306   1    L1Cache                Load      E>E      [0x7d0bd80, line 0x7d0bd80]
+2840651866971   1        Seq               Begin       >       [0x7d0bda0, line 0x7d0bd80] LD
+2840651867304   1        Seq                Done       >       [0x7d0bda0, line 0x7d0bd80] 1 cycles
+2840651867304   1    L1Cache                Load      E>E      [0x7d0bd80, line 0x7d0bd80]
+2840651867637   1        Seq               Begin       >       [0x7d0bda8, line 0x7d0bd80] LD
+2840651867970   1        Seq                Done       >       [0x7d0bda8, line 0x7d0bd80] 1 cycles
+2840651867970   1    L1Cache                Load      E>E      [0x7d0bd80, line 0x7d0bd80]
+2840651926578   1        Seq               Begin       >       [0x7d0bdb0, line 0x7d0bd80] LD
+2840651926911   1        Seq                Done       >       [0x7d0bdb0, line 0x7d0bd80] 1 cycles
+2840651926911   1    L1Cache                Load      E>E      [0x7d0bd80, line 0x7d0bd80]
+2840651927244   1        Seq               Begin       >       [0x7d0bdb8, line 0x7d0bd80] LD
+2840651927577   1        Seq                Done       >       [0x7d0bdb8, line 0x7d0bd80] 1 cycles
+2840651927577   1    L1Cache                Load      E>E      [0x7d0bd80, line 0x7d0bd80]
+2840668650171   1    L1Cache      L1_Replacement      E>M_I    [0x7d0bd80, line 0x7d0bd80]
+2840668652169   0    L2Cache             L1_PUTX     MT>M      [0x7d0bd80, line 0x7d0bd80]
+2840668653834   1    L1Cache              WB_Ack    M_I>I      [0x7d0bd80, line 0x7d0bd80]
+2840903451468   0        DMA         ReadRequest  READY>BUSY_RD [0x7d0bd80, line 0x7d0bd80]
+2840903454798   0  Directory            DMA_READ      M>M_DRD  [0x7d0bd80, line 0x7d0bd80]
