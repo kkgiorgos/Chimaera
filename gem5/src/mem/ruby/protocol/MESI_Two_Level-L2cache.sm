@@ -167,6 +167,7 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
     void allocate(Addr);
     void deallocate(Addr);
     bool isPresent(Addr);
+    bool areNSlotsAvailable(int n, Tick curTime);
   }
 
   TBETable TBEs, template="<L2Cache_TBE>", constructor="m_number_of_TBEs";
@@ -375,7 +376,18 @@ machine(MachineType:L2Cache, "MESI Directory L2 Cache CMP")
           } else if(in_msg.Type == CoherenceResponseType:MEMORY_ACK) {
               trigger(Event:Mem_Ack, in_msg.addr, cache_entry, tbe);
           } else if(in_msg.Type == CoherenceResponseType:INV) {
-              trigger(Event:MEM_Inv, in_msg.addr, cache_entry, tbe);
+              State state := getState(tbe, cache_entry, in_msg.addr);
+              // DMA invalidations allocate replacement TBEs. If those are
+              // exhausted, a resource-stalled invalidation at this queue's
+              // head would block the MEMORY_ACKs that release existing TBEs.
+              // Recycle only that allocation case so acknowledgements and
+              // forwarded L1 data can continue to make progress.
+              if ((state == State:M || state == State:SS || state == State:MT) &&
+                  !TBEs.areNSlotsAvailable(1, clockEdge())) {
+                  responseL2Network_in.recycle(clockEdge(), cyclesToTicks(recycle_latency));
+              } else {
+                  trigger(Event:MEM_Inv, in_msg.addr, cache_entry, tbe);
+              }
           } else {
             error("unknown message type");
           }

@@ -403,10 +403,9 @@ X86ISA::Interrupts::getIntAddrRange() const
 uint32_t
 X86ISA::Interrupts::readReg(ApicRegIndex reg)
 {
-    if (reg >= APIC_TRIGGER_MODE(0) &&
-            reg <= APIC_TRIGGER_MODE(15)) {
-        panic("Local APIC Trigger Mode registers are unimplemented.\n");
-    }
+    // requestInterrupt maintains the per-vector trigger-mode bits. Linux reads
+    // TMR while acknowledging level-triggered PCI interrupts; expose that state
+    // just like IRR/ISR rather than aborting on the first PCI completion.
     switch (reg) {
       case APIC_ARBITRATION_PRIORITY:
         panic("Local APIC Arbitration Priority register unimplemented.\n");
