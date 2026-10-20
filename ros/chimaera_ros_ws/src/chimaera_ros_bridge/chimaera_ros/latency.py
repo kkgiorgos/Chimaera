@@ -117,7 +117,8 @@ def validate(config):
 
 def stage_guest(output, package, bundle=None):
     capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
-    if not capabilities.is_file() or json.loads(capabilities.read_text()).get('version') != 4:
+    metadata = json.loads(capabilities.read_text()) if capabilities.is_file() else {}
+    if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
         raise ValueError('Rebuild the benchmark runtime before staging the current message protocol')
     output = output.resolve()
     # Build the same three routes once. Run-specific routes/QoS are injected at
@@ -147,7 +148,7 @@ def stage_guest(output, package, bundle=None):
     startup = result / 'guest_start'
     startup.write_text(startup.read_text().replace('run session.json --side guest',
         'run /tmp/chimaera-latency-session.json --side guest'))
-    write_json(result / 'latency-runtime.json', dict(version=4, cpu_types=['kvm', 'timing', 'o3'],
+    write_json(result / 'latency-runtime.json', dict(version=4, transport_protocol=3, cpu_types=['kvm', 'timing', 'o3'],
         workloads=['synthetic', 'ball_catching']))
     if bundle:
         def archive_entry(member):
@@ -173,6 +174,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         raise ValueError('Unsupported gem5 CPU model')
     base_env = environment if environment is not None else os.environ
     if config['mode'] == 'chimaera':
+        if bundle:
+            validate_bundle(bundle)
         if not os.access('/dev/kvm', os.R_OK | os.W_OK):
             raise ValueError('KVM mode requires a readable/writable /dev/kvm')
         for artifact in (image, kernel, gem5_root / 'build/X86/gem5.opt'):

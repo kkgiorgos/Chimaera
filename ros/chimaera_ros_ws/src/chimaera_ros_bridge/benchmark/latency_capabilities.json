@@ -1,1 +1,1 @@
-{"version": 4, "workloads": ["synthetic", "ball_catching"]}
+{"version": 4, "transport_protocol": 3, "workloads": ["synthetic", "ball_catching"]}

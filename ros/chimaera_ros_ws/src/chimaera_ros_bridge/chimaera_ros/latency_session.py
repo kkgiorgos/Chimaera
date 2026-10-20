@@ -17,11 +17,11 @@ def validate_bundle(bundle):
     try:
         with tarfile.open(bundle) as archive:
             with archive.extractfile('opt/chimaera/latency/latency-runtime.json') as source:
-                version = json.load(source).get('version')
-        if version != 4:
+                metadata = json.load(source)
+        if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
             raise ValueError('outdated guest bundle')
     except (OSError, KeyError, AttributeError, TypeError, ValueError, tarfile.TarError) as error:
-        raise ValueError('Single-boot sweeps require a staged v4 guest bundle; rebuild and stage the runtime') from error
+        raise ValueError('Require a staged v4 guest bundle with transport protocol 3; rebuild and stage the runtime') from error
 
 
 def hardware_key(config):

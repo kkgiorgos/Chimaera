@@ -59,7 +59,7 @@ class SessionTest(unittest.TestCase):
                 poll_us=[1000]))['cases'][0]['config']
             bundle = root/'guest.tar.gz'
             with tarfile.open(bundle, 'w:gz') as archive:
-                data = b'{"version":4}'
+                data = b'{"version":4,"transport_protocol":3}'
                 member = tarfile.TarInfo('opt/chimaera/latency/latency-runtime.json')
                 member.size = len(data)
                 archive.addfile(member, io.BytesIO(data))
@@ -126,6 +126,14 @@ class SessionTest(unittest.TestCase):
             with tarfile.open(path, 'w:gz'):
                 pass
             with self.assertRaisesRegex(ValueError, 'v4'):
+                validate_bundle(path)
+            # Benchmark schema v4 alone cannot establish transport compatibility.
+            with tarfile.open(path, 'w:gz') as archive:
+                data = b'{"version":4}'
+                member = tarfile.TarInfo('opt/chimaera/latency/latency-runtime.json')
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+            with self.assertRaisesRegex(ValueError, 'transport protocol 3'):
                 validate_bundle(path)
         with self.assertRaisesRegex(ValueError, 'boolean'):
             plan_sweep(dict(DEFAULT, single_boot='true'))

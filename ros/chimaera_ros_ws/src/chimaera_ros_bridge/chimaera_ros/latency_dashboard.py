@@ -186,6 +186,7 @@ class Workbench:
                     marker = archive.extractfile('opt/chimaera/latency/latency-runtime.json')
                     metadata = json.loads(marker.read(4096)) if marker else {}
                 self.bundle_checks[key] = (isinstance(metadata, dict) and metadata.get('version') == 4
+                    and metadata.get('transport_protocol') == 3
                     and isinstance(metadata.get('cpu_types'), list)
                     and all(cpu in metadata['cpu_types'] for cpu in ('kvm', 'timing', 'o3'))
                     and isinstance(metadata.get('workloads'), list)

@@ -114,7 +114,7 @@ class LatencyAnalysisTest(unittest.TestCase):
         binary.write_text('test executable')
         capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
         capabilities.parent.mkdir(parents=True)
-        capabilities.write_text('{"version":4}')
+        capabilities.write_text('{"version":4,"transport_protocol":3}')
         output = self.root / 'stage'
         bundle = self.root / 'guest.tar.gz'
         stage_guest(output, package, bundle)
@@ -129,7 +129,7 @@ class LatencyAnalysisTest(unittest.TestCase):
         with tarfile.open(bundle) as archive:
             self.assertIn('opt/chimaera/latency/guest_start', archive.getnames())
             marker = json.load(archive.extractfile('opt/chimaera/latency/latency-runtime.json'))
-            self.assertEqual(marker, dict(version=4, cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
+            self.assertEqual(marker, dict(version=4, transport_protocol=3, cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
             self.assertTrue(all(not name.startswith('/') and '..' not in Path(name).parts
                                 for name in archive.getnames()))
             self.assertTrue(all(member.mtime == 0 for member in archive.getmembers()))
