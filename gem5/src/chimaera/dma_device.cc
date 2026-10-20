@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 #include "chimaera/dma_device.hh"
+#include "debug/ChimaeraDma.hh"
 
 #include <algorithm>
 #include <cstring>
@@ -14,7 +15,7 @@ namespace gem5 { namespace chimaera {
 
 ChimaeraDma::ChimaeraDma(const Params& p)
     : PciEndpoint(p), loopback(p.loopback), h2gPath(p.h2g_mailbox),
-      g2hPath(p.g2h_mailbox), maxPending(p.max_pending),
+      g2hPath(p.g2h_mailbox), maxPending(p.max_pending), mailboxSlots(p.mailbox_slots),
       txHeaderDone([this] { headerDone(true); }, name() + ".txHeader"),
       rxHeaderDone([this] { headerDone(false); }, name() + ".rxHeader"),
       txSegmentsDone([this] { segmentsDone(true); }, name() + ".txSegments"),
@@ -22,6 +23,7 @@ ChimaeraDma::ChimaeraDma(const Params& p)
 {
     fatal_if(maxPending == 0 || maxPending > 64,
              "Chimaera DMA max_pending must be between 1 and 64");
+    fatal_if(mailboxSlots == 0 || mailboxSlots > 64, "invalid DMA mailbox slot count");
 }
 
 bool
@@ -34,13 +36,19 @@ ChimaeraDma::validMemory(Addr address, std::size_t length) const
 void
 ChimaeraDma::updateInterrupt()
 {
+    DPRINTF(ChimaeraDma, "IRQ causes=%#x asserted=%d command=%#x\n",
+            interrupts, irqAsserted, letoh(config().command));
     auto status = letoh(config().status);
     status = interrupts ? status | 8 : status & ~8;
     config().status = htole(static_cast<uint16_t>(status));
     const bool asserted = interrupts && !(letoh(config().command) & 0x400);
-    if (asserted && !irqAsserted) intrPost();
-    if (!asserted && irqAsserted) intrClear();
+    if (asserted == irqAsserted) return;
+    // Posting migrates to the destination event queue. A KVM CPU can already
+    // acknowledge the device before intrPost returns. Publish our line state
+    // first so a nested ACK clears it, and never overwrite that ACK afterwards.
     irqAsserted = asserted;
+    if (asserted) intrPost();
+    else intrClear();
 }
 
 void
@@ -54,10 +62,12 @@ ChimaeraDma::fail(std::uint32_t code)
 void
 ChimaeraDma::ingress()
 {
+    DPRINTF(ChimaeraDma, "INGRESS irq=%#x tx=%d/%u rx=%d/%u posted=%u\n",
+            interrupts, tx.active, tx.stage, rx.active, rx.stage, postedRx.size());
     if (resetting) return;
     if (!loopback && !h2g) {
-        h2g = std::make_unique<chimaera_mailbox::Mailbox>(h2gPath);
-        g2h = std::make_unique<chimaera_mailbox::Mailbox>(g2hPath);
+        h2g = std::make_unique<chimaera_mailbox::Mailbox>(h2gPath, false, mailboxSlots);
+        g2h = std::make_unique<chimaera_mailbox::Mailbox>(g2hPath, false, mailboxSlots);
     }
     tryTx();
     tryRx();
@@ -139,6 +149,8 @@ ChimaeraDma::headerDone(bool transmit)
     if (resetting) { transfer.active = false; finishReset(); return; }
     const auto length = letoh(transfer.descriptor.length);
     const auto count = letoh(transfer.descriptor.segments);
+    DPRINTF(ChimaeraDma, "%s HEADER cookie=%llu bytes=%u sg=%u\n",
+            transmit ? "TX" : "RX", letoh(transfer.descriptor.cookie), length, count);
     if (length > CHDMA_MAX_BYTES || count > CHDMA_MAX_SEGMENTS ||
         count != (length + CHDMA_PAGE_BYTES - 1) / CHDMA_PAGE_BYTES ||
         (!transmit && length < transfer.length)) {
@@ -171,6 +183,8 @@ void
 ChimaeraDma::segmentsDone(bool transmit)
 {
     auto& transfer = transmit ? tx : rx;
+    DPRINTF(ChimaeraDma, "%s PAYLOAD_BEGIN cookie=%llu bytes=%u\n",
+            transmit ? "TX" : "RX", letoh(transfer.descriptor.cookie), transfer.length);
     if (resetting) { transfer.active = false; finishReset(); return; }
     // Validate the entire scatter list before issuing any payload request.
     for (const auto& segment : transfer.segments) {
@@ -202,6 +216,8 @@ void
 ChimaeraDma::payloadDone(bool transmit)
 {
     auto& transfer = transmit ? tx : rx;
+    DPRINTF(ChimaeraDma, "%s COMPLETE cookie=%llu bytes=%u\n",
+            transmit ? "TX" : "RX", letoh(transfer.descriptor.cookie), transfer.length);
     if (resetting) { transfer.active = false; finishReset(); return; }
     if (transmit) {
         if (loopback) echoed.push_back(std::move(echoTx));

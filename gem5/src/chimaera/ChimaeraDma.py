@@ -21,5 +21,6 @@ class ChimaeraDma(PciEndpoint):
     h2g_mailbox = Param.String("/tmp/chimaera_dma_h2g", "Host input mailbox")
     g2h_mailbox = Param.String("/tmp/chimaera_dma_g2h", "Host output mailbox")
     max_pending = Param.Unsigned(64, "Maximum queued receive descriptors")
+    mailbox_slots = Param.Unsigned(2, "Slots in each host mailbox (must match host controller)")
 
     cxx_exports = [PyBindMethod("ingress")]

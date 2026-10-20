@@ -39,6 +39,12 @@ configure_ticks()
 requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL, kvm_required=True)
 if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
     parser.error('Core counts and cache associativity must be positive')
+if args.transport_backend == 'dma' and args.case_script:
+    parser.error('DMA requires a fresh boot; reused sessions are not supported')
+CacheHierarchy = MESITwoLevelCacheHierarchy
+if args.transport_backend == 'dma':
+    from chimaera_dma import DmaCacheHierarchy, DmaTimingServer, attach_dma
+    CacheHierarchy = DmaCacheHierarchy
 processor = (SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=args.num_cores)
     if args.cpu_type == 'kvm' else SimpleSwitchableProcessor(
         starting_core_type=CPUTypes.KVM,
@@ -48,7 +54,7 @@ for core in processor.get_cores():
     core.get_simobject().usePerf = False
 board = X86Board(clk_freq=args.cpu_clock, processor=processor,
     memory=SingleChannelDDR3_1600(size='3GiB'),
-    cache_hierarchy=MESITwoLevelCacheHierarchy(l1d_size=args.l1d_size, l1d_assoc=args.l1_assoc,
+    cache_hierarchy=CacheHierarchy(l1d_size=args.l1d_size, l1d_assoc=args.l1_assoc,
         l1i_size=args.l1i_size, l1i_assoc=args.l1_assoc, l2_size=args.l2_size,
         l2_assoc=args.l2_assoc, num_l2_banks=1))
 preamble = 'rm -f /tmp/chimaera-sim-time-origin.ns /tmp/chimaera-latency-endpoint-ready\n'
@@ -60,9 +66,12 @@ if args.guest_bundle:
 board.set_kernel_disk_workload(
     kernel=KernelResource(local_path=args.kernel),
     disk_image=DiskImageResource(local_path=args.image),
-    kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off'],
+    kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off']
+        + (['acpi=off'] if args.transport_backend == 'dma' else []),
     readfile_contents=guest_start_script(args.guest_command, args.guest_file,
         preamble=preamble))
+if args.transport_backend == 'dma':
+    attach_dma(board, args.dma_h2g, args.dma_g2h)
 
 
 switched = False
@@ -77,12 +86,14 @@ def prepare_clock():
     Path(str(board.readfile)).write_text(f'CHIMAERA_TIME_ORIGIN_NS {origin}\n')
     (Path(m5.options.outdir) / 'latency_clock_origin.json').write_text(
         json.dumps(dict(origin_ns=origin, cpu=args.cpu_type, num_cores=args.num_cores,
-                        cpu_clock=args.cpu_clock,
+                        cpu_clock=args.cpu_clock, transport_backend=args.transport_backend,
                         active_cpus=[core.get_simobject().type for core in processor.get_cores()])) + '\n')
 
 
 timing = (ReusableTimingServer(readfile=str(board.readfile), case_script=args.case_script,
                               on_ready=prepare_clock) if args.case_script
           else TimingServer(on_ready=prepare_clock))
+if args.transport_backend == 'dma':
+    timing = DmaTimingServer(board, on_ready=prepare_clock)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

@@ -95,7 +95,11 @@ requires(
 )
 
 
-cache_hierarchy = MESITwoLevelCacheHierarchy(
+CacheHierarchy = MESITwoLevelCacheHierarchy
+if args.transport_backend == 'dma':
+    from chimaera_dma import DmaCacheHierarchy, DmaTimingServer, attach_dma
+    CacheHierarchy = DmaCacheHierarchy
+cache_hierarchy = CacheHierarchy(
     l1d_size=args.l1d_size,
     l1d_assoc=args.l1_assoc,
     l1i_size=args.l1i_size,
@@ -140,7 +144,7 @@ board.set_kernel_disk_workload(
         "lpj=7999923",
         "root=/dev/sda2",
         "mce=off",
-    ],
+    ] + (['acpi=off'] if args.transport_backend == 'dma' else []),
     readfile_contents=boot_script,
 )
 
@@ -168,5 +172,8 @@ def prepare_roi():
 
 
 timing = TimingServer(on_ready=prepare_roi)
+if args.transport_backend == 'dma':
+    attach_dma(board, args.dma_h2g, args.dma_g2h)
+    timing = DmaTimingServer(board, on_ready=prepare_roi)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

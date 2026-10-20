@@ -91,6 +91,11 @@ public:
     const auto physics_file = declare_parameter<std::string>("physics_clock_file", "");
     if (!physics_file.empty()) physics_ = std::make_unique<SharedClock>(physics_file);
     ball_ = declare_parameter<std::string>("workload", "synthetic") == "ball_catching";
+    const auto policy = declare_parameter<std::string>("delivery_policy", "latest");
+    if (policy != "latest" && policy != "lossless")
+      throw std::invalid_argument("Invalid delivery policy");
+    lossless_ = policy == "lossless";
+    verify_payload_ = declare_parameter<bool>("verify_payload", false);
     const auto payload = declare_parameter<int64_t>("payload_bytes", 64);
     rate_ = declare_parameter<double>("rate_hz", 20.0);
     const auto warmup = declare_parameter<int64_t>("warmup_ns", 500000000);
@@ -236,6 +241,7 @@ private:
     // use SensorDataQoS (depth 5); the effort receiver uses depth 1. Synthetic
     // camera/clock producers use the ROS/Gazebo publisher queue depth of 10.
     if (outgoing) qos = (id <= 2 || id == 5) ? rclcpp::QoS(10).reliable() : rclcpp::SensorDataQoS();
+    if (lossless_) qos = rclcpp::QoS(128).reliable().durability_volatile();
     if (outgoing) {
       auto publisher = create_publisher<Message>(name, qos);
       publishers_.push_back(publisher);
@@ -243,6 +249,14 @@ private:
       stream.publish = [this, publisher, message](uint64_t scheduled) {
         stamp(*message).sec = scheduled / 1000000000ULL;
         stamp(*message).nanosec = scheduled % 1000000000ULL;
+        if constexpr (std::is_same_v<Message, sensor_msgs::msg::Image>) {
+          if (verify_payload_) {
+            for (unsigned i = 0; i < 8; ++i) {
+              message->data[i] = static_cast<uint8_t>(scheduled >> (8 * i));
+              message->data[message->data.size() - 8 + i] = message->data[i] ^ 0xff;
+            }
+          }
+        }
         const auto published = now();
         if (published >= stop_) return SharedClock::unset;
         publisher->publish(*message);
@@ -261,6 +275,25 @@ private:
           const auto sequence = static_cast<uint64_t>(std::llround(capture * stream.rate / 1e9));
           if (release(sequence, stream.rate) != capture)
             throw std::runtime_error("Message capture stamp does not identify a source sample");
+          if constexpr (std::is_same_v<Message, sensor_msgs::msg::Image>) {
+            if (verify_payload_) {
+              if (
+                message->encoding != "rgb8" || message->step != message->width * 3 ||
+                message->data.size() != message->height * message->step)
+                throw std::runtime_error("Image dimensions/encoding corrupted");
+              for (std::size_t i = 0; i < message->data.size(); ++i) {
+                const auto expected =
+                  i < 8 ? static_cast<uint8_t>(capture >> (8 * i))
+                  : i >= message->data.size() - 8
+                    ? static_cast<uint8_t>(
+                        (capture >> (8 * (i - (message->data.size() - 8)))) ^ 0xff)
+                    : 0xa5;
+                if (message->data[i] != expected)
+                  throw std::runtime_error(
+                    "Image payload corrupted or buffer reused before delivery");
+              }
+            }
+          }
           if (events_.size() >= 4000000)
             throw std::runtime_error("Benchmark event capacity exceeded");
           // Actual publication time is joined from buffered source records after
@@ -433,6 +466,8 @@ private:
     }
   }
   bool ball_{};
+  bool lossless_{};
+  bool verify_payload_{};
   std::map<uint64_t, Stream> streams_;
   std::vector<Stream> background_;
   std::vector<rclcpp::PublisherBase::SharedPtr> publishers_;

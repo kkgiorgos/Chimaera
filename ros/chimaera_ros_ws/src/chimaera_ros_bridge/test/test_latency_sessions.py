@@ -55,7 +55,7 @@ class SessionTest(unittest.TestCase):
                          root/'disk', root/'kernel']:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b'fixture')
-            config = plan_sweep(dict(DEFAULT, modes=['chimaera'], interval_us=[50000],
+            config = plan_sweep(dict(DEFAULT, modes=['chimaera'], interval_us=[50000], dds_shm_bytes=16777216,
                 poll_us=[1000]))['cases'][0]['config']
             bundle = root/'guest.tar.gz'
             with tarfile.open(bundle, 'w:gz') as archive:
@@ -102,6 +102,11 @@ class SessionTest(unittest.TestCase):
                 session_config = json.loads((root/'second/guest-session.json').read_text())
                 self.assertEqual(session_config['bridge']['application_ready_file'],
                                  '/tmp/chimaera-latency-endpoint-ready')
+                self.assertFalse(session_config['guest']['localhost_only'])
+                self.assertEqual(session_config['guest']['env']['CHIMAERA_LATENCY_REUSE'], '1')
+                self.assertEqual(session_config['guest']['env']['FASTRTPS_DEFAULT_PROFILES_FILE'],
+                                 '/tmp/chimaera-latency-dds.xml')
+                self.assertIn('/tmp/chimaera-latency-dds.xml', (root/'first/next-case.sh').read_text())
                 self.assertIn('/tmp/chimaera-latency-endpoint-ready', (root/'first/next-case.sh').read_text())
                 subprocess.run(['bash', '-n', str(root/'first/next-case.sh')], check=True)
                 self.assertEqual(dict(json.loads((root/'second/commands.json').read_text()))['gem5'][0],

@@ -122,3 +122,38 @@ The simulator's m5 handlers panic on socket failures; the adapter cannot turn
 those panics into guest result errors. The libm5 mapping helper can also exit
 on setup failure. Controller shutdown and failure behavior are documented
 separately in [CONTROLLERS.md](CONTROLLERS.md).
+
+## Coherent DMA backend
+
+`chimaera/dma_controller.hpp` supplies `DmaHostController` and
+`DmaGuestController` through the existing controller targets. Build the simulator
+with `ChimaeraDma` and the guest module against the exact running kernel; see
+[kernel/README.md](kernel/README.md). The ROS bridge selects this path with
+`transport_backend: dma`. The m5 backend remains the default.
+
+The host creates bounded shared mailboxes and admits input only while gem5 is
+paused. The guest uses registered scatter/gather buffers, coherent timing DMA,
+interrupt completions and a ROS guard condition. Application callbacks stay on
+the executor thread. A received `Message` retains its registered buffer until
+publication returns; explicit slices keep a whole control batch loaned until its
+last record is released. Ordinary copies retain deep value semantics.
+
+DMA controller protocol 2 (`CHDMA002`, driver ABI 1) batches consecutive frames
+up to 4096 bytes into packets capped at 64 KiB and 64 records. Large frames keep
+their own buffer. Global FIFO and explicit coalescing policies are preserved.
+Transmit allocations reserve a 16-byte prefix, so adding the packet header does
+not copy an image. One TX slot is reserved for heap fallback and control batching;
+this prevents pool starvation behind queued registered loans.
+
+The benchmark defaults to `buffer_mb=8 receive_slots=16 transmit_slots=4`:
+160 MiB of guest registered memory, allocated before workbegin. This supports
+640×480 and 1280×960 raw RGB stereo packets. Application frames must fit within
+`slot_bytes - 16`, including their route/stereo envelope. `buffer_mb` can be
+raised to 32 for larger frames; oversized frames fail explicitly. There is no
+implicit image compression, fragmentation, or delivery-policy change.
+
+Use a fresh VM for each DMA case. Checkpoint restore, reused-VM sessions and
+production ACPI PCI routing remain unsupported. Native references must use the
+same endpoint binary, traffic shape, delivery policy and measurement window;
+KVM remains a smoke-check CPU. End-to-end ROS results and raw device results are
+separate measurements.

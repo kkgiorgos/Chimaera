@@ -62,7 +62,7 @@ public:
     for (const auto & route : routes) {
       const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
       if (!route.coalesce_group.empty()) {
-        stereo_.add(route.coalesce_group, route.key);
+        stereo_.add(route.coalesce_group, route.key, route.coalesce);
         stereo_groups_[route.key] = route.coalesce_group;
       }
       const bool outgoing = (side == "host") == (route.direction == "host_to_guest");
@@ -76,7 +76,7 @@ public:
               throw std::runtime_error(
                 "bridge outgoing queue or serialized message limit exceeded");
             }
-            auto bytes = chimaera::Message::for_overwrite(8 + key.size() + message->size());
+            auto bytes = allocate(8 + key.size() + message->size());
             std::memcpy(bytes.data(), "CBR1", 4);
             const auto length = static_cast<std::uint32_t>(key.size());
             for (unsigned i = 0; i < 4; ++i) {
@@ -97,15 +97,14 @@ public:
             if (auto pair = stereo_.submit(group, key, stamp, std::move(bytes))) {
               // One controller entry makes replacement and worker-thread drains
               // atomic for both cameras. Inner CBR1 payloads remain unchanged.
-              auto packed =
-                chimaera::Message::for_overwrite(8 + (*pair)[0].size() + (*pair)[1].size());
+              auto packed = allocate(8 + (*pair)[0].size() + (*pair)[1].size());
               std::memcpy(packed.data(), "CBP1", 4);
               const auto first = static_cast<uint32_t>((*pair)[0].size());
               for (unsigned i = 0; i < 4; ++i)
                 packed[4 + i] = static_cast<std::byte>(first >> (24 - 8 * i));
               std::memcpy(packed.data() + 8, (*pair)[0].data(), first);
               std::memcpy(packed.data() + 8 + first, (*pair)[1].data(), (*pair)[1].size());
-              outgoing_.submit(std::move(packed), "pair:" + group);
+              outgoing_.submit(std::move(packed), coalesce ? "pair:" + group : "");
             }
           }));
       } else {
@@ -320,6 +319,7 @@ public:
   static constexpr std::size_t max_bytes = 4096;
   static constexpr std::size_t max_messages = 128;
   std::function<void()> pump;
+  std::function<chimaera::Message(std::size_t)> allocate = chimaera::Message::for_overwrite;
   std::function<void(const chimaera::Message &)> on_receive;
   std::function<std::optional<int64_t>()> simulation_time;
 

@@ -25,20 +25,27 @@ def plan(data, side, package_prefix=None, simulate=False):
     if side == 'guest':
         env.setdefault('ROS_LOG_DIR', '/tmp/chimaera-guest-logs')
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
-                  ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns', 'image_diagnostics')}}
+                  ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns', 'image_diagnostics',
+                   'transport_backend')}}
     if side == 'host':
         parameters.update({key: data['bridge'][key] for key in
                            ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',
-                            'timing_socket', 'status_bar', 'report_seconds')})
+                            'timing_socket', 'status_bar', 'report_seconds', 'dma_h2g', 'dma_g2h')})
         if data['bridge']['timing_backend'] == 'gazebo':
             parameters.update({key: data['bridge'][key] for key in
                                ('gazebo_world', 'physics_step_ns', 'timing_file')})
     else:
         parameters.update({key: data['bridge'][key] for key in
                            ('m5ops', 'wait_for_application', 'startup_timeout_s', 'simulation_time_from_readfile',
-                            'checkpoint_control', 'application_ready_file')})
+                            'checkpoint_control', 'application_ready_file',
+                            'dma_device', 'dma_module', 'dma_module_options', 'dma_diagnostics')})
         if not parameters['application_ready_file']:
             parameters.pop('application_ready_file')
+        # ROS CLI rejects an unquoted empty assignment (e.g. dma_module:=).
+        # Let the C++ defaults provide optional empty values, including m5 runs.
+        for key in ('dma_module', 'dma_module_options'):
+            if not parameters[key]:
+                parameters.pop(key)
     executable = 'gazebo_host_bridge' if side == 'host' and data['bridge']['timing_backend'] == 'gazebo' else side + '_bridge'
     args = [str(package_prefix / 'lib/chimaera_ros_bridge' / executable), '--ros-args']
     for key, value in parameters.items():
@@ -56,6 +63,9 @@ def plan(data, side, package_prefix=None, simulate=False):
                    '--gem5-root', str(root), '--socket-path', data['bridge']['timing_socket'],
                    '--guest-command', data['deploy']['guest_root'] + '/guest_start', '--managed-shutdown']
         command += sim.get('args', [])
+        if data['bridge']['transport_backend'] == 'dma':
+            command += ['--transport-backend', 'dma', '--dma-h2g', data['bridge']['dma_h2g'],
+                        '--dma-g2h', data['bridge']['dma_g2h']]
         processes.append({'name': 'gem5', 'command': command})
     return dict(side=side, setup=config['setup'], env=env, processes=processes)
 

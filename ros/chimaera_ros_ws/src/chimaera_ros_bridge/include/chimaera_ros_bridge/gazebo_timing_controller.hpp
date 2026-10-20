@@ -4,13 +4,14 @@
 #include <ignition/msgs/world_control.pb.h>
 #include <ignition/msgs/world_stats.pb.h>
 
+#include <chimaera/dma_controller.hpp>
 #include <chimaera/gem5_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <condition_variable>
 #include <ignition/transport/Node.hh>
 #include <limits>
-#include <mutex>
 #include <memory>
+#include <mutex>
 #include <thread>
 
 namespace chimaera_ros_bridge
@@ -22,14 +23,20 @@ class TimingController final : public chimaera::TimingController
 public:
   TimingController(
     std::string socket, std::chrono::seconds timeout, Bridge & bridge, std::string world,
-    chimaera::Duration physics_step, chimaera::Duration poll_interval)
+    chimaera::Duration physics_step, chimaera::Duration poll_interval, std::string transport = "m5",
+    std::string h2g = "/tmp/chimaera_dma_h2g", std::string g2h = "/tmp/chimaera_dma_g2h")
   : gem5_(std::move(socket), timeout),
-    host_(gem5_, poll_interval),
     bridge_(bridge),
     timeout_(timeout),
     physics_step_(physics_step),
     world_(std::move(world))
   {
+    if (transport == "dma")
+      host_ = std::make_unique<chimaera::DmaHostController>(gem5_, std::move(h2g), std::move(g2h));
+    else if (transport == "m5")
+      host_ = std::make_unique<chimaera::Gem5HostController>(gem5_, poll_interval);
+    else
+      throw std::invalid_argument("transport_backend must be m5 or dma");
     if (physics_step_.count() <= 0 || world_.empty()) {
       throw std::invalid_argument("physics_step_ns must be positive and gazebo_world nonempty");
     }
@@ -77,9 +84,10 @@ public:
     interval_ = interval;
     pending_ = true;
     const auto begin = std::chrono::steady_clock::now();
-    bridge_.exchange(host_);
-    const auto result = host_.step(interval_);
-    gem5_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+    bridge_.exchange(*host_);
+    const auto result = host_->step(interval_);
+    gem5_wall_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
     if (!result.ok()) {
       throw std::runtime_error(result.message);
     }
@@ -88,7 +96,7 @@ public:
     if (on_gem5_boundary) {
       on_gem5_boundary(gem5_.elapsed_ticks());
     }
-    bridge_.exchange(host_);
+    bridge_.exchange(*host_);
     // DDS and the host command gateway run asynchronously to the timing barrier.
     // Allow their executors to consume commands while both simulators are paused.
     settle();
@@ -131,10 +139,13 @@ private:
     ignition::msgs::WorldControl request;
     request.set_pause(true);
     request.set_multi_step(static_cast<uint32_t>(interval_ / physics_step_));
-    if (cancelled && cancelled()) { throw std::runtime_error("Physics request cancelled"); }
+    if (cancelled && cancelled()) {
+      throw std::runtime_error("Physics request cancelled");
+    }
     // A synchronous Request can block until timeout after launch stops Gazebo.
     // Keep callback state alive independently of this controller on cancellation.
-    struct Reply {
+    struct Reply
+    {
       std::mutex mutex;
       std::condition_variable changed;
       bool received{false}, accepted{false};
@@ -153,13 +164,17 @@ private:
     std::unique_lock lock(reply->mutex);
     const auto deadline = std::chrono::steady_clock::now() + timeout_;
     while (!reply->received) {
-      if (cancelled && cancelled()) { throw std::runtime_error("Physics request cancelled"); }
+      if (cancelled && cancelled()) {
+        throw std::runtime_error("Physics request cancelled");
+      }
       if (std::chrono::steady_clock::now() >= deadline) {
         throw std::runtime_error("Gazebo timed out accepting a step");
       }
       reply->changed.wait_for(lock, std::chrono::milliseconds(50));
     }
-    if (!reply->accepted) { throw std::runtime_error("Gazebo rejected a step"); }
+    if (!reply->accepted) {
+      throw std::runtime_error("Gazebo rejected a step");
+    }
   }
 
 public:
@@ -187,7 +202,8 @@ public:
         ". Check physics_step_ns and exclusive world control");
     }
     lock.unlock();
-    gazebo_wall_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - gazebo_begin_).count();
+    gazebo_wall_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - gazebo_begin_).count();
     settle();
     pending_ = false;
   }
@@ -202,7 +218,7 @@ public:
       return {chimaera::ControllerState::failed, error.what()};
     }
   }
-  chimaera::ControllerResult stop() { return host_.stop(); }
+  chimaera::ControllerResult stop() { return host_->stop(); }
   uint64_t elapsed_ticks() const { return gem5_.elapsed_ticks(); }
   double gem5_wall_seconds{}, gazebo_wall_seconds{};
   std::function<void()> pump;
@@ -230,7 +246,7 @@ private:
     changed_.notify_all();
   }
   chimaera::Gem5TimingController gem5_;
-  chimaera::Gem5HostController host_;
+  std::unique_ptr<chimaera::HostController> host_;
   Bridge & bridge_;
   std::chrono::seconds timeout_;
   chimaera::Duration physics_step_, interval_{};

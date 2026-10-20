@@ -93,6 +93,12 @@ if(BUILD_TESTING)
   find_package(std_msgs REQUIRED)
   enable_testing()
   add_executable(serialized_view_test test/serialized_view_test.cpp)
+  add_executable(completion_waitable_test test/completion_waitable_test.cpp)
+  target_link_libraries(completion_waitable_test PRIVATE bridge)
+  ament_target_dependencies(completion_waitable_test PUBLIC rclcpp)
+  add_test(NAME completion_waitable_test COMMAND completion_waitable_test)
+  set_tests_properties(completion_waitable_test PROPERTIES TIMEOUT 20 ENVIRONMENT
+    "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=193;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
   target_link_libraries(serialized_view_test PRIVATE bridge)
   ament_target_dependencies(serialized_view_test PUBLIC rclcpp)
   add_test(NAME serialized_view_test COMMAND serialized_view_test)
@@ -150,6 +156,10 @@ if(BUILD_TESTING)
   add_test(NAME latency_sessions_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_latency_sessions.py)
   set_tests_properties(latency_sessions_test PROPERTIES ENVIRONMENT
+    "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
+  add_test(NAME latency_dma_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
+    -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_latency_dma.py)
+  set_tests_properties(latency_dma_test PROPERTIES ENVIRONMENT
     "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
   if(BUILD_LATENCY_BENCHMARK)
     add_test(NAME latency_message_test COMMAND ${Python3_EXECUTABLE}

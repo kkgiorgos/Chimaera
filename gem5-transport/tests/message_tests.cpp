@@ -48,5 +48,22 @@ int main() {
     expect(std::span<const std::byte>(packet).size() == packet.size());
     packet.insert(packet.end(), empty.end(), empty.end());
     expect(packet.size() == 4);
+    unsigned releases = 0;
+    std::byte external[16]{};
+    {
+        auto owner = std::shared_ptr<void>(external, [&](void*) { ++releases; });
+        auto adopted = Message::adopt(external, sizeof(external), owner);
+        owner.reset();
+        adopted[3] = std::byte{17};
+        Message independent = adopted;
+        expect(independent.data() != external && independent == adopted);
+        Message transferred = std::move(adopted);
+        expect(transferred.data() == external && adopted.empty() && !releases);
+        transferred.reserve(32); // Growing detaches and releases the loan once.
+        expect(releases == 1 && transferred.data() != external && transferred == independent);
+        transferred[3] = std::byte{18};
+        expect(external[3] == std::byte{17});
+    }
+    expect(releases == 1);
     return 0;
 }

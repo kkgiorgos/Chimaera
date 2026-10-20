@@ -39,6 +39,8 @@ restore = experiment.get('checkpoint_restore')
 capture = experiment.get('checkpoint_prepare')
 if restore and capture:
     parser.error('Cannot prepare and restore a checkpoint together')
+if args.transport_backend == 'dma' and (restore or capture):
+    parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
 if capture and (experiment['aggressor']['pattern'] != 'none' or experiment['aggressor']['gbps']):
     parser.error('Readiness checkpoints require a disabled aggressor')
 # Keep the detailed CPU paths identical on producer and consumers. The restore
@@ -51,7 +53,11 @@ if not restore:
     for core in cores['boot']:
         core.get_simobject().usePerf = False
 processor = SwitchableProcessor(switchable_cores=cores, starting_cores='detailed' if restore else 'boot')
-cache = MESITwoLevelCacheHierarchy(l1d_size=hardware['l1d_size'],
+CacheHierarchy = MESITwoLevelCacheHierarchy
+if args.transport_backend == 'dma':
+    from chimaera_dma import DmaCacheHierarchy, attach_dma
+    CacheHierarchy = DmaCacheHierarchy
+cache = CacheHierarchy(l1d_size=hardware['l1d_size'],
     l1i_size=hardware['l1i_size'], l1d_assoc=hardware['l1_assoc'],
     l1i_assoc=hardware['l1_assoc'], l2_size=hardware['l2_size'],
     l2_assoc=hardware['l2_assoc'], num_l2_banks=1, functional_checkpoint_writeback=True)
@@ -68,8 +74,11 @@ files = ['/tmp/chimaera-ball.tar.gz=' + args.bundle, *args.guest_file]
 boot = guest_start_script('/tmp/chimaera-ball-start', files, preamble=preamble)
 board.set_kernel_disk_workload(kernel=KernelResource(local_path=args.kernel),
     disk_image=DiskImageResource(local_path=args.image),
-    kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off'],
+    kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off']
+        + (['acpi=off'] if args.transport_backend == 'dma' else []),
     readfile_contents=boot, checkpoint=Path(restore) / 'cpt' if restore else None)
+if args.transport_backend == 'dma':
+    attach_dma(board, args.dma_h2g, args.dma_g2h)
 
 if args.instantiate_only:
     # Use the board's documented direct-instantiation lifecycle. No timing
@@ -196,6 +205,11 @@ class BallTimingServer(TimingServer):
         return {**super().exit_handlers(), ExitEvent.CHECKPOINT: lambda: True}
 
     def handle_command(self, line):
+        if line == 'CHIMAERA_INGRESS' and args.transport_backend == 'dma':
+            if not self.roi_started or self.finished:
+                raise ValueError('DMA ingress requires a live, paused ROI')
+            board.chimaera_dma.ingress()
+            return 'OK INGRESS'
         if line == 'BENCHMARK_RESTORE':
             if not restore or self.restore_boundary_tick is None or self.pressure_started:
                 raise RuntimeError('No pending restored host boundary')

@@ -129,7 +129,9 @@ class LatencyAnalysisTest(unittest.TestCase):
         with tarfile.open(bundle) as archive:
             self.assertIn('opt/chimaera/latency/guest_start', archive.getnames())
             marker = json.load(archive.extractfile('opt/chimaera/latency/latency-runtime.json'))
-            self.assertEqual(marker, dict(version=4, transport_protocol=3, cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
+            self.assertEqual(marker, dict(version=4, transport_protocol=3,
+                transport_backends=['m5'], dma_abi=None, dma_protocol=None, endpoint_features=[],
+                cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
             self.assertTrue(all(not name.startswith('/') and '..' not in Path(name).parts
                                 for name in archive.getnames()))
             self.assertTrue(all(member.mtime == 0 for member in archive.getmembers()))

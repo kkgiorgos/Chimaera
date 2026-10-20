@@ -29,6 +29,7 @@ class ChimaeraDma : public PciEndpoint
     const bool loopback;
     const std::string h2gPath, g2hPath;
     const unsigned maxPending;
+    const unsigned mailboxSlots;
     std::unique_ptr<chimaera_mailbox::Mailbox> h2g, g2h;
     std::deque<Addr> postedRx;
     std::deque<std::vector<std::uint8_t>> echoed;

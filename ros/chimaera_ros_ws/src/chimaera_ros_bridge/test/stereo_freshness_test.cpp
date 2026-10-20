@@ -64,6 +64,26 @@ int main(int argc, char ** argv)
       rejects([&] { chimaera_ros_bridge::load_config(path); });
     }
     write(config);
+    // Lossless stereo keeps unmatched samples until their peer arrives and
+    // never silently replaces complete pairs or crosses missing timestamps.
+    chimaera_ros_bridge::StereoQueue lossless;
+    lossless.add("pair", "left", false);
+    lossless.add("pair", "right", false);
+    for (int64_t stamp = 1; stamp <= 8; ++stamp)
+      require(
+        !lossless.submit("pair", "left", stamp, chimaera::Message(1, std::byte(stamp))),
+        "unpaired lossless image was delivered");
+    for (int64_t stamp = 1; stamp <= 8; ++stamp) {
+      auto pair = lossless.submit("pair", "right", stamp, chimaera::Message(1, std::byte(stamp)));
+      require(
+        pair && (*pair)[0][0] == std::byte(stamp) && (*pair)[1][0] == std::byte(stamp),
+        "lossless stereo sample was replaced");
+    }
+    require(lossless.pending() == 0, "completed lossless pair retained buffers");
+    rejects([&] { lossless.submit("pair", "left", 8, {}); });
+    lossless.submit("pair", "left", 9, {});
+    lossless.submit("pair", "left", 10, {});
+    rejects([&] { lossless.submit("pair", "right", 10, {}); });
     std::array<std::byte, 12> header{};
     header[7] = std::byte{1};
     header[11] = std::byte{99};

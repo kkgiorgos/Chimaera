@@ -1,1 +1,1 @@
-{"version": 4, "transport_protocol": 3, "workloads": ["synthetic", "ball_catching"]}
+{"version": 4, "transport_protocol": 3, "transport_backends": ["m5", "dma"], "dma_abi": 1, "dma_protocol": 2, "endpoint_features": ["lossless", "image_integrity"], "workloads": ["synthetic", "ball_catching"]}

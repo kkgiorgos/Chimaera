@@ -142,7 +142,10 @@ int main(int argc, char ** argv)
       chimaera_ros_bridge::TimingController timing(
         config->declare_parameter<std::string>("timing_socket", "/tmp/chimaera_time.sock"),
         std::chrono::seconds(timeout), *bridge, world, std::chrono::nanoseconds(physics_step),
-        std::chrono::microseconds(poll));
+        std::chrono::microseconds(poll),
+        config->declare_parameter<std::string>("transport_backend", "m5"),
+        config->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
+        config->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"));
       timing.pump = bridge->pump;
       timing.cancelled = [] { return !rclcpp::ok(); };
       chimaera_latency::SharedClock logical(

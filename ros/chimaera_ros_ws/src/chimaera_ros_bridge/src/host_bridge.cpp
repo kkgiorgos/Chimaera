@@ -1,3 +1,4 @@
+#include <chimaera/dma_controller.hpp>
 #include <chimaera/gem5_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <chimaera_ros_bridge/status_bar.hpp>
@@ -46,7 +47,18 @@ int main(int argc, char ** argv)
     executor.add_node(node);
     node->pump = [&] { node->drain_callbacks(executor); };
     chimaera::Gem5TimingController timing(socket, std::chrono::seconds(timeout));
-    chimaera::Gem5HostController controller(timing, std::chrono::microseconds(poll));
+    std::unique_ptr<chimaera::HostController> selected;
+    const auto backend = node->declare_parameter<std::string>("transport_backend", "m5");
+    if (backend == "dma")
+      selected = std::make_unique<chimaera::DmaHostController>(
+        timing, node->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
+        node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"));
+    else if (backend == "m5")
+      selected =
+        std::make_unique<chimaera::Gem5HostController>(timing, std::chrono::microseconds(poll));
+    else
+      throw std::invalid_argument("transport_backend must be m5 or dma");
+    auto & controller = *selected;
     try {
       RCLCPP_INFO(node->get_logger(), "Data transport ready; waiting for gem5 guest");
       const auto waiting_since = Clock::now();

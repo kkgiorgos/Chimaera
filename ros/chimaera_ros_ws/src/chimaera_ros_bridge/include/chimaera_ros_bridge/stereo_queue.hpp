@@ -38,9 +38,10 @@ class StereoQueue
 {
 public:
   using Pair = std::array<chimaera::Message, 2>;
-  void add(const std::string & group, const std::string & key)
+  void add(const std::string & group, const std::string & key, bool latest = true)
   {
     groups_[group].keys.push_back(key);
+    groups_[group].latest = latest;
   }
   std::size_t pending() const
   {
@@ -57,14 +58,24 @@ public:
     if (state.keys.size() != 2) throw std::logic_error("stereo group requires two routes");
     if (key != state.keys[0] && key != state.keys[1])
       throw std::logic_error("unknown stereo route");
-    if (stamp <= state.completed) return std::nullopt;
+    if (stamp <= state.completed) {
+      if (!state.latest) throw std::runtime_error("out-of-order lossless stereo sample");
+      return std::nullopt;
+    }
     const auto side = state.keys[0] == key ? 0u : 1u;
     state.frames[side][stamp] = std::move(frame);
     // Bound unmatched arrivals too, including if one camera disappears.
     for (auto & frames : state.frames) {
-      while (frames.size() > 3) frames.erase(frames.begin());
+      if (!state.latest && frames.size() > 128)
+        throw std::runtime_error("lossless stereo unmatched queue limit exceeded");
+      if (state.latest)
+        while (frames.size() > 3) frames.erase(frames.begin());
     }
     if (!state.frames[1 - side].count(stamp)) return std::nullopt;
+    if (
+      !state.latest &&
+      (state.frames[0].begin()->first != stamp || state.frames[1].begin()->first != stamp))
+      throw std::runtime_error("missing lossless stereo sample");
     Pair pair{std::move(state.frames[0].at(stamp)), std::move(state.frames[1].at(stamp))};
     state.completed = stamp;
     for (auto & frames : state.frames) {
@@ -79,6 +90,7 @@ private:
     std::vector<std::string> keys;
     std::array<std::map<int64_t, chimaera::Message>, 2> frames;
     int64_t completed{-1};
+    bool latest{true};
   };
   std::map<std::string, Group> groups_;
 };

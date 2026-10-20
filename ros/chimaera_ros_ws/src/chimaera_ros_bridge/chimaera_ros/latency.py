@@ -27,6 +27,7 @@ from .latency_workloads import BALL_DEFAULT, ball_routes, image_age, traffic
 from .latency_budget import wall_budget
 from .latency_session import SweepSessions, ordered_cases, validate_bundle
 from .latency_startup import startup_status, log_tail
+from .dds import shared_memory_profile
 
 MODES = ('native_free', 'native_stepped', 'chimaera')
 UNSET = 2**64 - 1
@@ -75,7 +76,7 @@ def world(clock_file, physics_step_ns):
 
 
 def guest_session(cpu_type='kvm', config=None):
-    return dict(version=1, routes='/tmp/chimaera-latency-routes.json',
+    result = dict(version=1, routes='/tmp/chimaera-latency-routes.json',
         host=dict(domain_id=41, setup=['/opt/ros/humble/setup.bash'], processes=[]),
         guest=dict(domain_id=42,
             setup=['/opt/ros/humble/setup.bash', GUEST_ROOT + '/app/share/chimaera_ros_bridge/local_setup.bash'],
@@ -88,9 +89,33 @@ def guest_session(cpu_type='kvm', config=None):
                     max_serialized_bytes=16781312,
                     max_image_age_ns=image_age(config) if config and config.get('workload')=='ball_catching' else 0),
         deploy=dict(guest_root=GUEST_ROOT, install_trees=[]))
+    if (config or {}).get('transport_backend') == 'dma':
+        result['bridge'].update(transport_backend='dma', dma_module='/tmp/chimaera-dma.ko',
+            dma_module_options=(config or {}).get('dma_module_options',
+                'buffer_mb=8 receive_slots=16 transmit_slots=4'),
+            dma_diagnostics=(config or {}).get('dma_diagnostics', False))
+    if (config or {}).get('dds_shm_bytes', 0):
+        result['guest'].update(localhost_only=False, env=dict(
+            FASTRTPS_DEFAULT_PROFILES_FILE='/tmp/chimaera-latency-dds.xml',
+            RMW_IMPLEMENTATION='rmw_fastrtps_cpp', RMW_FASTRTPS_USE_QOS_FROM_XML='0'))
+    return result
 
 
 def validate(config):
+    shm = config.get('dds_shm_bytes', 0)
+    if type(shm) is not int or shm < 0 or shm > 128 * 1024 * 1024:
+        raise ValueError('dds_shm_bytes must be an integer between 0 and 128 MiB')
+    if shm:
+        largest = max(config.get('payload_bytes', 0),
+            max((s.get('body_bytes', 0) for s in traffic(config)), default=0)) + 4096
+        if shm < max(1024 * 1024, 2 * largest):
+            raise ValueError('DDS shared memory must hold at least two complete serialized payloads')
+    if config.get('transport_backend', 'm5') not in ('m5', 'dma'):
+        raise ValueError('transport_backend must be m5 or dma')
+    if config.get('delivery_policy', 'latest') not in ('latest', 'lossless'):
+        raise ValueError('delivery_policy must be latest or lossless')
+    if type(config.get('verify_payload', False)) is not bool:
+        raise ValueError('verify_payload must be boolean')
     if config.get('workload', 'synthetic') not in ('synthetic', 'ball_catching'):
         raise ValueError('Unknown workload')
     for key in ('rate_hz', 'duration', 'warmup', 'drain'):
@@ -148,7 +173,10 @@ def stage_guest(output, package, bundle=None):
     startup = result / 'guest_start'
     startup.write_text(startup.read_text().replace('run session.json --side guest',
         'run /tmp/chimaera-latency-session.json --side guest'))
-    write_json(result / 'latency-runtime.json', dict(version=4, transport_protocol=3, cpu_types=['kvm', 'timing', 'o3'],
+    write_json(result / 'latency-runtime.json', dict(version=4, transport_protocol=3,
+        transport_backends=metadata.get('transport_backends', ['m5']), dma_abi=metadata.get('dma_abi'), dma_protocol=metadata.get('dma_protocol'),
+        endpoint_features=metadata.get('endpoint_features', []),
+        cpu_types=['kvm', 'timing', 'o3'],
         workloads=['synthetic', 'ball_catching']))
     if bundle:
         def archive_entry(member):
@@ -164,6 +192,17 @@ def stage_guest(output, package, bundle=None):
 def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
              environment=None, cancelled=None, reuse=None):
     validate(config)
+    required = []
+    if config.get('delivery_policy') == 'lossless': required.append('lossless')
+    if config.get('verify_payload'): required.append('image_integrity')
+    if required:
+        capability = package / 'share/chimaera_ros_bridge/config/latency_capabilities.json'
+        features = json.loads(capability.read_text()).get('endpoint_features', []) if capability.is_file() else []
+        if set(required) - set(features):
+            raise ValueError('Rebuild the runtime for required endpoint features: ' + ', '.join(required))
+    dma = config.get('transport_backend', 'm5') == 'dma'
+    if dma and reuse is not None:
+        raise ValueError('DMA requires fresh-boot cases; guest reuse is not supported')
     if reuse is not None:
         if config['mode'] != 'chimaera':
             raise ValueError('Guest reuse requires Chimaera mode')
@@ -175,7 +214,9 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     base_env = environment if environment is not None else os.environ
     if config['mode'] == 'chimaera':
         if bundle:
-            validate_bundle(bundle)
+            validate_bundle(bundle, backend='dma' if dma else 'm5', required_features=required)
+        if dma and not Path(config.get('dma_module', '')).is_file():
+            raise ValueError('DMA cases require dma_module built for the exact guest kernel')
         if not os.access('/dev/kvm', os.R_OK | os.W_OK):
             raise ValueError('KVM mode requires a readable/writable /dev/kvm')
         for artifact in (image, kernel, gem5_root / 'build/X86/gem5.opt'):
@@ -188,7 +229,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     config = dict(config, schema_version=1, status='running', run_id=str(uuid.uuid4()),
                   created=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   hostname=platform.node(), platform=platform.platform(),
-                  rmw=base_env.get('RMW_IMPLEMENTATION', 'ROS default'),
+                  rmw='rmw_fastrtps_cpp' if config.get('dds_shm_bytes') else base_env.get('RMW_IMPLEMENTATION', 'ROS default'),
                   cpu=cpu_type if config['mode'] == 'chimaera' else 'native',
                   clock_contract='gem5 elapsed time; host callbacks use completed gem5 boundary'
                     if config['mode'] == 'chimaera' else 'Gazebo PreUpdate simulation time',
@@ -199,6 +240,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     artifacts.append(package / 'lib/libchimaera_latency_clock.so')
     if bundle:
         artifacts.append(bundle)
+    if dma and config['mode'] == 'chimaera':
+        artifacts.append(Path(config['dma_module']))
     config['artifact_sha256'] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in artifacts}
     try:
         config['git_commit'] = subprocess.check_output(
@@ -215,10 +258,14 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         with path.open('xb') as handle:
             handle.write(struct.pack('<QQ', 0x434c42434c4f434b, UNSET))
     (output / 'world.sdf').write_text(world(physics, config['physics_step_ns']))
+    if config.get('dds_shm_bytes'):
+        (output / 'dds.xml').write_text(shared_memory_profile(config['dds_shm_bytes']))
+        config['artifact_sha256']['dds.xml'] = hashlib.sha256((output / 'dds.xml').read_bytes()).hexdigest()
+        write_json(manifest, config)
     write_json(output / 'routes.json', routes(config['reliability'], config['depth'], config))
     guest = guest_session(cpu_type, config)
     if reuse is not None:
-        guest['guest']['env'] = dict(CHIMAERA_LATENCY_REUSE='1')
+        guest['guest'].setdefault('env', {})['CHIMAERA_LATENCY_REUSE'] = '1'
         if reuse.process is not None and cpu_type != 'kvm':
             guest['guest']['env']['CHIMAERA_LATENCY_DETAILED_START'] = '1'
         config['boot_session'] = str(reuse.directory or output)
@@ -227,6 +274,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         write_json(manifest, config)
     write_json(output / 'guest-session.json', guest)
     common = dict(payload_bytes=config['payload_bytes'], rate_hz=float(config['rate_hz']),
+                  delivery_policy=config.get('delivery_policy', 'latest'),
+                  verify_payload=config.get('verify_payload', False),
                   warmup_ns=round(config['warmup'] * 1e9),
                   duration_ns=round(config['duration'] * 1e9), drain_ns=round(config['drain'] * 1e9),
                   reliability=config['reliability'], depth=config['depth'])
@@ -251,6 +300,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         ready_file=str(output / 'guest-ready') if config['mode'] != 'chimaera'
                    else '/tmp/chimaera-latency-endpoint-ready'))
     parameters(output / 'driver.yaml', dict(mode=config['mode'],
+        transport_backend=config.get('transport_backend', 'm5'),
         reuse_guest=reuse is not None,
         start_case=reuse is not None and reuse.process is not None,
         interval_us=config['interval_us'], poll_us=config['poll_us'],
@@ -259,7 +309,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         clock_file=str(logical), physics_clock_file=str(physics),
         host_ready=str(output / 'host-ready'), guest_ready=str(output / 'guest-ready'),
         done_file=str(output / 'complete'), routes=str(output / 'routes.json'),
-        max_serialized_bytes=max(65536, config['payload_bytes'] + 4096),
+        max_serialized_bytes=max(65536, config['payload_bytes'] + 4096,
+            max((s.get('body_bytes', 0) for s in traffic(config)), default=0) + 4096),
         max_image_age_ns=image_age(config) if config.get('workload')=='ball_catching' else 0))
     executable = package / 'lib/chimaera_ros_bridge'
     commands = [('gazebo', ['ign', 'gazebo', '-s', str(output / 'world.sdf')]),
@@ -273,11 +324,20 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
             '--guest-file', '/tmp/chimaera-latency.yaml=' + str(output / 'guest.yaml'),
             '--guest-file', '/tmp/chimaera-latency-session.json=' + str(output / 'guest-session.json'),
             '--guest-file', '/tmp/chimaera-latency-routes.json=' + str(output / 'routes.json')]))
+        if config.get('gem5_debug_flags'):
+            commands[-1][1][1:1] = ['--debug-flags=' + config['gem5_debug_flags'],
+                '--debug-file=' + str(output / 'gem5/dma-debug.log')]
+        if config.get('dds_shm_bytes'):
+            commands[-1][1].extend(['--guest-file',
+                '/tmp/chimaera-latency-dds.xml=' + str(output / 'dds.xml')])
         for key, default in dict(cpu_type='kvm', cpu_clock='3GHz', num_cores=2,
                 l1d_size='16KiB', l1i_size='16KiB', l2_size='256KiB', l1_assoc=8, l2_assoc=16).items():
             commands[-1][1].extend(['--' + key.replace('_', '-'), str(config.get(key, default))])
         if bundle:
             commands[-1][1].extend(['--guest-bundle', str(bundle)])
+        if dma:
+            commands[-1][1].extend(['--transport-backend', 'dma', '--guest-file',
+                '/tmp/chimaera-dma.ko=' + str(config['dma_module'])])
         if reuse is not None:
             supervisor = output / 'guest-supervisor'
             supervisor.write_text('#!/bin/bash\nset -e\nexport PYTHONPATH='
@@ -304,6 +364,9 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
                IGN_PARTITION='chimaera-latency-' + config['run_id'],
                IGN_GAZEBO_SYSTEM_PLUGIN_PATH=str(package / 'lib') + ':' + base_env.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
                IGN_LOG_PATH=str(output / 'ign-logs'))
+    if config.get('dds_shm_bytes'):
+        env.update(ROS_LOCALHOST_ONLY='0', RMW_IMPLEMENTATION='rmw_fastrtps_cpp',
+            RMW_FASTRTPS_USE_QOS_FROM_XML='0', FASTRTPS_DEFAULT_PROFILES_FILE=str(output / 'dds.xml'))
     processes, logs = [], []
     started = time.monotonic()
     try:
@@ -316,9 +379,12 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
                 # The guest supervisor runs as root in the ephemeral image.
                 script = ('#!/bin/bash\nset -e\nrm -f /tmp/chimaera-sim-time-origin.ns '
                           '/tmp/chimaera-latency-endpoint-ready\n')
-                for destination, source in [('/tmp/chimaera-latency.yaml', 'guest.yaml'),
+                injected = [('/tmp/chimaera-latency.yaml', 'guest.yaml'),
                         ('/tmp/chimaera-latency-session.json', 'guest-session.json'),
-                        ('/tmp/chimaera-latency-routes.json', 'routes.json')]:
+                        ('/tmp/chimaera-latency-routes.json', 'routes.json')]
+                if config.get('dds_shm_bytes'):
+                    injected.append(('/tmp/chimaera-latency-dds.xml', 'dds.xml'))
+                for destination, source in injected:
                     encoded = base64.b64encode((output / source).read_bytes()).decode()
                     script += f'printf %s {encoded} | base64 -d > {destination}\n'
                 script += shlex.quote(GUEST_ROOT + '/guest_start') + '\n'
@@ -476,6 +542,7 @@ def _metrics(events, config, source, stream=None):
         if e['event']=='send' and e['side']==source and (stream is None or e['stream']==stream)
         and start <= e['publish_ns'] < stop}
     received, latencies, duplicates, reordered, largest = set(), [], 0, 0, {}
+    ages = []
     for event in events:
         key = event['stream'], event['sequence']
         if event['event']!='receive' or event['side']!=destination or key not in selected:
@@ -488,11 +555,12 @@ def _metrics(events, config, source, stream=None):
         largest[event['stream']] = max(largest.get(event['stream'], -1), event['sequence'])
         received.add(key)
         latencies.append(event['callback_ns']-event['publish_ns'])
+        ages.append(event['callback_ns']-event['scheduled_ns'])
     release_lags = [event['publish_ns']-event['scheduled_ns'] for event in selected.values()]
     if any(lag < 0 for lag in release_lags):
         raise ValueError('Message published before its scheduled release')
     sizes = {event['payload_bytes'] for event in selected.values()}
-    return dict(latency=statistics(latencies), release_lag=statistics(release_lags),
+    return dict(latency=statistics(latencies), age=statistics(ages), release_lag=statistics(release_lags),
         published=len(selected), received=len(received), missing_at_drain=len(selected)-len(received),
         duplicates=duplicates, reordered=reordered,
         delivery_fraction=len(received)/len(selected) if selected else None,
@@ -512,6 +580,29 @@ def summarize(directory):
     for stream in traffic(config):
         source = 'host' if stream['direction']=='host_to_guest' else 'guest'
         result['streams'][stream['name']] = dict(stream, **_metrics(events, config, source, stream['name']))
+    if 'left_image' in result['streams'] and 'right_image' in result['streams']:
+        start = round(config['warmup'] * 1e9)
+        stop = start + round(config['duration'] * 1e9)
+        sent, received = {}, {}
+        for event in events:
+            if event['stream'] not in ('left_image', 'right_image'): continue
+            key = event['stream'], event['sequence']
+            if event['side'] == 'host' and event['event'] == 'send' and start <= event['publish_ns'] < stop:
+                sent[key] = event
+            if event['side'] == 'guest' and event['event'] == 'receive':
+                received.setdefault(key, event)
+        published = {seq for stream, seq in sent if stream == 'left_image' and ('right_image', seq) in sent}
+        complete = {seq for seq in published if ('left_image', seq) in received and ('right_image', seq) in received}
+        latencies, ages, skew = [], [], []
+        for seq in complete:
+            left, right = received['left_image', seq], received['right_image', seq]
+            last = max(left['callback_ns'], right['callback_ns'])
+            latencies.append(last - min(sent['left_image', seq]['publish_ns'], sent['right_image', seq]['publish_ns']))
+            ages.append(last - sent['left_image', seq]['scheduled_ns'])
+            skew.append(abs(left['callback_ns'] - right['callback_ns']))
+        result['stereo_pairs'] = dict(published=len(published), received=len(complete),
+            missing_at_drain=len(published - complete), latency=statistics(latencies),
+            age=statistics(ages), callback_skew=statistics(skew))
     return result
 
 
@@ -546,9 +637,14 @@ def make_report(root, write_outputs=True):
                 continue
             if any(measured['config'].get(key) != baseline['config'].get(key) for key in ('rmw', 'hostname')):
                 continue
+            if measured['config'].get('delivery_policy', 'latest') != baseline['config'].get('delivery_policy', 'latest') or \
+               measured['config'].get('verify_payload', False) != baseline['config'].get('verify_payload', False):
+                continue
+            if measured['config'].get('dds_shm_bytes', 0) != baseline['config'].get('dds_shm_bytes', 0):
+                continue
             def fingerprints(config):
                 return {Path(path).name: digest for path, digest in config.get('artifact_sha256', {}).items()
-                        if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so')}
+                        if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so', 'dds.xml')}
             if fingerprints(measured['config']) != fingerprints(baseline['config']):
                 continue
             if baseline['config']['mode'] == 'native_stepped' and baseline['config']['interval_us'] != measured['config']['interval_us']:
@@ -663,6 +759,12 @@ def main():
         command.add_argument('--image', type=Path)
         command.add_argument('--kernel', type=Path)
         command.add_argument('--guest-bundle', type=Path, help='Install a staged archive inside the guest at boot')
+        command.add_argument('--transport-backend', choices=('m5', 'dma'), default='m5')
+        command.add_argument('--dma-module', default='', help='Module built for the exact guest kernel')
+        command.add_argument('--dma-module-options', default='buffer_mb=8 receive_slots=16 transmit_slots=4')
+        command.add_argument('--delivery-policy', choices=('latest', 'lossless'), default='latest')
+        command.add_argument('--verify-payload', action='store_true', help='Check every image byte (correctness runs)')
+        command.add_argument('--dds-shm-bytes', type=int, default=0, help='Sized loopback DDS transport; 0 retains middleware defaults')
         command.add_argument('--cpu-type', choices=('kvm', 'timing', 'o3'),
                              nargs=None if action == 'run' else '+', default='kvm' if action == 'run' else ['kvm'])
         command.add_argument('--cpu-clock', default='3GHz')
@@ -706,12 +808,15 @@ def main():
             make_report(args.output)
             return
         config = {key: getattr(args, key) for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout',
-                  'cpu_clock', 'num_cores', 'l1d_size', 'l1i_size', 'l2_size', 'l1_assoc', 'l2_assoc')}
+                  'cpu_clock', 'num_cores', 'l1d_size', 'l1i_size', 'l2_size', 'l1_assoc', 'l2_assoc',
+                  'transport_backend', 'dma_module', 'dma_module_options', 'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
         if args.action == 'run':
             config.update({key: getattr(args, key) for key in ('mode', 'payload_bytes', 'rate_hz', 'interval_us', 'poll_us', 'cpu_type')}, repeat=1)
             run_case(args.output, config, package, gem5_root, image, kernel, bundle)
             make_report(args.output)
         else:
+            if args.transport_backend == 'dma' and not args.fresh_boots:
+                raise ValueError('DMA sweeps require --fresh-boots')
             if args.repeats < 1:
                 raise ValueError('repeats must be positive')
             args.output.mkdir(parents=True, exist_ok=False)

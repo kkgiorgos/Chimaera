@@ -80,7 +80,10 @@ int main(int argc, char ** argv)
       socket, std::chrono::seconds(timeout), *node,
       node->declare_parameter<std::string>("gazebo_world", ""),
       std::chrono::nanoseconds(node->declare_parameter<int64_t>("physics_step_ns", 1000000)),
-      std::chrono::microseconds(poll));
+      std::chrono::microseconds(poll),
+      node->declare_parameter<std::string>("transport_backend", "m5"),
+      node->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
+      node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"));
     timing.pump = node->pump;
     timing.cancelled = [] { return !rclcpp::ok(); };
     auto & controller = timing;

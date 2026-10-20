@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <span>
 
 namespace chimaera::control {
 inline constexpr std::size_t max_messages = 1024;
@@ -25,6 +26,8 @@ public:
             throw std::invalid_argument("queue limits must be positive");
     }
     std::size_t size() const { return entries_.size(); }
+    const Entry* front() const { return entries_.empty() ? nullptr : &entries_.front(); }
+    std::span<const Entry> entries() const { return entries_; }
     void submit(Message data, std::string_view key = {}) {
         std::string owned_key(key);
         auto count = bytes_;

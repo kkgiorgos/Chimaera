@@ -35,6 +35,7 @@ class ReceivedQueue {
     std::size_t next_{};
     std::size_t bytes_{};
 public:
+    bool empty() const noexcept { return messages_.size() == next_; }
     void append(Batch&& source) {
         const auto count = messages_.size() - next_;
         const auto added_bytes = bytes(source);

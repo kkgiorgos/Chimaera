@@ -9,7 +9,9 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 m5ops="address", wait_for_application=False, timing_backend="gem5",
                 gazebo_world="", physics_step_ns=1000000, timing_file="",
                 max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False,
-                checkpoint_control=False, application_ready_file='')
+                checkpoint_control=False, application_ready_file='', transport_backend='m5',
+                dma_device='/dev/chimaera-dma', dma_module='', dma_module_options='', dma_diagnostics=False,
+                dma_h2g='/tmp/chimaera_dma_h2g', dma_g2h='/tmp/chimaera_dma_g2h')
 
 
 def fields(value, allowed, required=()):
@@ -84,6 +86,18 @@ def load(path):
     bridge = data.setdefault('bridge', {})
     fields(bridge, DEFAULTS)
     bridge = data['bridge'] = DEFAULTS | bridge
+    if bridge['transport_backend'] not in ('m5', 'dma'):
+        raise ValueError('transport_backend must be m5 or dma')
+    if type(bridge['dma_diagnostics']) is not bool:
+        raise ValueError('dma_diagnostics must be boolean')
+    if bridge['transport_backend'] == 'dma' and bridge['checkpoint_control']:
+        raise ValueError('DMA requires a fresh boot; checkpointing is not supported')
+    for key in ('dma_device', 'dma_h2g', 'dma_g2h'):
+        if not Path(string(bridge[key])).is_absolute():
+            raise ValueError(key + ' must be absolute')
+    for key in ('dma_module', 'dma_module_options'):
+        if not isinstance(bridge[key], str) or '\0' in bridge[key]:
+            raise ValueError(key + ' must be a string without NUL')
     integer(bridge['max_serialized_bytes'], 4, 64 * 1024 * 1024 - 2056)
     integer(bridge['max_pending_messages'], 1, 1000000)
     integer(bridge['max_image_age_ns'], 0, 3600000000000)

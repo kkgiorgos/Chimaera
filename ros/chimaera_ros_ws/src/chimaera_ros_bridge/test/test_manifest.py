@@ -34,6 +34,8 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(guest['env']['ROS_LOCALHOST_ONLY'], '1')
         self.assertIn('config_file:=' + str(self.root / 'routes.json'), host['processes'][0]['command'])
         self.assertNotIn('poll_us:=10000', guest['processes'][0]['command'])
+        self.assertNotIn('dma_module:=', guest['processes'][0]['command'])
+        self.assertNotIn('dma_module_options:=', guest['processes'][0]['command'])
         self.assertEqual(len(host['processes']), 1)
         self.assertNotIn('ratio', data['bridge'])
         self.assertFalse(any(arg.startswith('ratio:=')

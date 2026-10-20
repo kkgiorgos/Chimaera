@@ -11,7 +11,7 @@ HARDWARE = dict(cpu_type='kvm', num_cores=2, cpu_clock='3GHz', l1d_size='16KiB',
                 l1i_size='16KiB', l2_size='256KiB', l1_assoc=8, l2_assoc=16)
 
 
-def validate_bundle(bundle):
+def validate_bundle(bundle, backend='m5', required_features=()):
     if bundle is None:
         raise ValueError('Single-boot sweeps require a staged v4 --guest-bundle; rebuild and stage the runtime')
     try:
@@ -20,8 +20,16 @@ def validate_bundle(bundle):
                 metadata = json.load(source)
         if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
             raise ValueError('outdated guest bundle')
+        if backend == 'dma' and ('dma' not in metadata.get('transport_backends', []) or
+                                 metadata.get('dma_abi') != 1 or metadata.get('dma_protocol') != 2):
+            raise ValueError('guest bundle lacks DMA ABI 1 support')
+        if set(required_features) - set(metadata.get('endpoint_features', [])):
+            raise ValueError('guest bundle lacks required endpoint features')
     except (OSError, KeyError, AttributeError, TypeError, ValueError, tarfile.TarError) as error:
-        raise ValueError('Require a staged v4 guest bundle with transport protocol 3; rebuild and stage the runtime') from error
+        raise ValueError('Require a staged v4 guest bundle with transport protocol 3'
+            + (' and DMA ABI 1 / protocol 2' if backend == 'dma' else '')
+            + (' and endpoint features ' + ', '.join(required_features) if required_features else '')
+            + '; rebuild and stage the runtime') from error
 
 
 def hardware_key(config):

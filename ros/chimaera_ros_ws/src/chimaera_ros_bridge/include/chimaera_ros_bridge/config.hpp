@@ -109,8 +109,8 @@ inline std::vector<Route> load_config(const std::string & path)
     json_object * group = nullptr;
     if (json_object_object_get_ex(entry, "coalesce_group", &group)) {
       route.coalesce_group = string(entry, "coalesce_group");
-      if (!route.coalesce || route.type != "sensor_msgs/msg/Image") {
-        throw std::invalid_argument("coalesce_group requires coalesced Image routes");
+      if (route.type != "sensor_msgs/msg/Image") {
+        throw std::invalid_argument("coalesce_group requires Image routes");
       }
     }
     if (route.host_topic.front() != '/' || route.guest_topic.front() != '/') {
@@ -169,7 +169,8 @@ inline std::vector<Route> load_config(const std::string & path)
     if (!route.coalesce_group.empty()) groups[route.coalesce_group].push_back(&route);
   }
   for (const auto & [name, members] : groups) {
-    if (members.size() != 2 || members[0]->direction != members[1]->direction) {
+    if (members.size() != 2 || members[0]->direction != members[1]->direction ||
+        members[0]->coalesce != members[1]->coalesce) {
       throw std::invalid_argument(
         "stereo coalescing group needs two routes with the same direction: " + name);
     }

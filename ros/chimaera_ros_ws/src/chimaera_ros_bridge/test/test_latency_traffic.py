@@ -78,6 +78,10 @@ class BallTrafficTest(unittest.TestCase):
         self.assertEqual(result['streams']['right_image']['latency']['mean_ms'], 20.)
         self.assertEqual(result['streams']['effort_command']['latency']['mean_ms'], 5.)
         self.assertEqual(result['directions']['host_to_guest']['received'], 2)
+        self.assertEqual(result['stereo_pairs']['published'], 1)
+        self.assertEqual(result['stereo_pairs']['received'], 1)
+        self.assertEqual(result['stereo_pairs']['age']['mean_ms'], 20.)
+        self.assertEqual(result['stereo_pairs']['callback_skew']['mean_ms'], 10.)
         self.assertEqual((directory/'events.csv').read_bytes(), original)
         self.assertTrue(all(e['publish_ns']!=UNSET for e in read_events(directory)))
 
