@@ -236,9 +236,10 @@ def plan(data):
 
 
 def routes():
+    # State/commands have newest-value semantics even if DMA admission stalls.
+    # Keep telemetry lossless, and read gem5 time directly inside the guest.
     result = []
     for topic, kind, direction, reliable in [
-            ('/clock', 'rosgraph_msgs/msg/Clock', 'host_to_guest', False),
             ('/stereo/left/image_raw', 'sensor_msgs/msg/Image', 'host_to_guest', False),
             ('/stereo/right/image_raw', 'sensor_msgs/msg/Image', 'host_to_guest', False),
             ('/robot/joint_states', 'sensor_msgs/msg/JointState', 'host_to_guest', False),
@@ -248,7 +249,8 @@ def routes():
             *[(f'/benchmark/{name}', 'std_msgs/msg/String', 'guest_to_host', True)
               for name in ('perception', 'interception', 'control', 'control_timing')]]:
         result.append(dict(host_topic=topic, guest_topic=topic, type=kind, direction=direction,
-                           coalesce=topic == '/clock' or 'image_raw' in topic,
+                           coalesce='image_raw' in topic or topic in (
+                               '/robot/joint_states', '/robot/effort_command'),
                            qos=dict(history='keep_last', depth=128 if topic.startswith('/benchmark/')
                                     else 2 if 'image' in topic else 1,
                                     reliability='reliable' if reliable else 'best_effort', durability='volatile')))
@@ -261,6 +263,7 @@ def routes():
 def robot_command(point, calibration, image_age_periods=2.0, image_diagnostics=False):
     return ['ros2', 'launch', 'ball_catching_robot', 'robot.launch.py',
             'robot_file:=/tmp/chimaera-ball.urdf',
+            'use_sim_time:=false',
             'calibration:=' + json.dumps(calibration or {}),
             f'image_age_periods:={image_age_periods}',
             f'image_diagnostics:={str(image_diagnostics).lower()}',

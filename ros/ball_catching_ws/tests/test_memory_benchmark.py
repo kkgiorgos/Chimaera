@@ -338,12 +338,14 @@ def test_invalid_launch_stops_without_accepting_a_task_miss(tmp_path, monkeypatc
 
 def test_host_truth_and_throw_settings_never_cross_bridge():
     topic_routes = routes()['topics']
-    assert len(topic_routes) == 11
+    assert len(topic_routes) == 10
+    assert all(route['host_topic'] != '/clock' for route in topic_routes)
     assert sum(route['type'] == 'sensor_msgs/msg/Image' for route in topic_routes) == 2
     assert all(not route['host_topic'].startswith(('/evaluation', '/experiment')) for route in topic_routes)
     assert all('ball_state' not in route['host_topic'] for route in topic_routes)
     assert [route['host_topic'] for route in topic_routes if route['coalesce']] == [
-        '/clock', '/stereo/left/image_raw', '/stereo/right/image_raw']
+        '/stereo/left/image_raw', '/stereo/right/image_raw',
+        '/robot/joint_states', '/robot/effort_command']
     assert [route['coalesce_group'] for route in topic_routes if 'coalesce_group' in route] == ['stereo', 'stereo']
     telemetry = [r for r in topic_routes if r['host_topic'].startswith('/benchmark/')]
     assert len(telemetry) == 4
@@ -362,6 +364,7 @@ def test_guest_launch_has_no_empty_ros_arguments(tmp_path):
     assert 'image_age_periods:=2.0' in command
     assert any(arg.startswith('gem5_clock_library:=') for arg in command)
     assert 'record_telemetry:=true' in command
+    assert 'use_sim_time:=false' in command
 
 
 def test_orin_memory_interface_capacity_and_transaction_size(tmp_path):

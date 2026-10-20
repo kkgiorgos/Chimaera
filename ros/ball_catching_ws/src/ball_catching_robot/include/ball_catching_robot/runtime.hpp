@@ -60,6 +60,22 @@ class ProcessingClock {
  private:
   ImageClock clock_;
 };
+// Absolute application time uses the same gem5/Gazebo origin as sensor stamps.
+// Native runs retain the node's ROS clock; guests do not need a /clock subscriber.
+class ApplicationClock {
+ public:
+  explicit ApplicationClock(rclcpp::Node & node)
+    : clock_([&node] { return node.now().nanoseconds(); },
+        recordingParameter<std::string>(node, "gem5_clock_library", ""),
+        recordingParameter<std::string>(node, "gem5_time_origin_file", "")) {}
+  std::optional<rclcpp::Time> now() {
+    const auto time = clock_.now();
+    if (!time) return std::nullopt;
+    return rclcpp::Time(*time, RCL_ROS_TIME);
+  }
+ private:
+  ImageClock clock_;
+};
 class Recorder {
  public:
   Recorder(const std::string &directory, const std::string &name, rclcpp::Node *node = nullptr)
@@ -145,10 +161,29 @@ struct Feedback {
     q = position; dq = speed; time = seconds(msg.header.stamp); valid = true;
   }
 };
-// ROS-clock timers retain the simulation-time scheduling of the Python nodes.
+// Native timers follow ROS time. Guest timers wake on the guest kernel's steady
+// clock, but only run when gem5 time reaches the next period. Missing the origin
+// or a frozen clock cannot trigger work; a slow callback skips missed periods.
 inline rclcpp::TimerBase::SharedPtr timer(rclcpp::Node &node, double period, std::function<void()> callback) {
+  if (!std::isfinite(period) || period < 1e-9 || period > 3600.)
+    throw std::invalid_argument("timer period must be between 1 ns and 1 hour");
+  const auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::duration<double>(period));
+  if (!recordingParameter<std::string>(node, "gem5_clock_library", "").empty()) {
+    auto clock = std::make_shared<ApplicationClock>(node);
+    std::function<void()> tick =
+      [clock, callback = std::move(callback), period = duration.count(), next = int64_t{0}]() mutable {
+        const auto stamp = clock->now();
+        if (!stamp || stamp->nanoseconds() < next) return;
+        const auto time = stamp->nanoseconds();
+        next = time + period - time % period;
+        callback();
+      };
+    return node.create_wall_timer(std::min(duration, std::chrono::nanoseconds(1000000)),
+      std::move(tick));
+  }
   return rclcpp::create_timer(node.get_node_base_interface(), node.get_node_timers_interface(),
-      node.get_clock(), std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period)),
+      node.get_clock(), duration,
       std::move(callback));
 }
 template<class Node> int run(int argc, char **argv) {

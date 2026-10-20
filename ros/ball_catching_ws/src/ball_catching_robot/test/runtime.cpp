@@ -6,6 +6,60 @@
 
 using namespace ball_catching;
 
+TEST(Scheduling, GuestTimersAndStampsDoNotRequireClockMessages)
+{
+  rclcpp::init(0, nullptr);
+  const auto directory = std::filesystem::path("/tmp") /
+    ("chimaera-scheduling-test-" + std::to_string(getpid()));
+  std::filesystem::create_directories(directory);
+  const auto originFile = directory / "origin.ns";
+  void * library = dlopen(FAKE_GEM5_CLOCK, RTLD_NOW | RTLD_LOCAL);
+  ASSERT_NE(library, nullptr);
+  const auto set = reinterpret_cast<void (*)(uint64_t)>(
+    dlsym(library, "chimaera_test_set_time_ns"));
+  ASSERT_NE(set, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("scheduling_test",
+    rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("gem5_clock_library", FAKE_GEM5_CLOCK),
+      rclcpp::Parameter("gem5_time_origin_file", originFile.string()),
+      rclcpp::Parameter("use_sim_time", false)}));
+  ApplicationClock clock(*node);
+  unsigned calls = 0;
+  auto scheduled = timer(*node, .004, [&] { ++calls; });
+  auto pump = [&] {
+    for (int i = 0; i < 5; ++i) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      rclcpp::spin_some(node);
+    }
+  };
+  EXPECT_FALSE(clock.now());
+  pump();
+  EXPECT_EQ(calls, 0u);  // No work before the exact time origin exists.
+  constexpr uint64_t origin = 5000000000;
+  std::ofstream(originFile) << origin << '\n';
+  set(origin + 4000000);
+  pump();
+  ASSERT_TRUE(clock.now());
+  EXPECT_EQ(clock.now()->nanoseconds(), 4000000);
+  EXPECT_EQ(calls, 1u);  // Wall time alone cannot fire another callback.
+  set(origin + 7999999);
+  pump();
+  EXPECT_EQ(calls, 1u);
+  set(origin + 8000000);
+  pump();
+  EXPECT_EQ(calls, 2u);
+  set(origin + 100000000);
+  pump();
+  EXPECT_EQ(calls, 3u);  // Skip missed periods instead of replaying stale work.
+  EXPECT_EQ(node->count_publishers("/clock"), 0u);
+  EXPECT_EQ(node->count_subscribers("/clock"), 0u);
+  scheduled.reset();
+  node.reset();
+  std::filesystem::remove_all(directory);
+  dlclose(library);
+  rclcpp::shutdown();
+}
+
 TEST(Recording, GuestClockAndExportAreIndependentOfRosClock)
 {
   rclcpp::init(0, nullptr);

@@ -54,6 +54,16 @@ work under both KVM and the detailed CPU. Native checks
 use ROS simulation time. Image delivery fails closed until this clock is ready.
 Readiness reflects capture age, so stale arrivals cannot falsely refresh it.
 
+The guest routes omit `/clock`. Planner/controller timestamps and timer deadlines
+use that same gem5 clock and origin; guest nodes run with `use_sim_time:=false`.
+Steady timers wake the executor at most every millisecond, with callbacks gated
+by gem5 time. They wait for the origin and skip missed periods instead of running
+a burst of stale updates. Native nodes continue to use ROS simulation time.
+Joint feedback and effort commands coalesce pending values, just like stereo
+pairs: a stalled DMA consumer keeps the newest state rather than accumulating
+1 kHz feedback up to the controller's 1,024-message limit. Benchmark telemetry
+remains reliable and lossless. Already committed mailbox entries remain in flight.
+
 The CPU reference remains four x86 Timing CPUs at 3 GHz, private 32 KiB
 instruction/data L1 caches and an 8 MiB shared Ruby MESI last-level cache.
 The default memory interface now approximates the Jetson AGX Orin 64 GB:

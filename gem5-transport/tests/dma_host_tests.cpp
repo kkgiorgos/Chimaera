@@ -89,7 +89,10 @@ int main() {
         expect(host.step(std::chrono::milliseconds(2)).ok());
         auto first = host.take();
         expect(first && *first == Message(1843337, std::byte{1}));
-        host.submit(Message(8192, std::byte{41}), "state");
+        // Several seconds of 1 kHz feedback while the consumer is stalled must
+        // retain one newest state, rather than hit the 1024-message limit.
+        for (unsigned i = 0; i < 4096; ++i)
+            host.submit(Message(8192, std::byte{41}), "state");
         expect(host.step(std::chrono::milliseconds(2)).ok());
         auto second = host.take();
         expect(second && *second == Message(1843337, std::byte{2}));

@@ -15,7 +15,7 @@ public:
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
     planner_(arm_),
     record_(declare_parameter<std::string>("output", ""), "interception", this),
-    processingClock_(*this)
+    processingClock_(*this), applicationClock_(*this)
   {
     const auto home =
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())));
@@ -59,7 +59,9 @@ private:
   };
   void plan()
   {
-    const auto stamp = now();
+    const auto currentTime = applicationClock_.now();
+    if (!currentTime) return;
+    const auto stamp = *currentTime;
     const double time = stamp.seconds();
     if (
       !feedback_.valid || !ball_ || !radius_ || time < holdUntil_ ||
@@ -153,7 +155,8 @@ private:
         segment.sample(segment.start + segment.duration),
         segment.start + segment.duration - segments.front().start);
     commands_->publish(msg);
-    trajectories_.replace(segments, now().seconds());
+    const auto completed = applicationClock_.now();
+    if (completed) trajectories_.replace(segments, completed->seconds());
   }
   MotionState desired(double time) const
   {
@@ -163,6 +166,7 @@ private:
   CupInterceptPlanner planner_;
   Recorder record_;
   ProcessingClock processingClock_;
+  ApplicationClock applicationClock_;
   Feedback feedback_;
   Vec7 home_;
   double lastPlan_{-1}, holdUntil_{-1}, planInterval_{.06}, planningBudget_{1. / 30.};

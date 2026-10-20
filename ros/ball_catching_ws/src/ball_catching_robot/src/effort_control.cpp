@@ -15,7 +15,7 @@ public:
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())))),
     record_(declare_parameter<std::string>("output", ""), "control", this),
     timing_(get_parameter("output").as_string(), "control_timing", this),
-    processingClock_(*this)
+    processingClock_(*this), applicationClock_(*this)
   {
     arm_.validateHome(home_);
     const double hz = declare_parameter("control_hz", 250.);
@@ -55,14 +55,18 @@ private:
         if (!candidate.feasible(arm_)) return;
         candidates.push_back(candidate);
       }
-      trajectories_.replace(candidates, now().seconds());
+      const auto stamp = applicationClock_.now();
+      if (!stamp) return;
+      trajectories_.replace(candidates, stamp->seconds());
     } catch (const std::invalid_argument &) {
       return;
     }
   }
   void control()
   {
-    const auto stamp = now();
+    const auto current = applicationClock_.now();
+    if (!current) return;
+    const auto stamp = *current;
     const double time = stamp.seconds();
     if (!feedback_.valid || time - feedback_.time < 0 || time - feedback_.time >= .05) return;
     const auto started = processingClock_.now();
@@ -113,6 +117,7 @@ private:
   Vec7 home_;
   Recorder record_, timing_;
   ProcessingClock processingClock_;
+  ApplicationClock applicationClock_;
   Feedback feedback_;
   double lastLog_{-1}, lastControl_{-1};
   Vec7 integral_ = Vec7::Zero();
