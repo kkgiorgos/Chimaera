@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chimaera throughput and latency comparison</title>
+<style>
+:root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;color:var(--foreground,CanvasText);font:14px/1.5 var(--font-sans,system-ui)}h2{font-size:22px;margin:0}p{margin:8px 0 14px}.muted,small{color:var(--muted-foreground,GrayText)}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}select{font:inherit;font-size:13px;padding:7px;border:1px solid var(--border,GrayText);border-radius:6px;color:inherit;background:var(--card,Canvas);max-width:100%}.group{margin:20px 0}.name{font-weight:650;margin-bottom:8px}.row{display:grid;grid-template-columns:142px 1fr 139px;gap:8px;align-items:center;margin:7px 0;font-size:12px}.track{height:13px;background:var(--secondary,ButtonFace);border-radius:3px}.bar{height:100%;min-width:1px;border-radius:3px;background:var(--color)}.value{text-align:right;font-variant-numeric:tabular-nums}.rate{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.panel{background:var(--card,ButtonFace);padding:16px;border-radius:var(--radius,8px)}.big{font-size:21px;font-weight:650}.caption{font-size:12px}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}th,td{padding:7px 5px;border-bottom:1px solid var(--border,GrayText);text-align:right;font-variant-numeric:tabular-nums}td:first-child,th:first-child{text-align:left}.loss{color:var(--warning,#a46a17);font-weight:650}summary{cursor:pointer;margin:15px 0;font-weight:650}.note{margin-top:18px;padding:16px;background:var(--card,ButtonFace);border-radius:var(--radius,8px)}.note p:last-child{margin-bottom:0}@media(max-width:480px){h2{font-size:20px}.row{grid-template-columns:104px 1fr 112px;font-size:11px}.caption{font-size:11px}}
+</style><body>
+<h2>Throughput and guest-visible latency</h2>
+<p class="muted">ubuntu-george · 2 × TimingSimpleCPU at 3 GHz · 2 ms synchronization</p>
+<p>DMA greatly reduces standalone control delay. Stereo delivery stays at the offered 30 pairs/s; the remaining image delay is dominated by ROS publication in the traced example.</p>
+<div class="controls">
+<select id="cohort" aria-label="Benchmark cohort"><option value="acceptance">Final matched tests · 2 s</option><option value="historical">Original and early rewrites · 0.2 s pilots</option></select>
+<select id="workload" aria-label="Workload"><option value="control">64-byte controls · 97 Hz each way</option><option value="latest">Stereo 640×480 RGB · latest</option><option value="lossless">Stereo 640×480 RGB · lossless</option></select>
+</div>
+<p id="cohortNote" class="caption muted"></p>
+<div id="throughput" class="rate" aria-live="polite"></div>
+<div class="controls">
+<select id="stat" aria-label="Latency statistic"><option value="latency_mean_ms">Mean callback delay</option><option value="latency_p99_ms">Observed p99 callback delay</option><option value="age_mean_ms">Mean age from scheduled release</option><option value="age_max_ms">Maximum age from scheduled release</option></select>
+<select id="native" aria-label="Same-machine native reference"><option value="native_stepped">Compare with stepped native</option><option value="native_free">Compare with free-running native</option></select>
+</div>
+<div id="chart" aria-live="polite"></div>
+<p class="caption muted">Bars: co-simulation milliseconds · received / published. Native runs use the same physical machine and matched endpoints for each implementation. Native timestamps use 1 ms buckets; zero means the same bucket.</p>
+<details><summary>All streams: delivery, rates and latency</summary><div class="scroll"><table>
+<thead><tr><th>Implementation / stream</th><th>Received / sent</th><th>Delivered / source-s</th><th>Mean ms</th><th>p99 ms</th><th>Native receipts</th><th>Native / source-s</th><th>Native mean ms</th></tr></thead><tbody id="streams"></tbody></table></div></details>
+<details><summary>Wall-clock execution records</summary><p class="caption muted">Whole-case wall time includes setup, warmup, drain and export, under shared host load. These values do not isolate simulator speed or maximum message throughput.</p><div class="scroll"><table><thead><tr><th>Implementation</th><th>Detailed CPU, s</th><th>Stepped native, s</th><th>Free native, s</th></tr></thead><tbody id="wall"></tbody></table></div></details>
+<div class="note"><strong>How to read throughput</strong><p>Rates count unique receipts from a finite source cohort, including arrivals during drain, divided by the source-window duration. They show delivered load, with payload headers excluded. No saturation sweep has established maximum capacity. Stereo RGB payload at full delivery is 55.296 MB per source-second (two 921,600-byte images × 30 Hz).</p><p id="interpretation"></p><p class="caption muted">One repeat per case; 60 stereo pairs in final tests and 6 frames per eye in pilots. Historical pilots use older DDS settings and endpoints, so cross-cohort percentages would confound implementation and benchmark changes. The native gap also includes modeled guest CPU/memory costs. Device-only DMA probes are excluded from ROS comparisons.</p></div>
+<script>
+const data=DATA;
+const names={host_to_guest:'Host → guest',guest_to_host:'Guest → host',left_image:'Left camera',right_image:'Right camera',stereo_pair:'Complete stereo pair',joint_states:'Joint feedback',effort_command:'Effort command',clock:'Clock'};
+const colors={baseline:'var(--chart-1,#ac8455)','candidate-v1':'var(--chart-2,#a382c6)','candidate-v2':'var(--chart-3,#7d9893)',m5:'var(--chart-1,#ac8455)',dma:'var(--chart-2,#688ae0)'};
+const el=id=>document.getElementById(id),fmt=(v,n=2)=>v==null?'n/a':v.toFixed(n);
+function render(){
+ const cohort=el('cohort').value,old=cohort==='historical';
+ el('workload').querySelector('[value=lossless]').disabled=old;
+ if(old&&el('workload').value==='lossless')el('workload').value='latest';
+ for(const option of el('stat').options)option.disabled=old&&option.value.startsWith('age');
+ if(old&&el('stat').value.startsWith('age'))el('stat').value='latency_mean_ms';
+ const shape=el('workload').value,native=el('native').value,stat=el('stat').value;
+ const selected=data.rows.filter(r=>r.cohort===cohort&&(shape==='control'?r.workload==='synthetic':r.workload==='ball_catching'&&r.policy===shape));
+ const impls=old?['baseline','candidate-v1','candidate-v2']:['m5','dma'];
+ const get=(impl,mode,stream)=>selected.find(r=>r.implementation===impl&&r.mode===mode&&r.stream===stream);
+ el('cohortNote').textContent=data.cohorts[cohort];
+ el('throughput').innerHTML=impls.map(impl=>{
+   const streams=shape==='control'?['host_to_guest','guest_to_host']:['left_image','right_image'];
+   const rows=streams.map(s=>get(impl,'chimaera',s)),ns=streams.map(s=>get(impl,native,s));
+   const goodput=rows.reduce((sum,r)=>sum+r.payload_MB_per_source_second,0),nativeGoodput=ns.reduce((sum,r)=>sum+r.payload_MB_per_source_second,0);
+   const counts=rows.map(r=>r.received+'/'+r.published).join(' + '),rates=rows.map(r=>fmt(r.delivered_per_source_second,1)).join(' / ');
+   return '<div class="panel"><strong>'+rows[0].label+'</strong><div class="big">'+fmt(goodput,shape==='control'?6:3)+' MB/source-s</div><div class="caption">'+rates+(shape==='control'?' messages/source-s, H→G / G→H':' frames/source-s, left / right')+'<br>'+counts+' received<br>Matched native: '+fmt(nativeGoodput,shape==='control'?6:3)+' MB/source-s</div></div>';
+ }).join('');
+ const streams=shape==='control'?['host_to_guest','guest_to_host']:(old?['left_image','right_image']:['left_image','right_image','stereo_pair']);
+ el('chart').innerHTML=streams.map(stream=>{
+   const values=impls.flatMap(impl=>[get(impl,'chimaera',stream),get(impl,native,stream)]),max=Math.max(...values.map(r=>r[stat]??0),.001)*1.05;
+   return '<div class="group"><div class="name">'+names[stream]+'</div>'+values.map(r=>'<div class="row"><span>'+r.label+(r.mode==='chimaera'?'':' · native')+'</span><div class="track"><div class="bar" style="--color:'+(r.mode==='chimaera'?colors[r.implementation]:'var(--chart-4,#3da48d)')+';width:'+((r[stat]??0)/max*100)+'%"></div></div><span class="value">'+fmt(r[stat])+' ms · '+r.received+'/'+r.published+'</span></div>').join('')+'</div>';
+ }).join('');
+ el('streams').innerHTML=impls.flatMap(impl=>selected.filter(r=>r.implementation===impl&&r.mode==='chimaera').map(r=>{
+   const n=get(impl,native,r.stream);
+   return '<tr><td>'+r.label+' / '+names[r.stream]+'</td><td class="'+(r.missing_at_drain?'loss':'')+'">'+r.received+'/'+r.published+'</td><td>'+fmt(r.delivered_per_source_second,1)+'</td><td>'+fmt(r.latency_mean_ms)+'</td><td>'+fmt(r.latency_p99_ms)+'</td><td>'+n.received+'/'+n.published+'</td><td>'+fmt(n.delivered_per_source_second,1)+'</td><td>'+fmt(n.latency_mean_ms)+'</td></tr>';
+ })).join('');
+ el('wall').innerHTML=impls.map(impl=>{const stream=shape==='control'?'host_to_guest':'left_image';return '<tr><td>'+get(impl,'chimaera',stream).label+'</td>'+['chimaera','native_stepped','native_free'].map(mode=>'<td>'+fmt(get(impl,mode,stream).wall_seconds,1)+'</td>').join('')+'</tr>';}).join('');
+ el('interpretation').textContent=old?'The first rewrite loses more images than the original in this short pilot. Lower latency among received frames therefore cannot establish better lossless performance. Complete-pair age was not exported for these pilots.':shape==='control'?'All 194/194 messages arrive each way. DMA reduces mean callback delay by 88.5% into the guest and 74.1% out, relative to the matched M5 rewrite. Delivered throughput is unchanged at this offered load.':shape==='latest'?'Both backends deliver 60/60 stereo pairs. Mean pair callback delay changes from 23.35 to 22.99 ms (1.5%). Joint, effort and clock delivery is incomplete; open the stream table to see those losses.':'Both backends deliver every actual publication. Mean pair callback delay changes from 26.25 to 24.42 ms (7.0%), but observed maximum age rises from 36.05 to 38.89 ms. Both exceed the 33.3 ms frame period in this cohort.';
+}
+document.querySelectorAll('select').forEach(e=>e.addEventListener('change',render));render();
+console.log('Comparison:',data.cases,'stream rows:',data.rows.length);
+</script></body></html>

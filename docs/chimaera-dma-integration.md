@@ -4,6 +4,10 @@ Implementation: `cfc5dc1` on `feat/chimaera-low-latency-transport`.
 Measurements: `ubuntu-george`, 2026-10-20. All runs use isolated containers;
 the deployed latency service and guest disk/kernel remain unchanged.
 
+The [throughput and latency comparison](chimaera-implementation-comparison.md)
+puts these matched results alongside native execution and the historical
+original/first-rewrite pilots, with delivery rates and payload goodput.
+
 ## What is integrated
 
 The ROS host bridge, Gazebo timing controller and guest bridge can select
