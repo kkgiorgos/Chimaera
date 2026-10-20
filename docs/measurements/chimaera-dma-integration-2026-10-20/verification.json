@@ -34,8 +34,8 @@
     },
     {
       "kind": "analysis/collector unittest",
-      "passed": 8,
-      "total": 8,
+      "passed": 9,
+      "total": 9,
       "command": "python3 -m unittest discover -s profiling/chimaera_rewrite -v"
     }
   ],
@@ -333,5 +333,6 @@
     },
     "raw_data_retained": "/home/kkgiorgos/Chimaera/.chimaera-rewrite/20261020"
   },
-  "post_run_binary_hash_check": "Both acceptance SDK binaries match gem5_sha256; module matches retained probe SHA."
+  "post_run_binary_hash_check": "Both acceptance SDK binaries match gem5_sha256; module matches retained probe SHA.",
+  "csv_output_validation": "LF line endings; every field/value round-tripped unchanged; diagnostic-only comparison CSVs removed."
 }

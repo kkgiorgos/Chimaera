@@ -53,10 +53,15 @@ def export(roots, output, physical_host, history_only=False):
                   attempts=attempts)
     (output / 'attempts.json').write_text(json.dumps(record, indent=2) + '\n')
     fields = list(dict.fromkeys(key for row in rows for key in row))
-    with (output / 'comparison.csv').open('w') as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(rows)
+    comparison = output / 'comparison.csv'
+    if rows:
+        with comparison.open('w') as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields, lineterminator='\n')
+            writer.writeheader()
+            writer.writerows(rows)
+    elif comparison.exists():
+        # A diagnostic archive must not retain a stale matched comparison.
+        comparison.unlink()
     return len(attempts), len(complete), len(rows)
 
 

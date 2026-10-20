@@ -120,7 +120,7 @@ def main():
     (args.output / 'runs.json').write_text(json.dumps(runs, indent=2) + '\n')
     fields = list(dict.fromkeys(key for row in rows for key in row))
     with (args.output / 'comparison.csv').open('w') as output:
-        writer = csv.DictWriter(output, fieldnames=fields)
+        writer = csv.DictWriter(output, fieldnames=fields, lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
     print(f'{len(runs)} runs, {len(rows)} stream measurements; matched native controls verified')

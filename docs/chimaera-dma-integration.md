@@ -304,7 +304,7 @@ mixed-stream performance or sustained 10 Hz delivery.
 - Fourteen ROS/package CTests pass, including guard notifications before and
   during executor wait, lossless stereo pairing, manifest compatibility,
   DDS configuration, metrics and guest reuse compatibility. Sixty-four deployed
-  configuration checks pass. Eight analysis/collector checks pass.
+  configuration checks pass. Nine analysis/collector checks pass.
 - The final detailed-CPU host-mailbox probe passes all eighteen byte/dirty-guard
   checks at 0, 63, 64, 4096, 4097, 921600, 1843200, 1843337 and 7372800 bytes,
   twice each. Invalid requests, exclusive open and reset/reopen with DMA in
