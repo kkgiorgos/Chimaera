@@ -792,9 +792,12 @@ class Controller:
                                                        image_count=count, source=source['name'])
             return update
         application = provenance.get('application_image_id')
-        count = 2 if provenance.get('readiness_checkpoint') else 1
-        # The application already contains every SDK layer. Consumers need no
-        # standalone SDK image or second export of those same filesystem layers.
+        base = provenance.get('base_image_id', image)
+        needs_base = not provenance.get('readiness_checkpoint') and not destination.get('disk')
+        count = (1 + int(bool(provenance.get('readiness_checkpoint'))) +
+                 int(needs_base and base != (application or image)))
+        # Application layers suffice for execution, but fresh-boot preparation
+        # also exports the dependency base to construct the guest filesystem.
         images = dict(sdk_image_id=image)
         if application:
             self.remote.call(destination, 'remember_image', image=application)
@@ -805,6 +808,15 @@ class Controller:
         else:
             images['sdk_image_id'] = self.remote.copy_image(source, destination, image, cancel=cancelled,
                                                           progress=progress('SDK', 1, count))
+        if needs_base:
+            if base == (application or image):
+                images['base_image_id'] = images.get('application_image_id', images['sdk_image_id'])
+            else:
+                self.remote.call(destination, 'remember_image', image=base)
+                images['base_image_id'] = self.remote.copy_image(
+                    source, destination, base, cancel=cancelled,
+                    progress=progress('Guest base', 2, count))
+                self.remote.call(destination, 'remember_image', image=images['base_image_id'])
         if provenance.get('readiness_checkpoint'):
             progress('Readiness assets', 2, count)(dict(phase='Streaming sparse disk and checkpoints',
                 bytes_sent=0, bytes_per_second=0, elapsed_seconds=0, eta_seconds=None, updated=time.time()))
@@ -864,7 +876,11 @@ class Controller:
                 continue
             if not experiment['calibration'] and machine['id'] != producer:
                 continue
-            if experiment['calibration'] and machine['id'] != producer and not (preparation or {}).get('sdk_image_id'):
+            needs_base = (experiment['calibration'] and
+                not experiment['calibration']['provenance'].get('readiness_checkpoint') and not machine.get('disk'))
+            if experiment['calibration'] and machine['id'] != producer and (
+                    not (preparation or {}).get('sdk_image_id') or
+                    (needs_base and not (preparation or {}).get('base_image_id'))):
                 experiment['preparations'][machine['id']] = dict(status='copying_sdk', phase='Copying prepared images')
                 cancelled = self.sdk_cancellations.setdefault(experiment['id'], threading.Event())
                 self.submit('sdk-' + machine['id'], 'sdk_transfer', (experiment['id'], machine['id'], experiment.get('generation', 0)),
@@ -873,7 +889,7 @@ class Controller:
             experiment['preparations'][machine['id']] = dict(preparation or {}, status='preparing')
             calibration = copy.deepcopy(experiment['calibration']) if machine['id'] != producer else None
             if calibration:
-                for field in ('sdk_image_id', 'application_image_id'):
+                for field in ('sdk_image_id', 'base_image_id', 'application_image_id'):
                     if (preparation or {}).get(field):
                         calibration['provenance'][field] = preparation[field]
             self.submit('prepare-' + machine['id'], 'prepare', (experiment['id'], machine['id']),

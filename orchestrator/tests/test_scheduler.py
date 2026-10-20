@@ -643,16 +643,20 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
     value = experiment(controller, count=1)
     app_id = 'sha256:' + 'b' * 64
     value['calibration']['provenance']['application_image_id'] = app_id
+    base_id = 'sha256:' + 'c' * 64
+    value['calibration']['provenance']['base_image_id'] = base_id
     original = dict(value['calibration']['provenance'])
     local = {
-        'm1': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'd' * 64),
-        'm2': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'f' * 64),
+        'm1': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'd' * 64,
+                   base_image_id='sha256:' + '1' * 64),
+        'm2': dict(sdk_image_id=SDK_ID, application_image_id='sha256:' + 'f' * 64,
+                   base_image_id='sha256:' + '2' * 64),
     }
     transfers = []
 
     def transfer(source, destination, image, **kwargs):
         transfers.append((source['id'], destination['id'], image))
-        field = 'sdk_image_id' if image == SDK_ID else 'application_image_id'
+        field = 'base_image_id' if image == base_id else 'application_image_id'
         return local[destination['id']][field]
 
     controller.remote.copy_image = transfer
@@ -662,7 +666,7 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
     finish_jobs(controller)
     saved = controller.experiment('e1')
     assert saved['calibration']['provenance'] == original
-    assert set(transfers) == {('m0', machine, app_id) for machine in local}
+    assert set(transfers) == {('m0', machine, image) for machine in local for image in (app_id, base_id)}
     for machine, images in local.items():
         assert all(saved['preparations'][machine][key] == image for key, image in images.items())
     controller.schedule(saved)
@@ -672,7 +676,52 @@ def test_cross_store_image_ids_stay_local_to_each_consumer(controller):
         assert request['calibration']['provenance'] == dict(original, **images)
         remembered = [c[2]['image'] for c in controller.remote.calls if c[:2] == (machine, 'remember_image')]
         assert images['application_image_id'] in remembered
+        assert images['base_image_id'] in remembered
     assert controller.experiment('e1')['calibration']['provenance'] == original
+
+
+@pytest.mark.parametrize('checkpoint,configured_disk', [(True, False), (False, True)])
+def test_consumer_with_guest_assets_does_not_transfer_base(controller, checkpoint, configured_disk):
+    value = experiment(controller, count=1)
+    app_id, base_id = ('sha256:' + char * 64 for char in ('b', 'c'))
+    value['calibration']['provenance'].update(application_image_id=app_id,
+        base_image_id=base_id, readiness_checkpoint=checkpoint, checkpoint_index_sha256='index')
+    destination = controller.machine('m1')
+    destination['disk'] = '/guest.img' if configured_disk else ''
+    controller.remote.copy_readiness = lambda *args, **kwargs: True
+    images = controller.copy_sdk(value, destination, None)
+    assert 'base_image_id' not in images
+    copies = [c[2]['image'] for c in controller.remote.calls if c[1] == 'copy_image']
+    assert copies == [app_id]
+
+
+def test_missing_base_transfer_blocks_preparation_and_retry_recovers(controller):
+    value = experiment(controller, count=1)
+    app_id, base_id = ('sha256:' + char * 64 for char in ('b', 'c'))
+    value['config'] = dict(fixed=dict(transport_backend='dma'))
+    value['calibration']['provenance'].update(application_image_id=app_id, base_image_id=base_id)
+    # A persisted transfer from the old controller has only these two markers.
+    value['preparations']['m1'] = dict(status='pending', sdk_image_id=SDK_ID, application_image_id=app_id)
+    controller.save(value)
+    copy_image = controller.remote.copy_image
+    def fail_base(source, destination, image, **kwargs):
+        if image == base_id:
+            raise RuntimeError('Base transfer interrupted')
+        return copy_image(source, destination, image, **kwargs)
+    controller.remote.copy_image = fail_base
+    controller.schedule(value)
+    finish_jobs(controller)
+    assert controller.experiment('e1')['preparations']['m1']['status'] == 'failed'
+    assert not any(c[:2] == ('m1', 'prepare') for c in controller.remote.calls)
+    controller.remote.copy_image = copy_image
+    controller.apply(dict(kind='retry_prepare', body=dict(id='e1', machine='m1')))
+    finish_jobs(controller)
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    controller.schedule(controller.experiment('e1'))
+    finish_jobs(controller)
+    request = next(c[2] for c in controller.remote.calls if c[:2] == ('m1', 'prepare'))
+    assert request['calibration']['provenance']['base_image_id'] == base_id
 
 
 def test_stop_cancels_sdk_transfer_and_late_completion_cannot_prepare(controller):
@@ -737,7 +786,7 @@ def test_selected_machine_supplies_both_images_before_consumer_prepares(controll
         assert 'Application transfer interrupted' in preparation['error']
     else:
         copies = [c for c in controller.remote.calls if c[1] == 'copy_image']
-        assert [c[2]['image'] for c in copies] == [app_id]
+        assert [c[2]['image'] for c in copies] == [app_id, SDK_ID]
         controller.schedule(controller.experiment('e1'))
         finish_jobs(controller)
         assert any(c[0] == 'm1' and c[1] == 'prepare' for c in controller.remote.calls)

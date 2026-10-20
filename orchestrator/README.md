@@ -241,8 +241,13 @@ controller rates require compatible checkpoints; preparation groups those separa
 Missing or incompatible checkpoints fail preparation/execution; there is no KVM
 fallback. Use a new experiment after updating the simulator/bridge for this protocol.
 
+Fresh-boot workers (including DMA) also receive the dependency base image used
+to construct their guest disk. Workers using transferred readiness checkpoints
+or an explicitly configured disk do not need that extra image. Destination image
+identities are recorded separately from the producer's calibration provenance.
+
 The dashboard shows **Copying prepared images** during transfer, with the current
-application image, compressed bytes sent, average transfer rate, elapsed time,
+application or guest base image, compressed bytes sent, average transfer rate, elapsed time,
 and an estimated ETA for the current image based on its uncompressed Docker size
 and measured export/network throughput. The ETA excludes loading and verification;
 those stages display their status instead. ETA appears after throughput is sampled.
