@@ -33,7 +33,7 @@ int main(int argc, char ** argv)
     auto node = std::make_shared<chimaera_ros_bridge::Bridge>("guest");
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
-    node->pump = [&executor] { executor.spin_some(); };
+    node->pump = [&] { node->drain_callbacks(executor); };
     const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);
     if (timeout < 1) {
       throw std::invalid_argument("startup_timeout_s must be positive");
@@ -69,7 +69,12 @@ int main(int argc, char ** argv)
       m5_work_begin_addr(0, 0);
     bool time_ready = false;
     while (rclcpp::ok()) {
-      const auto result = controller.run_next();
+      const auto result = controller.run_next([&](chimaera::Duration idle_wait) {
+        // Wait on DDS readiness so outgoing work wakes the bridge immediately.
+        // The timeout remains the maximum interval between host-input polls.
+        executor.spin_once(idle_wait);
+        node->exchange(controller);
+      });
       if (result.state == chimaera::ControllerState::stopped) {
         break;
       }
@@ -106,12 +111,13 @@ int main(int argc, char ** argv)
         time_ready = true;
         RCLCPP_INFO(node->get_logger(), "Authoritative simulation clock ready at %lu ns", origin);
       }
-      // Deliver, pump ROS once, then queue outgoing messages for the next poll.
+      // Deliver incoming data and collect responses. Queued responses make the
+      // next exchange immediate rather than sleeping for another poll interval.
       node->exchange(controller);
       if (std::getenv("CHIMAERA_LATENCY_REUSE")) {
         char control[96]{};
-        const auto length = ops == "instruction" ? m5_read_file(control, 95, 0)
-                                                  : m5_read_file_addr(control, 95, 0);
+        const auto length =
+          ops == "instruction" ? m5_read_file(control, 95, 0) : m5_read_file_addr(control, 95, 0);
         if (std::string(control, length) == "CHIMAERA_END_CASE\n") break;
       }
       if (checkpoint_control) {

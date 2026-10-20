@@ -10,7 +10,7 @@
 namespace chimaera::control {
 using Batch = std::vector<Message>;
 // Version identification belongs to startup, not every message batch.
-inline constexpr std::uint64_t startup_magic = 0x4348494d43545232; // CHIMCTR2
+inline constexpr std::uint64_t startup_magic = 0x4348494d43545233; // CHIMCTR3
 inline constexpr auto bootstrap_delay = std::chrono::milliseconds(1);
 inline bool valid(Duration interval, Duration poll) {
     return interval.count() > 0 && poll.count() > 0 && poll <= interval &&
@@ -101,32 +101,31 @@ inline Duration decode_startup(std::span<const std::byte> data) {
         throw std::runtime_error("invalid controller startup reply");
     return Duration(poll);
 }
-inline Message encode(const Batch& batch) {
+inline Message encode_manifest(const Batch& batch) {
+    bytes(batch);
     Message data;
-    data.reserve(8 + batch.size() * 8 + bytes(batch));
+    data.reserve(8 + batch.size() * 8);
     put(data, batch.size());
     for (const auto& message : batch) {
         put(data, message.size());
-        data.insert(data.end(), message.begin(), message.end());
     }
     return data;
 }
-inline Batch decode(std::span<const std::byte> data) {
+inline std::vector<std::size_t> decode_manifest(std::span<const std::byte> data) {
     const auto count = get(data);
-    if (count > max_messages) throw std::runtime_error("invalid controller batch size");
-    Batch batch;
+    if (count > max_messages || data.size() != count * 8)
+        throw std::runtime_error("invalid controller manifest");
+    std::vector<std::size_t> sizes;
+    sizes.reserve(count);
     std::size_t payload_bytes = 0;
     for (std::uint64_t i = 0; i < count; ++i) {
         const auto size = get(data);
-        if (size > data.size()) throw std::runtime_error("truncated controller message");
         if (size > max_bytes - payload_bytes)
             throw std::runtime_error("controller batch exceeds 32 MiB");
         payload_bytes += size;
-        batch.emplace_back(data.begin(), data.begin() + size);
-        data = data.subspan(size);
+        sizes.push_back(size);
     }
-    if (!data.empty()) throw std::runtime_error("trailing controller data");
-    return batch;
+    return sizes;
 }
 inline void send(Transport& transport, std::span<const std::byte> data) {
     auto result = transport.send(data);
@@ -136,5 +135,27 @@ inline Message receive(Transport& transport) {
     auto result = transport.receive();
     if (!result.ok()) throw std::runtime_error(result.message);
     return std::move(result.data);
+}
+
+// A small manifest is followed by independently owned payload frames. Never
+// concatenate image data into a batch and copy it back out at the destination.
+// Startup v3 rejects peers using the previous contiguous-batch protocol.
+inline void send_batch(Transport& transport, const Batch& batch) {
+    const auto manifest = encode_manifest(batch); // Validate before sending any bytes.
+    send(transport, manifest);
+    for (const auto& message : batch) send(transport, message);
+}
+
+inline Batch receive_batch(Transport& transport) {
+    const auto sizes = decode_manifest(receive(transport));
+    Batch batch;
+    batch.reserve(sizes.size());
+    for (const auto size : sizes) {
+        auto message = receive(transport);
+        if (message.size() != size)
+            throw std::runtime_error("controller payload does not match manifest");
+        batch.push_back(std::move(message));
+    }
+    return batch; // No partial batch becomes visible on a transport failure.
 }
 } // namespace chimaera::control

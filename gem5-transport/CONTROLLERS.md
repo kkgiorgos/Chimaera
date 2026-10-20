@@ -11,6 +11,10 @@ Include `chimaera/gem5_controller.hpp` and link the appropriate controller targe
 from [the build guide](README.md). The `DataController`, `HostController`,
 `GuestController`, and `TimingController` interfaces define the extension contracts.
 Applications serialize controller calls and own all message producers and consumers.
+`Message` owns contiguous bytes with deep-copy/value semantics and cheap moves.
+Receive paths use `Message::for_overwrite()` only when the complete allocation
+will be filled before it becomes visible; ordinary construction and resize
+continue to zero-initialize bytes.
 
 A host loop constructs the listeners before starting the guest, waits for the
 paused timing server, and exchanges application data around each step:
@@ -117,12 +121,15 @@ sequenceDiagram
 
 Configure the polling interval once in the host controller constructor (default
 1 ms); it must be positive and at most one simulated hour. Startup sends this
-immutable value to the guest. A guest `run_next()` performs one batch exchange.
-Before subsequent exchanges it sleeps for that duration on the guest OS clock.
-Returning before that sleep lets the application deliver received messages and
-run callbacks promptly. The first call completes startup, then sends queued
-application output and receives a batch immediately, without a polling wait.
-Actual spacing also includes guest scheduling and application work; the duration is not a guarantee of a fixed poll count.
+immutable maximum idle interval to the guest. A guest `run_next()` performs one
+batch exchange. Queued output bypasses its idle wait. Applications with an
+executor can call `run_next(before_exchange)` instead: the hook receives the
+maximum idle duration, waits for local readiness, and submits newly ready output
+before transport I/O. It runs on the caller's thread, receives zero wait at
+startup or when output is queued, and may return early. The ROS bridge uses
+this hook to wake on DDS work. Host input still needs polling; this protocol
+does not provide a guest interrupt. Without a hook, idle waits use the guest OS
+clock. Actual spacing also includes guest scheduling and application work.
 
 An empty batch is valid, so polling never waits for application data. Before the
 first host step, the guest exchanges startup requests and receives not-ready
@@ -216,27 +223,35 @@ The message protocol has two phases, both inside the [raw transport framing](REA
 [src/controller_protocol.hpp](src/controller_protocol.hpp) defines their encoding.
 All integers below are unsigned, eight-byte, and big-endian.
 
-**Startup:** the guest sends the protocol identifier `CHIMCTR2`. The host replies
+**Startup:** the guest sends the protocol identifier `CHIMCTR3`. The host replies
 with that identifier followed by the polling duration in nanoseconds. Zero means
 not ready, so the guest retries after its 1 ms bootstrap wait. A positive value
 completes startup. Both ends check the identifier; the guest also rejects
 truncated/trailing startup data and durations above one hour. There are no
 application messages in startup, and queued data stays intact until it finishes.
 
-**Running:** both directions use exactly the same format:
+**Running:** both directions send a small framed manifest, followed by one
+separately framed payload for each entry:
 
 ```text
 message_count
 for each message:
     message_length
-    message_bytes
+# End of manifest. Then one outer transport frame per message:
+message_0_bytes
+message_1_bytes
+...
 ```
 
 A zero count is an empty batch; a zero message length is an empty application
 message. There is no type, epoch, version identifier, or polling duration in a
 regular batch. The startup version and ordered request/reply flow identify the
-protocol and phase. Batch decoding rejects excessive counts/payload, truncation,
-and trailing data. The outer transport already provides total packet length.
+protocol and phase. Manifest decoding rejects excessive counts/payload and
+trailing or truncated metadata before receiving payloads. Each payload length
+must match its manifest entry. A partial batch is never published to the
+controller's receive queue. Payload buffers move into that queue directly;
+there is no image-sized concatenation or unpacking copy. More framing operations
+per nonempty batch are an explicit tradeoff to measure on detailed CPUs.
 
 The host worker completes its startup reply before accepting batches. The guest
 completes startup before sending its first batch, including switching m5op backend

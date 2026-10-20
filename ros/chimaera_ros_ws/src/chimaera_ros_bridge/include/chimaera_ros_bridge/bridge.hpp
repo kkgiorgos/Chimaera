@@ -3,6 +3,7 @@
 #include <chimaera/controller.hpp>
 #include <chimaera/outgoing_queue.hpp>
 #include <chimaera_ros_bridge/config.hpp>
+#include <chimaera_ros_bridge/serialized_view.hpp>
 #include <chimaera_ros_bridge/stereo_queue.hpp>
 #include <cstdint>
 #include <cstdio>
@@ -70,11 +71,12 @@ public:
           topic, route.type, route.qos,
           [this, key = route.key, coalesce = route.coalesce,
            group = route.coalesce_group](std::shared_ptr<rclcpp::SerializedMessage> message) {
+            ++callback_generation_;
             if (message->size() > byte_limit_) {
               throw std::runtime_error(
                 "bridge outgoing queue or serialized message limit exceeded");
             }
-            chimaera::Message bytes(8 + key.size() + message->size());
+            auto bytes = chimaera::Message::for_overwrite(8 + key.size() + message->size());
             std::memcpy(bytes.data(), "CBR1", 4);
             const auto length = static_cast<std::uint32_t>(key.size());
             for (unsigned i = 0; i < 4; ++i) {
@@ -95,7 +97,8 @@ public:
             if (auto pair = stereo_.submit(group, key, stamp, std::move(bytes))) {
               // One controller entry makes replacement and worker-thread drains
               // atomic for both cameras. Inner CBR1 payloads remain unchanged.
-              chimaera::Message packed(8 + (*pair)[0].size() + (*pair)[1].size());
+              auto packed =
+                chimaera::Message::for_overwrite(8 + (*pair)[0].size() + (*pair)[1].size());
               std::memcpy(packed.data(), "CBP1", 4);
               const auto first = static_cast<uint32_t>((*pair)[0].size());
               for (unsigned i = 0; i < 4; ++i)
@@ -145,15 +148,14 @@ public:
         stale_image();
         return;
       }
-      auto left_message = serialized(left);
-      auto right_message = serialized(right);
-      // Allocation/copying itself can consume the age budget on a Timing CPU.
-      if (!fresh_image(stamp, "copied")) {
+      SerializedView left_message(left.data, left.size);
+      SerializedView right_message(right.data, right.size);
+      if (!fresh_image(stamp, "publish_ready")) {
         stale_image();
         return;
       }
-      publishers_.at(left.key)->publish(left_message);
-      publishers_.at(right.key)->publish(right_message);
+      publishers_.at(left.key)->publish(left_message.message());
+      publishers_.at(right.key)->publish(right_message.message());
       if (image_diagnostics_) trace_image("published", stamp);
       received_ += 2;
       last_receive_ = std::chrono::steady_clock::now();
@@ -162,8 +164,8 @@ public:
     const auto value = frame(bytes.data(), bytes.size());
     if (stereo_groups_.count(value.key))
       throw std::runtime_error("stereo route requires paired delivery");
-    auto message = serialized(value);
-    publishers_.at(value.key)->publish(message);
+    SerializedView message(value.data, value.size);
+    publishers_.at(value.key)->publish(message.message());
     ++received_;
     last_receive_ = std::chrono::steady_clock::now();
   }
@@ -197,14 +199,6 @@ private:
       throw std::runtime_error("invalid incoming serialized message size");
     return {key, bytes + 8 + length, size};
   }
-  static rclcpp::SerializedMessage serialized(const Frame & frame)
-  {
-    rclcpp::SerializedMessage message(frame.size);
-    auto & serialized = message.get_rcl_serialized_message();
-    std::memcpy(serialized.buffer, frame.data, frame.size);
-    serialized.buffer_length = frame.size;
-    return message;
-  }
   std::optional<int64_t> trace_image(const char * stage, int64_t stamp)
   {
     const auto time = simulation_time ? simulation_time() : std::nullopt;
@@ -236,6 +230,19 @@ private:
   }
 
 public:
+  // spin_some collects readiness once. Recollect after callbacks consumed a
+  // sample so bursts can drain in this exchange. Bound passes even if sources
+  // remain continuously ready, and track callbacks rather than queue size:
+  // latest-value replacement does not change the latter.
+  template <typename Executor>
+  void drain_callbacks(Executor & executor, std::size_t max_passes = 32)
+  {
+    for (std::size_t pass = 0; pass < max_passes; ++pass) {
+      const auto previous = callback_generation_;
+      executor.spin_some();
+      if (callback_generation_ == previous) break;
+    }
+  }
   // Application-driven transfer, shared by host boundaries and guest polls.
   void exchange(chimaera::DataController & controller)
   {
@@ -319,6 +326,7 @@ public:
 private:
   std::size_t byte_limit_{max_bytes}, queue_limit_{max_messages};
   chimaera::control::OutgoingQueue outgoing_;
+  std::uint64_t callback_generation_{};
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
   int64_t image_age_ns_{};

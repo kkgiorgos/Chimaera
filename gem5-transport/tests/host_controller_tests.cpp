@@ -4,14 +4,16 @@
 #include <cstring>
 #include <filesystem>
 #include <future>
+#include <source_location>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 using namespace chimaera;
 namespace {
-void expect(bool condition) {
-    if (!condition) throw std::runtime_error("host controller assertion failed");
+void expect(bool condition, std::source_location location = std::source_location::current()) {
+    if (!condition) throw std::runtime_error(
+        "host controller assertion failed at line " + std::to_string(location.line()));
 }
 struct Socket {
     int fd;
@@ -49,9 +51,28 @@ Message exchange_frame(const std::string& g2h, const std::string& h2g, Message d
     transfer(h2g, data, false);
     return data;
 }
+struct MockGuest : Transport {
+    std::string g2h, h2g;
+    MockGuest(std::string out, std::string in) : g2h(std::move(out)), h2g(std::move(in)) {}
+    SendResult send(std::span<const std::byte> data) override {
+        auto header = detail::encode(data.size());
+        transfer(g2h, header, true);
+        if (!data.empty()) transfer(g2h, {const_cast<std::byte*>(data.data()), data.size()}, true);
+        return {};
+    }
+    ReceiveResult receive() override {
+        detail::Header header{};
+        transfer(h2g, header, false);
+        Message data(detail::decode(header));
+        if (!data.empty()) transfer(h2g, data, false);
+        return {std::move(data), TransportError::none, {}};
+    }
+};
 control::Batch exchange(const std::string& g2h, const std::string& h2g,
                         control::Batch messages = {}) {
-    return control::decode(exchange_frame(g2h, h2g, control::encode(messages)));
+    MockGuest guest(g2h, h2g);
+    control::send_batch(guest, messages);
+    return control::receive_batch(guest);
 }
 }
 int main() {

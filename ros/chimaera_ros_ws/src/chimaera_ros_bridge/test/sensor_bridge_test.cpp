@@ -53,6 +53,23 @@ struct QueueController : chimaera::DataController
   }
 };
 
+struct MemoryTransport : chimaera::Transport
+{
+  std::deque<chimaera::Message> frames;
+  chimaera::SendResult send(std::span<const std::byte> bytes) override
+  {
+    frames.emplace_back(bytes.begin(), bytes.end());
+    return {};
+  }
+  chimaera::ReceiveResult receive() override
+  {
+    if (frames.empty()) return {{}, chimaera::TransportError::disconnected, "empty stream"};
+    auto bytes = std::move(frames.front());
+    frames.pop_front();
+    return {std::move(bytes), chimaera::TransportError::none, {}};
+  }
+};
+
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
@@ -386,7 +403,9 @@ int main(int argc, char ** argv)
       image_host->exchange(image_controller);
       auto batch = image_controller.outgoing.drain();
       require(batch.size() == 2, "stereo batch lost an image");
-      auto decoded = chimaera::control::decode(chimaera::control::encode(batch));
+      MemoryTransport transport;
+      chimaera::control::send_batch(transport, batch);
+      auto decoded = chimaera::control::receive_batch(transport);
       for (auto & frame : decoded) image_guest->submit(std::move(frame));
       until([&] {
         executor.spin_some();

@@ -462,13 +462,14 @@ int main(int argc, char ** argv)
   int result = 0;
   try {
     auto endpoint = std::make_shared<chimaera_latency::Endpoint>();
+    // Keep source scheduling periodic while receiving subscriptions wake the
+    // executor directly. An explicit sleep after spin_some delayed every
+    // receive and drained bursts one sample per OS tick in the guest.
+    auto source_timer =
+      endpoint->create_wall_timer(std::chrono::milliseconds(1), [&] { endpoint->tick(); });
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(endpoint);
-    while (rclcpp::ok()) {
-      executor.spin_some();
-      endpoint->tick();
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    executor.spin();
   } catch (const std::exception & error) {
     std::cerr << "Latency endpoint: " << error.what() << '\n';
     result = 1;

@@ -8,10 +8,11 @@
 namespace chimaera {
 
 using Duration = std::chrono::nanoseconds;
-using Message = std::vector<std::byte>;
 
 // Applications push outgoing data and pull received data. Calls to a controller
-// are serialized by the application; no application callbacks are invoked.
+// are serialized by the application. The concrete guest controller additionally
+// offers an explicit executor hook before an exchange; transport I/O never
+// invokes application callbacks.
 class DataController {
 public:
     virtual ~DataController() = default;
@@ -50,7 +51,8 @@ public:
 class GuestController : public DataController {
 public:
     virtual ~GuestController() = default;
-    // Wait for the configured polling duration, then exchange one batch.
+    // Wait up to the configured polling duration, then exchange one batch.
+    // Already queued output may bypass the idle wait.
     // The first call completes startup and exchanges a batch without a polling wait.
     // External scheduling pauses this call along with all other guest code.
     [[nodiscard]] virtual ControllerResult run_next() = 0;

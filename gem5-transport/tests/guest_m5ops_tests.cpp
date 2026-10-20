@@ -8,6 +8,7 @@
 #include <deque>
 #include <stdexcept>
 #include <time.h>
+#include <unistd.h>
 
 using namespace chimaera;
 extern "C" { void* m5_mem = nullptr; }
@@ -27,6 +28,14 @@ std::uint64_t send(bool instruction, void* buffer, std::uint64_t size) {
 std::uint64_t recv(bool instruction, void* buffer, std::uint64_t size) {
     calls.push_back(instruction);
     expect(!received.empty() && received.front().size() == size);
+    const auto page_size = static_cast<std::size_t>(::sysconf(_SC_PAGESIZE));
+    if (size >= page_size) {
+        const auto* bytes = static_cast<std::byte*>(buffer);
+        expect(bytes[0] == std::byte{});
+        const auto first_boundary = page_size - reinterpret_cast<std::uintptr_t>(buffer) % page_size;
+        for (auto offset = first_boundary; offset < size; offset += page_size)
+            expect(bytes[offset] == std::byte{});
+    }
     std::memcpy(buffer, received.front().data(), size);
     received.pop_front();
     return size;
@@ -35,6 +44,13 @@ void enqueue(Message data) {
     auto header = detail::encode(data.size());
     received.emplace_back(header.begin(), header.end());
     if (!data.empty()) received.push_back(std::move(data));
+}
+void enqueue_batch(control::Batch batch) {
+    Message manifest;
+    control::put(manifest, batch.size());
+    for (const auto& message : batch) control::put(manifest, message.size());
+    enqueue(std::move(manifest));
+    for (auto& message : batch) enqueue(std::move(message));
 }
 
 }
@@ -62,6 +78,9 @@ int main() {
     expect(instruction.send(data).ok());
     expect(instruction.receive().data == data);
     expect(calls == std::vector<bool>({true, true, true, true}));
+    const Message image(3 * ::sysconf(_SC_PAGESIZE) + 13, std::byte{0xa5});
+    enqueue(image);
+    expect(instruction.receive().data == image);
     short_send = true;
     expect(!instruction.send(data).ok());
     const auto failed_calls = calls.size();
@@ -74,8 +93,8 @@ int main() {
     sent.clear();
     enqueue(control::encode_startup(Duration{}));
     enqueue(control::encode_startup(Duration(3)));
-    enqueue(control::encode({data, {}}));
-    enqueue(control::encode({data}));
+    enqueue_batch({data, {}});
+    enqueue_batch({data});
     Gem5GuestController controller(GuestM5Ops::instruction, true);
     expect(!controller.take());
     controller.submit(Message{std::byte{9}}, "state");
@@ -83,24 +102,22 @@ int main() {
     expect(controller.run_next().ok());
     // No polling wait before delivering the first application reply.
     expect(waits.size() == 1 && waits[0].duration == control::bootstrap_delay);
-    expect(waits[0].sent_frames == 2 && waits[0].remaining_frames == 6);
+    expect(waits[0].sent_frames == 2 && waits[0].remaining_frames == 11);
     expect(controller.take() == data);
     expect(controller.take() == Message{});
     expect(!controller.take());
-    expect(received.size() == 2);
+    expect(received.size() == 4);
     expect(controller.run_next().ok());
     expect(waits.size() == 2 && waits[1].duration == Duration(3));
-    expect(waits[1].sent_frames == 6 && waits[1].remaining_frames == 2);
+    expect(waits[1].sent_frames == 8 && waits[1].remaining_frames == 4);
     expect(controller.take() == data);
     expect(!controller.take());
-    expect(sent.size() == 8);
+    expect(sent.size() == 10);
     expect(sent[1] == control::startup_request() && sent[3] == control::startup_request());
-    expect(control::decode(sent[5]) == control::Batch{data});
-    expect(control::decode(sent[7]).empty());
-    expect(calls == std::vector<bool>({false, false, false, false,
-                                     false, false, false, false,
-                                     true, true, true, true,
-                                     true, true, true, true}));
+    expect(sent[7] == data);
+    expect(control::decode_manifest(sent[9]).empty());
+    expect(std::count(calls.begin(), calls.end(), false) == 8);
+    expect(std::all_of(calls.begin() + 8, calls.end(), [](bool instruction) { return instruction; }));
     expect(received.empty());
     // A readiness checkpoint starts the new host handshake again without
     // losing queued application output or sleeping on the old poll interval.
@@ -108,11 +125,11 @@ int main() {
     controller.reconnect();
     const auto sent_before_restore = sent.size();
     enqueue(control::encode_startup(Duration(3)));
-    enqueue(control::encode({data}));
+    enqueue_batch({data});
     expect(controller.run_next().ok());
     expect(waits.size() == 2);
     expect(sent[sent_before_restore + 1] == control::startup_request());
-    expect(control::decode(sent[sent_before_restore + 3]) == control::Batch{data});
+    expect(sent[sent_before_restore + 5] == data);
     expect(controller.take() == data);
     // Configuration cannot reappear inside a running data session.
     enqueue(control::encode_startup(Duration(7)));
@@ -135,4 +152,25 @@ int main() {
     expect(!mismatch.run_next().ok());
     expect(calls == std::vector<bool>({false, false, false, false}));
     expect(sent.size() == 2 && sent[1] == control::startup_request());
+
+    // Ready output skips the idle wait. New application work is collected by
+    // the executor hook immediately before sending, on the caller's thread.
+    calls.clear();
+    sent.clear();
+    enqueue(control::encode_startup(Duration(3)));
+    enqueue_batch({});
+    enqueue_batch({});
+    enqueue_batch({});
+    Gem5GuestController driven(GuestM5Ops::instruction);
+    std::vector<Duration> idle;
+    auto pump = [&](Duration wait) { idle.push_back(wait); driven.submit(data); };
+    const auto sleeps = waits.size();
+    expect(driven.run_next(pump).ok());
+    expect(idle.back() == Duration{} && sent.back() == data);
+    driven.submit(data);
+    expect(driven.run_next(pump).ok());
+    expect(idle.back() == Duration{} && sent.back() == data);
+    expect(driven.run_next(pump).ok());
+    expect(idle.back() == Duration(3) && sent.back() == data);
+    expect(waits.size() == sleeps && received.empty());
 }

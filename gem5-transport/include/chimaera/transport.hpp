@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chimaera/message.hpp>
 #include <cstddef>
 #include <span>
 #include <string>
@@ -22,7 +23,7 @@ struct SendResult {
 };
 
 struct ReceiveResult {
-    std::vector<std::byte> data;
+    Message data;
     TransportError error{TransportError::none};
     std::string message;
 

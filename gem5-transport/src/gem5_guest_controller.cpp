@@ -33,13 +33,16 @@ std::optional<Message> Gem5GuestController::take() {
 }
 
 ControllerResult Gem5GuestController::run_next() {
+    return run_next({});
+}
+
+ControllerResult Gem5GuestController::run_next(
+        const std::function<void(Duration)>& before_exchange) {
     auto& s = *impl_;
     if (!s.failure.empty()) return {ControllerState::failed, s.failure};
     try {
-        if (s.poll.count() > 0) {
-            // Deliver the previous reply before waiting on the guest OS clock.
-            std::this_thread::sleep_for(s.poll);
-        } else {
+        const bool initialized = s.poll.count() > 0;
+        if (!initialized) {
             auto& bootstrap = s.address_bootstrap ? s.bootstrap_transport : s.transport;
             do {
                 control::send(bootstrap, control::startup_request());
@@ -49,9 +52,15 @@ ControllerResult Gem5GuestController::run_next() {
                 if (s.poll.count() == 0) std::this_thread::sleep_for(control::bootstrap_delay);
             } while (s.poll.count() == 0);
         }
+        // Output from the previous receive/callback phase must not wait through
+        // another poll. With an executor hook, new ROS output also wakes this
+        // exchange directly, avoiding periodic subscription service.
+        const auto wait = initialized && s.outgoing.size() == 0 ? s.poll : Duration{};
+        if (before_exchange) before_exchange(wait);
+        else if (wait.count() > 0) std::this_thread::sleep_for(wait);
         // Once initialized, both directions carry only batches of messages.
-        control::send(s.transport, control::encode(s.outgoing.drain()));
-        s.incoming.append(control::decode(control::receive(s.transport)));
+        control::send_batch(s.transport, s.outgoing.drain());
+        s.incoming.append(control::receive_batch(s.transport));
         return {};
     } catch (const std::exception& error) {
         s.failure = error.what();

@@ -138,7 +138,7 @@ int main(int argc, char ** argv)
              "max_image_age_ns", config->declare_parameter<int64_t>("max_image_age_ns", 0))}));
       rclcpp::executors::SingleThreadedExecutor executor;
       executor.add_node(bridge);
-      bridge->pump = [&executor] { executor.spin_some(); };
+      bridge->pump = [&] { bridge->drain_callbacks(executor); };
       chimaera_ros_bridge::TimingController timing(
         config->declare_parameter<std::string>("timing_socket", "/tmp/chimaera_time.sock"),
         std::chrono::seconds(timeout), *bridge, world, std::chrono::nanoseconds(physics_step),

@@ -1,10 +1,10 @@
 #include <chimaera/gem5_controller.hpp>
+#include <chimaera_ros_bridge/bridge.hpp>
+#include <chimaera_ros_bridge/status_bar.hpp>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <chimaera_ros_bridge/bridge.hpp>
-#include <chimaera_ros_bridge/status_bar.hpp>
 
 int main(int argc, char ** argv)
 {
@@ -44,7 +44,7 @@ int main(int argc, char ** argv)
     };
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
-    node->pump = [&executor] { executor.spin_some(); };
+    node->pump = [&] { node->drain_callbacks(executor); };
     chimaera::Gem5TimingController timing(socket, std::chrono::seconds(timeout));
     chimaera::Gem5HostController controller(timing, std::chrono::microseconds(poll));
     try {
@@ -70,8 +70,8 @@ int main(int argc, char ** argv)
         text << " CHIMAERA | " << (node->received() ? "ACTIVE" : "TIMING READY") << " | TX "
              << node->transmitted() << " RX " << node->received() << " Q " << node->pending()
              << " | sim " << std::fixed << std::setprecision(2)
-             << static_cast<double>(timing.elapsed_ticks()) / 1e12
-             << "s | step " << completed_steps;
+             << static_cast<double>(timing.elapsed_ticks()) / 1e12 << "s | step "
+             << completed_steps;
         if (node->received()) {
           text << " | RX age "
                << std::chrono::duration<double>(Clock::now() - node->last_receive()).count() << "s";
@@ -83,8 +83,7 @@ int main(int argc, char ** argv)
       report_status();
       for (int64_t count = 0; rclcpp::ok() && (steps == 0 || count < steps); ++count) {
         node->exchange(controller);
-        const auto result =
-          controller.step(std::chrono::microseconds(interval));
+        const auto result = controller.step(std::chrono::microseconds(interval));
         if (!result.ok()) {
           throw std::runtime_error(result.message);
         }
@@ -94,8 +93,7 @@ int main(int argc, char ** argv)
       }
       bar.clear();
       RCLCPP_INFO(
-        node->get_logger(), "Simulated %.3fs",
-        static_cast<double>(timing.elapsed_ticks()) / 1e12);
+        node->get_logger(), "Simulated %.3fs", static_cast<double>(timing.elapsed_ticks()) / 1e12);
     } catch (...) {
       bar.clear();
       const auto result = controller.stop();

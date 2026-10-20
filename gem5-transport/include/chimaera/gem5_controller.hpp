@@ -65,6 +65,12 @@ public:
     void submit(Message data, std::string_view coalescing_key = {}) override;
     std::optional<Message> take() override;
     ControllerResult run_next() override;
+    // Event-driven applications may service their executor while waiting. The
+    // hook runs on the caller's thread before I/O and may submit outgoing data.
+    // Its duration is zero at startup or when output is already queued; otherwise
+    // it is the maximum idle wait before checking for host input. Return early
+    // when application work arrives. No callbacks run inside transport I/O.
+    ControllerResult run_next(const std::function<void(Duration)>& before_exchange);
     // Require a fresh host handshake after restoring a completed exchange.
     // Queued application messages remain in guest memory.
     void reconnect();

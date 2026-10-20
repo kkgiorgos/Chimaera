@@ -69,7 +69,7 @@ public:
                 fail(TransportError::invalid_argument, "peer message exceeds 64 MiB limit");
             } else {
                 try {
-                    std::vector<std::byte> data(static_cast<std::size_t>(size));
+                    auto data = Message::for_overwrite(static_cast<std::size_t>(size));
                     if (data.empty() || receive_packet(data))
                         return {std::move(data), TransportError::none, {}};
                 } catch (const std::bad_alloc&) {

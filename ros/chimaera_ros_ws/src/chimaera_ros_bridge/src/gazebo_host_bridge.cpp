@@ -50,10 +50,15 @@ int main(int argc, char ** argv)
     const auto timing_file = node->declare_parameter<std::string>("timing_file", "");
     if (!timing_file.empty()) {
       const auto parent = std::filesystem::path(timing_file).parent_path();
-      if (!parent.empty()) { std::filesystem::create_directories(parent); }
+      if (!parent.empty()) {
+        std::filesystem::create_directories(parent);
+      }
       timing_log.open(timing_file);
-      if (!timing_log) { throw std::runtime_error("Cannot open timing_file: " + timing_file); }
-      timing_log << "step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n";
+      if (!timing_log) {
+        throw std::runtime_error("Cannot open timing_file: " + timing_file);
+      }
+      timing_log << "step,sim_seconds,gem5_sim_seconds,gem5_wall_seconds,gazebo_wall_seconds,other_"
+                    "wall_seconds,wall_seconds,elapsed_wall_seconds,startup_wall_seconds\n";
       timing_log << std::setprecision(17);
     }
     using Clock = std::chrono::steady_clock;
@@ -70,7 +75,7 @@ int main(int argc, char ** argv)
     };
     rclcpp::executors::SingleThreadedExecutor executor;
     executor.add_node(node);
-    node->pump = [&executor] { executor.spin_some(); };
+    node->pump = [&] { node->drain_callbacks(executor); };
     chimaera_ros_bridge::TimingController timing(
       socket, std::chrono::seconds(timeout), *node,
       node->declare_parameter<std::string>("gazebo_world", ""),
@@ -172,7 +177,8 @@ int main(int argc, char ** argv)
         const double sim_seconds = (ticks - run_origin_ticks) / 1e12;
         const double wall_seconds = std::chrono::duration<double>(now - run_begin).count();
         const double recent_wall = std::chrono::duration<double>(now - rate_report_time).count();
-        const double recent_rate = recent_wall > 0 ? (ticks - rate_report_ticks) / 1e12 / recent_wall : 0;
+        const double recent_rate =
+          recent_wall > 0 ? (ticks - rate_report_ticks) / 1e12 / recent_wall : 0;
         const double average_rate = wall_seconds > 0 ? sim_seconds / wall_seconds : 0;
         rate_report_time = now;
         rate_report_ticks = ticks;
@@ -188,8 +194,8 @@ int main(int argc, char ** argv)
         text << " | ROS pub/sub " << node->local_talkers() << '/' << node->local_listeners()
              << " | avg " << average_rate << "x";
         if (completed_steps && timing.gem5_wall_seconds > 0 && timing.gazebo_wall_seconds > 0) {
-          text << " | phase gem5 " << interval / 1e6 / timing.gem5_wall_seconds
-               << "x Gazebo " << interval / 1e6 / timing.gazebo_wall_seconds << "x";
+          text << " | phase gem5 " << interval / 1e6 / timing.gem5_wall_seconds << "x Gazebo "
+               << interval / 1e6 / timing.gazebo_wall_seconds << "x";
         }
         bar.update(text.str());
       };
@@ -198,10 +204,11 @@ int main(int argc, char ** argv)
       for (int64_t count = 0; rclcpp::ok() && (steps == 0 || count < steps); ++count) {
         const auto step_begin = Clock::now();
         const auto ticks_before = timing.elapsed_ticks();
-        const auto result =
-          controller.step(std::chrono::microseconds(interval));
+        const auto result = controller.step(std::chrono::microseconds(interval));
         if (!result.ok()) {
-          if (!rclcpp::ok()) { break; }
+          if (!rclcpp::ok()) {
+            break;
+          }
           throw std::runtime_error(result.message);
         }
         ++completed_steps;
@@ -223,20 +230,23 @@ int main(int argc, char ** argv)
           timing_log << completed_steps << ',' << interval / 1e6 << ','
                      << (timing.elapsed_ticks() - ticks_before) / 1e12 << ','
                      << timing.gem5_wall_seconds << ',' << timing.gazebo_wall_seconds << ','
-                     << std::max(0.0, active - timing.gem5_wall_seconds - timing.gazebo_wall_seconds) << ','
-                     << std::chrono::duration<double>(end - step_begin).count() << ','
+                     << std::max(
+                          0.0, active - timing.gem5_wall_seconds - timing.gazebo_wall_seconds)
+                     << ',' << std::chrono::duration<double>(end - step_begin).count() << ','
                      << std::chrono::duration<double>(end - run_begin).count() << ','
                      << startup_seconds << '\n';
           timing_log.flush();
-          if (!timing_log) { throw std::runtime_error("Failed writing timing_file"); }
+          if (!timing_log) {
+            throw std::runtime_error("Failed writing timing_file");
+          }
         }
       }
       const double sim_seconds = (timing.elapsed_ticks() - run_origin_ticks) / 1e12;
       const double wall_seconds = std::chrono::duration<double>(Clock::now() - run_begin).count();
       bar.clear();
       RCLCPP_INFO(
-        node->get_logger(), "Simulated %.3fs in %.3fs; average %.3fx", sim_seconds,
-        wall_seconds, wall_seconds > 0 ? sim_seconds / wall_seconds : 0);
+        node->get_logger(), "Simulated %.3fs in %.3fs; average %.3fx", sim_seconds, wall_seconds,
+        wall_seconds > 0 ? sim_seconds / wall_seconds : 0);
     } catch (...) {
       bar.clear();
       const auto result = controller.stop();
