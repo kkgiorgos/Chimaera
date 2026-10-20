@@ -1,0 +1,72 @@
+{
+  "implementation_commit": "cfc5dc167017247e3d29f27154f646f3843188ce",
+  "physical_host": "ubuntu-george",
+  "source_archive": "chimaera-dma-integration-source-r5.tar.gz",
+  "source_sha256": "c74c42400370209537e09ab062f94dc9c69537ae3f0f1fa334d759435d847712",
+  "source_differences": [
+    "test/test_latency_dma.py: test-only additions after archive"
+  ],
+  "checks": [
+    {
+      "kind": "transport CTest",
+      "passed": 9,
+      "total": 9
+    },
+    {
+      "kind": "transport ASan/UBSan CTest",
+      "passed": 9,
+      "total": 9,
+      "env": "LD_PRELOAD=/lib/x86_64-linux-gnu/libasan.so.6"
+    },
+    {
+      "kind": "ROS CTest",
+      "passed": 14,
+      "total": 14
+    },
+    {
+      "kind": "wall-follow deployed configuration pytest",
+      "passed": 64,
+      "total": 64
+    },
+    {
+      "kind": "analysis/collector unittest",
+      "passed": 8,
+      "total": 8
+    }
+  ],
+  "host_cpu": "Intel Core i5-9600K, 6 cores, 3.70 GHz nominal",
+  "container_cpu_quota": "200000 100000",
+  "container_memory_bytes": 4294967296,
+  "container_image": "sha256:642cd426444f5fe6e0ba2c586ca94937e744590b74511c6a55640b657ec35e93",
+  "host_kernel": "6.8.0-147-generic",
+  "guest_kernel": "5.15.0-142-generic",
+  "guest_kernel_sha256": "c4a4a9a46725d600d2ec324aced3613bbff2c6a13ca64c81669cb65367f05ccd",
+  "gem5_sha256": "705431873db47fc80242b5e07609de983c5c4532b5dc3d0e4f58e450bf64dde4",
+  "fastdds": "2.6.12-1jammy.20260723.233918",
+  "rmw_fastrtps_cpp": "6.2.10-1jammy.20260907.210327",
+  "control_roi_instructions": {
+    "m5": 146138819,
+    "dma": 158575657,
+    "note": "Whole detailed guest, including warmup, drain and telemetry; not isolated bridge CPU cost."
+  },
+  "runtime_build": {
+    "build_type": "Release",
+    "cxx_flags": "-O3 -DNDEBUG",
+    "cache": "/rewrite/build-dma-r4/CMakeCache.txt"
+  },
+  "diagnostic_trace_bundle": {
+    "sha256": "27a57526e356f63f7c4a34018f51f351752dfdeb3c3cb446ae59cdb6df22380e",
+    "adapter_source_sha256": "75b80d77cb14bbc36ebe30b7dcf8037c56dfc50fa7950a3799e5531107c4eb89",
+    "note": "Only startup stderr redirection and late tmpfs export differ; core runtime binaries unchanged.",
+    "base_files_checked": 88,
+    "changed_base_files": [
+      "opt/chimaera/latency/guest_start"
+    ],
+    "capabilities_validation": "pass"
+  },
+  "planned_matrices": {
+    "m5_acceptance": 9,
+    "dma_acceptance": 9,
+    "dma_validation": 15
+  }
+}

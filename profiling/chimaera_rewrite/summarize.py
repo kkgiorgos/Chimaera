@@ -11,11 +11,19 @@ from pathlib import Path
 MATCH_FIELDS = (
     'workload', 'payload_bytes', 'rate_hz', 'duration', 'warmup', 'drain',
     'physics_step_ns', 'interval_us', 'poll_us', 'reliability', 'depth', 'ball_catching',
+    'delivery_policy', 'verify_payload',
+    'dds_shm_bytes',
+    'rmw',
 )
 
 
 def identity(config):
     return json.dumps({key: config.get(key) for key in MATCH_FIELDS}, sort_keys=True)
+
+
+def fingerprints(config):
+    return {Path(path).name: digest for path, digest in config.get('artifact_sha256', {}).items()
+            if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so', 'dds.xml')}
 
 
 def collect(root):
@@ -43,6 +51,7 @@ def summarize(runs):
                            if candidate['variant'] == run['variant']
                            and candidate['config']['mode'] == mode
                            and candidate['physical_host'] == run['physical_host']
+                           and fingerprints(candidate['config']) == fingerprints(config)
                            and identity(candidate['config']) == identity(config)]
                 if not matches:
                     raise ValueError(f"{run['path']}: missing matched {mode} control")
@@ -71,6 +80,15 @@ def summarize(runs):
                        actual_source_hz=metrics['actual_source_hz'],
                        mean_ms=metrics['latency'].get('mean_ms'),
                        p95_ms=metrics['latency'].get('p95_ms'),
+                       p99_ms=metrics['latency'].get('p99_ms'),
+                       max_ms=metrics['latency'].get('max_ms'),
+                       age_mean_ms=metrics.get('age', {}).get('mean_ms'),
+                       age_p99_ms=metrics.get('age', {}).get('p99_ms'),
+                       duplicates=metrics.get('duplicates'), reordered=metrics.get('reordered'),
+                       age_max_ms=metrics.get('age', {}).get('max_ms'),
+                       missing_at_drain=metrics.get('missing_at_drain'),
+                       transport_backend=config.get('transport_backend', 'm5'),
+                       delivery_policy=config.get('delivery_policy', 'latest'),
                        release_lag_mean_ms=metrics['release_lag'].get('mean_ms'),
                        wall_seconds=config['wall_seconds'])
             for mode, control in controls.items():

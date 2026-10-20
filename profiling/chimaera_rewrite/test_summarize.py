@@ -25,7 +25,9 @@ class MatchedControls(unittest.TestCase):
             changed[0][field] = value
             with self.assertRaisesRegex(ValueError, 'missing matched native_free'):
                 summarize(changed)
-        for field, value in (('rate_hz', 60), ('payload_bytes', 640 * 480), ('duration', 2)):
+        for field, value in (('rate_hz', 60), ('payload_bytes', 640 * 480), ('duration', 2),
+                             ('dds_shm_bytes', 16777216), ('delivery_policy', 'lossless'),
+                             ('artifact_sha256', {'/runtime/latency_endpoint': 'different'})):
             changed = copy.deepcopy(candidates)
             changed[1]['config'][field] = value
             with self.assertRaisesRegex(ValueError, 'missing matched native_stepped'):

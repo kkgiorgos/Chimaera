@@ -90,3 +90,73 @@ Generate the interactive pilot comparison from the retained CSV with:
 python3 profiling/chimaera_rewrite/render_report.py \
   docs/measurements/chimaera-rewrite-2026-10-20/comparison.csv /tmp/pilot.html
 ```
+
+## Integrated ROS DMA validation
+
+The latency runtime now advertises driver ABI 1 and controller protocol 2.
+Rebuild and restage it; protocol 1 prototype bundles are rejected before boot.
+Run an exported experiment with `transport_backend: "dma"`,
+`single_boot: false`, and `dma_module` pointing to the exact guest-kernel module.
+The module is injected into the ephemeral guest image at boot. The deployed CPU
+configuration and stereo shape remain unchanged.
+
+`delivery_policy: "latest"` retains application sensor QoS and atomic stereo
+replacement. `delivery_policy: "lossless"` uses reliable depth-128 endpoints,
+keeps every complete stereo pair, and disables age expiry. All comparisons must
+match that policy in native-free and native-stepped execution. Always report
+source counts, receipts, duplicates, ordering, source release lag and frame age.
+`verify_payload: true` checks every image byte with changing capture markers;
+these correctness runs add guest CPU work and are separate from performance runs.
+
+The case runner accepts `--append` for distinctly named attempts and
+`--source-snapshot` for the retained build archive. It never overwrites a case.
+A case's `image_diagnostics: true` enables existing bridge publication-stage
+traces. `config.gem5_debug_flags: "ChimaeraDma"` enables descriptor, payload and
+IRQ traces in `gem5/dma-debug.log`. `config.dma_diagnostics: true` additionally
+exports the last guest bridge phase and buffer counters; it adds guest m5 calls
+and should be disabled for performance acceptance.
+
+Use `dds_shm_bytes: 16777216` for the local stereo workload in **all three**
+execution modes. A 921,600-byte image exceeds Fast DDS's default 512 KiB segment.
+The benchmark generates and fingerprints an explicit loopback UDP/SHM profile,
+sets `ROS_LOCALHOST_ONLY=0` to prevent Humble from appending a second default SHM
+transport, and injects the same profile into the guest. Leave enough `/dev/shm`
+for each participant's segment (three native participants use about 49 MiB at
+this setting). Zero retains middleware defaults for historical reproduction.
+
+Export the complete integration history, including startup failures and
+cancelled attempts, with:
+
+```bash
+python3 profiling/chimaera_rewrite/collect_integrated.py \
+  /path/to/integration-r5-m5-acceptance /path/to/integration-r5-dma-acceptance \
+  --physical-host ubuntu-george --output /tmp/integrated-results
+```
+
+Completed measurements require both native modes with matching traffic,
+endpoint/clock/DDS fingerprints, middleware and container identity. Physical
+host identity is supplied explicitly because the recorded per-process hostname
+identifies its isolated container. Detailed CPU provenance is checked before
+export; incomplete attempts remain in JSON and never enter comparison CSV.
+Use `--history-only` to archive older diagnostics without claiming that they
+have matched acceptance references. `render_integrated.py RESULTS/attempts.json
+report.html` produces the standalone interactive acceptance report.
+
+`profile_integrated.py CASE breakdown.json` separates descriptor-header-to-
+payload setup, coherent payload DMA, bridge view setup, ROS publication calls
+and the later callback. Its JSON retains individual samples and limitations.
+Descriptor fetch and earlier queues precede `HEADER`; TX setup can include
+mailbox backpressure. Throttled bridge traces and DMA records lack a common
+application ID. The parser permits a FIFO inference only when every source
+capture has exactly one ordered receipt per camera and the count/size of bulk
+RX transfers agrees. It then checks that the intervals reconstruct callback
+latency; otherwise it reports separate intervals and the reason it refused
+attribution. Completion-to-ACK includes IRQ delivery and driver handling.
+
+Serial-console tracing can add modeled delay. `make_tmpfs_trace_bundle.py
+BASE_BUNDLE M5_UTILITY NEW_BUNDLE` keeps runtime binaries unchanged, redirects
+guest stderr into RAM, and exports the file during drain with address-mode m5.
+Use it only for diagnostics: the source window must end before 0.75 s and drain
+must continue past 0.9 s. The retained RAM-profile matrix uses 0.05 s warmup,
+0.2 s source and 1 s drain. Exported `chimaera-image-trace.log` is read alongside
+device traces. Native controls use the same endpoint/clock/DDS binaries.

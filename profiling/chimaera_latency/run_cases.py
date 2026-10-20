@@ -23,11 +23,16 @@ def main():
     parser.add_argument('--gem5-root', type=Path, default=Path('/opt/chimaera/gem5'))
     parser.add_argument('--image', type=Path, default=Path('/assets/guest.img'))
     parser.add_argument('--kernel', type=Path, default=Path('/assets/kernel'))
+    parser.add_argument('--append', action='store_true',
+                        help='Append distinctly named cases to an existing matrix; never overwrite an attempt')
+    parser.add_argument('--source-snapshot', type=Path,
+                        help='Retained source archive used to build the runtime')
     args = parser.parse_args()
-    args.output.mkdir(parents=True, exist_ok=False)
+    args.output.mkdir(parents=True, exist_ok=args.append)
     cases = json.loads(args.cases.read_text())
     original_session = latency.guest_session
-    results = []
+    progress = args.output / 'progress.json'
+    results = json.loads(progress.read_text()) if args.append and progress.is_file() else []
     for case in cases:
         name = case['name']
         variant = case.get('variant', 'trace')
@@ -41,11 +46,15 @@ def main():
         runtime = args.original_runtime if variant == 'original' else args.runtime
         bundle = args.original_bundle if variant == 'original' else args.bundle
         output = args.output / name
+        if output.exists():
+            raise ValueError('Refusing to overwrite an earlier benchmark attempt: ' + str(output))
         enabled = variant == 'trace'
 
         def session(*values, **kwargs):
             spec = original_session(*values, **kwargs)
             spec['guest'].setdefault('env', {})['CHIMAERA_PROFILE'] = '1' if enabled else '0'
+            if case.get('image_diagnostics'):
+                spec['bridge']['image_diagnostics'] = True
             if case.get('guest_diagnostics'):
                 command = spec['guest']['processes'][0]['command']
                 diagnostics = '''
@@ -79,6 +88,9 @@ exec "$@"
                           memory_max=Path('/sys/fs/cgroup/memory.max').read_text().strip(),
                           fresh_boot=True,
                           gem5_sha256=hashlib.sha256((args.gem5_root/'build/X86/gem5.opt').read_bytes()).hexdigest())
+        if args.source_snapshot:
+            provenance['source_snapshot'] = str(args.source_snapshot)
+            provenance['source_sha256'] = hashlib.sha256(args.source_snapshot.read_bytes()).hexdigest()
         print('START', name, json.dumps(case), flush=True)
         try:
             latency.run_case(output, config, runtime, args.gem5_root,

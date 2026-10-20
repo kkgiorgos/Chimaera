@@ -2,6 +2,11 @@
 
 Work branch: `feat/chimaera-low-latency-transport`.
 
+The [integrated DMA validation record](chimaera-dma-integration.md) documents
+the subsequent ROS integration, interrupt fix, matched image DDS configuration
+and full-system acceptance method. The numbers below retain the earlier pilots
+and device microbenchmarks as historical evidence.
+
 The objective is the lowest practical guest-visible delay while preserving
 causal coupling and detailed CPU/memory behavior. Native execution on the same
 physical machine remains the reference. KVM is a smoke-test tool, not an
@@ -65,10 +70,11 @@ Host load was shared; these are exploratory timings, not isolated speed ratios.
 The native gap includes detailed CPU versus physical CPU behavior as well as
 the bridge. It is not an isolated measurement of transport CPU cost.
 
-## Experimental architecture: coherent DMA and interrupts
+## Coherent DMA and interrupts
 
-The next prototype replaces guest polling and synchronous m5 payload transfers.
-It is a separate backend until it has correctness and detailed-CPU evidence.
+The integrated `dma` backend replaces guest polling and synchronous m5 payload
+transfers. The default remains `m5` so existing sessions retain their configured
+transport. Both backends use the same ROS interfaces and causal boundaries.
 
 1. Host and simulator share bounded, versioned mailboxes. The host prepares input
    while gem5 is paused. An explicit timing-server command admits that input at
@@ -81,11 +87,11 @@ It is a separate backend until it has correctness and detailed-CPU evidence.
 3. A Linux PCI driver owns registered buffers, descriptor lifetime, completion
    interrupts, mmap and reset. Large buffers use page-sized coherent allocations
    so they do not require physically contiguous multi-megabyte allocations.
-4. The planned guest bridge borrows completed receive buffers for ROS publication. A
+4. The guest bridge borrows completed receive buffers for ROS publication. A
    message retains its buffer until its last owner releases it. Outgoing frame
-   construction should allocate from registered transmit buffers, avoiding a
+   construction allocates from registered transmit buffers, avoiding a
    further image-sized staging copy.
-5. Planned integration lets ROS readiness and device interrupts wake the bridge. No periodic
+5. ROS readiness and device interrupts wake the bridge through one executor. No periodic
    receive sleep is required. Completed guest output becomes visible to the host
    at the completed simulation boundary, preserving the coupling contract.
 
@@ -104,11 +110,12 @@ resets an in-flight transfer, unmaps, closes and reopens. The host-mailbox probe
 echoes only while gem5 is paused and explicitly admits input before resuming.
 No guest polling sleep or socket worker performs device reception.
 
-The default ROS bridge still uses the tested streamed m5 backend. Pool-backed
-`Message` adoption, ROS readiness integration and separate control/bulk queues
-remain to be connected to the new device. A large image must not monopolize
-control-message service. The prototype models timing/coherent memory traffic;
-it does not yet impose a separate PCI link-rate limit.
+Pool-backed `Message` adoption and ROS readiness integration are implemented.
+Controller protocol 2 batches consecutive small messages while retaining
+separate image buffers and global FIFO. Bulk DMA can still delay a following
+control packet; independent priority queues remain a possible follow-up after
+measuring the integrated path. The model includes timing/coherent memory
+traffic but does not impose a separate PCI link-rate limit.
 
 ### First detailed-CPU device measurements
 
@@ -169,19 +176,18 @@ The final host-mailbox test (`dma-mailbox-timing-final`) also passes all eightee
 payload/guard cases, invalid-input checks and reset/reopen. At 2 ms admission
 boundaries its 64-byte round trip is 1.993 ms, stereo 640×480 is 2.073 ms, and the
 7.37 MB payload is 2.57–2.69 ms. The difference from device loopback makes the
-synchronization cost visible. These measurements still require integration
-with ROS and sustained workload validation.
+synchronization cost visible. These historical device measurements remain
+separate from the integrated ROS validation described below.
 
 Linux also needed readable local-APIC trigger-mode registers: gem5 already
 maintains the bits, but previously aborted on reads during PCI interrupt
 acknowledgement. The prototype's MP-table interrupt mapping uses `acpi=off`
 because the minimal gem5 ACPI tables lack PCI routing. Production ACPI routing,
-checkpoint/reused-VM support, longer lossless/latest-frame runs and stable tail
-measurements remain explicit follow-up work.
+checkpoint/reused-VM support and stable long-run tail measurements remain
+explicit follow-up work.
 
-Next integration priorities are pool-backed ROS publication and callback
-readiness, independent control/bulk service, then longer paired native runs with
-lossless and latest-frame policies. A further clock design should expose the
+The integrated backend now supports paired native comparisons, full image-byte
+verification and separate lossless/latest-frame policies. A further clock design should expose the
 model's authoritative time to Linux through a paravirtual clock source and
 appropriate clock events. It needs the per-core oracle and wakeup validation;
 forcing a supposedly reliable TSC is not a validated fix. After measuring those
@@ -190,13 +196,14 @@ causal lookahead, with the gap to native reported at each step.
 
 ## Validation and evidence
 
-The current branch passes six transport tests, twelve ROS/package tests,
-AddressSanitizer/UndefinedBehaviorSanitizer transport checks, and a separate
-borrowed-publication lifetime sanitizer check. Native image tests compare every
-byte at 640×480 and 1280×960. Three comparison-tool tests reject missing native
-controls, workload/host mismatch and zero-publication results.
-Two DMA collector checks reject missing/mismatched native samples and detailed
-CPU provenance, while preserving failed attempts in the evidence.
+The integrated branch passes nine transport tests, fourteen ROS/package tests,
+64 deployed-configuration checks, and all nine transport tests under
+AddressSanitizer/UndefinedBehaviorSanitizer. Tests cover completion notification
+before/during executor wait, held receive loans, transmit staging starvation,
+shutdown with external loans, malformed peers and lossless stereo pairing.
+Eight comparison/collector checks reject missing or mismatched native samples,
+endpoint fingerprints, empty sources and incorrect detailed CPU provenance,
+while preserving failed and cancelled attempts.
 
 `profiling/chimaera_rewrite/summarize.py` exports raw run summaries and CSV while
 requiring matched native controls and checking active gem5 CPU provenance.

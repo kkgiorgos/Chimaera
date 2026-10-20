@@ -1,0 +1,13 @@
+Before fix: posting the interrupt reenters the device ACK before intrPost returns.
+The outer late irqAsserted assignment then suppresses subsequent posts.
+Retained source: /rewrite/integration-debug-r4/stereo_integrity_kvm_irq_trace/gem5/dma-debug.log
+
+99346768308088: board.chimaera_dma: IRQ causes=0x1 asserted=0 command=0x6
+99347768307840: board.chimaera_dma: IRQ causes=0 asserted=1 command=0x6
+99347768308088: board.chimaera_dma: RX COMPLETE cookie=0 bytes=153
+99347768308088: board.chimaera_dma: IRQ causes=0x1 asserted=0 command=0x6
+99347768308088: board.chimaera_dma: IRQ causes=0 asserted=0 command=0x6
+99347768308336: board.chimaera_dma: RX COMPLETE cookie=1 bytes=153
+99347768308336: board.chimaera_dma: IRQ causes=0x1 asserted=1 command=0x6
+99487768308212: board.chimaera_dma: TX COMPLETE cookie=8 bytes=8376
+99487768308212: board.chimaera_dma: IRQ causes=0x3 asserted=1 command=0x6
