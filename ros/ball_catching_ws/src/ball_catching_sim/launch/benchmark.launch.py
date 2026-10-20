@@ -38,6 +38,7 @@ def start(context):
         '--outdir=' + str(output / 'gem5'), '-p', str(universal / 'config'),
         str(scripts / 'gem5_ball_catching.py'), '--gem5-root', str(root),
         '--experiment', str(path), '--bundle', execution['bundle'],
+        '--transport-backend', execution['fixed'].get('transport_backend', 'm5'),
         '--image', execution['image'], '--kernel', execution['kernel'], '--managed-shutdown',
         '--guest-file', '/tmp/chimaera-ball-session.json=' + str(output / 'guest-session.json'),
         '--guest-file', '/tmp/chimaera-ball.urdf=' + str(output / 'robot.urdf'),
@@ -55,7 +56,8 @@ def start(context):
             pressure_warmup_ns=round(fixed['pressure_warmup'] * 1e9))
     bridge = Node(package='chimaera_ros_bridge', executable='gazebo_host_bridge', output='screen',
         additional_env={'IGN_PARTITION': options['partition'], 'IGN_IP': options['transport_ip']},
-        parameters=[dict(config_file=execution['routes'], timing_socket='/tmp/chimaera_time.sock',
+        parameters=[dict(transport_backend=fixed.get('transport_backend', 'm5'),
+            config_file=execution['routes'], timing_socket='/tmp/chimaera_time.sock',
             timing_file=str(output / 'timing.csv'), gazebo_world='ball_catching',
             interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
             physics_step_ns=round(fixed['physics_step'] * 1e9), startup_timeout_s=fixed['startup_timeout_s'],

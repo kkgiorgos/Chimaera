@@ -15,6 +15,10 @@ def prepare(directory):
     calibration = request.get('calibration')
     checkpoint_mode = request.get('readiness_checkpoint', False)
     config = request['config']
+    if config.get('fixed', {}).get('transport_backend', 'm5') == 'dma' and checkpoint_mode:
+        raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
+    if config.get('fixed', {}).get('dma_module'):
+        config['fixed']['dma_module'] = str(root / config['fixed']['dma_module'])
     # The stored JSON remains portable; resolve its repository-relative memory config here.
     config['ramulator_config'] = str(root / config['ramulator_config'])
     atomic_json(directory / 'experiment.json', config)

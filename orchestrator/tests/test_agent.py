@@ -9,7 +9,8 @@ from agent import Agent, memory_bytes
 
 
 @pytest.mark.parametrize('consumer', [False, True])
-def test_readiness_preparation_gives_kvm_only_to_the_producer(tmp_path, consumer):
+@pytest.mark.parametrize('backend', ['m5', 'dma'])
+def test_preparation_selects_checkpoints_and_producer_kvm(tmp_path, consumer, backend):
     agent = Agent(tmp_path, tmp_path / 'data')
     original_stat = Path.stat
     def stat(path, *args, **kwargs):
@@ -17,10 +18,10 @@ def test_readiness_preparation_gives_kvm_only_to_the_producer(tmp_path, consumer
             return SimpleNamespace(st_gid=999)
         return original_stat(path, *args, **kwargs)
     with patch('agent.Path.stat', stat), patch.object(agent, 'launch', return_value={}) as launch:
-        agent.prepare('experiment', {}, 1, '2g', 2, {},
+        agent.prepare('experiment', {'fixed': {'transport_backend': backend}}, 1, '2g', 2, {},
                       calibration={'records': {}} if consumer else None)
     request = json.loads((agent.directory('experiment') / 'request.json').read_text())
-    assert request['readiness_checkpoint'] is True
+    assert request['readiness_checkpoint'] is (backend == 'm5')
     command = launch.call_args.args[3]
     assert ('--device' in command) is not consumer
 

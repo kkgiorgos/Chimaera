@@ -33,7 +33,20 @@ def validate_config(root, config):
     if not path.is_relative_to(root.resolve()) or not path.is_file():
         raise ValueError('ramulator_config must name a file inside the repository')
     config['ramulator_config'] = str(path.relative_to(root.resolve()))
+    fixed = config.get('fixed', {})
+    if not isinstance(fixed, dict):
+        raise ValueError('fixed must be an object')
+    module = fixed.get('dma_module', '')
+    if not isinstance(module, str):
+        raise ValueError('dma_module must be a path string')
+    if module:
+        module_path = (root / module).resolve()
+        if not module_path.is_relative_to(root.resolve()) or not module_path.is_file():
+            raise ValueError('dma_module must name a file inside the repository')
+        config['fixed']['dma_module'] = str(module_path.relative_to(root.resolve()))
     resolved = dict(config, ramulator_config=str(path))
+    if module:
+        resolved['fixed'] = dict(config['fixed'], dma_module=str(module_path))
     sys.path.insert(0, str(root / 'ros/ball_catching_ws/scripts'))
     from run_memory_suite import load_config, plan
     with tempfile.TemporaryDirectory() as directory:

@@ -60,7 +60,8 @@ class Agent:
         directory.mkdir(parents=True, exist_ok=True)
         atomic_json(directory / 'request.json', dict(experiment=experiment, config=config, cpus=cpus,
             memory=memory, build_jobs=build_jobs, disk=disk, kernel=kernel, calibration=calibration,
-            source_identity=source_identity, readiness_checkpoint=True))
+            source_identity=source_identity,
+            readiness_checkpoint=config.get('fixed', {}).get('transport_backend', 'm5') != 'dma'))
         command = ['docker', 'run', '-d', '--name', 'chimaera-' + key,
             '--label', 'chimaera.experiment=' + experiment,
             '--user', f'{os.getuid()}:{os.getgid()}', '--group-add', str(Path('/var/run/docker.sock').stat().st_gid),

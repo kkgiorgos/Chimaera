@@ -77,13 +77,15 @@ def load_config(path, cpu_type=None):
     data['fixed'].setdefault('image_diagnostics', False)
     data['fixed'].setdefault('guest_dds_shm_bytes', 0)
     data['fixed'].setdefault('pressure_warmup', 0.05)
+    data['fixed'].setdefault('transport_backend', 'm5')
+    data['fixed'].setdefault('dma_module', '')
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
-                  'guest_dds_shm_bytes', 'pressure_warmup'},
+                  'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -93,6 +95,15 @@ def load_config(path, cpu_type=None):
         if set(data[section]) != keys:
             raise ValueError(f'{section} fields must be: ' + ', '.join(sorted(keys)))
     fixed = data['fixed']
+    if fixed['transport_backend'] not in ('m5', 'dma'):
+        raise ValueError('transport_backend must be m5 or dma')
+    if not isinstance(fixed['dma_module'], str):
+        raise ValueError('dma_module must be a path string')
+    if fixed['dma_module']:
+        module = (path.parent / fixed['dma_module']).resolve()
+        if not module.is_file():
+            raise ValueError('DMA module does not exist: ' + str(module))
+        fixed['dma_module'] = str(module)
     if type(fixed['image_diagnostics']) is not bool:
         raise ValueError('image_diagnostics must be boolean')
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
@@ -273,7 +284,9 @@ def session(output, data, point, calibration=None):
                     GUEST_ROOT + '/app/share/ball_catching_robot/local_setup.bash'],
                    localhost_only=not bool(fixed['guest_dds_shm_bytes']), env=guest_env,
                    processes=[dict(name='robot', command=robot)]),
-        bridge=dict(interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
+        bridge=dict(transport_backend=fixed['transport_backend'],
+                    dma_module=GUEST_ROOT + '/runtime/chimaera_dma.ko' if fixed['dma_module'] else '',
+                    interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
                     timing_backend='gazebo', gazebo_world='ball_catching',
                     physics_step_ns=round(fixed['physics_step'] * 1e9),
                     max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
@@ -323,6 +336,8 @@ def prepare_bundle(output, data, points):
     if staged.exists():
         staged = output / f'staged-{len(list(output.glob("staged*"))) + 1:03d}'
     root = stage(load(output / 'staging-session.json'), staged)
+    if data['fixed']['dma_module']:
+        shutil.copyfile(data['fixed']['dma_module'], root / 'runtime/chimaera_dma.ko')
     if data['fixed']['guest_dds_shm_bytes']:
         (root / 'dds.xml').write_text(guest_dds_profile(data['fixed']['guest_dds_shm_bytes']))
     libraries = root / 'lib'
@@ -468,6 +483,8 @@ def native_trial(directory, data, point):
 
 def gem5_trial(directory, output, data, point, args, calibration, bundle,
                checkpoint_prepare=None, checkpoint_restore=None):
+    if data['fixed'].get('transport_backend', 'm5') == 'dma' and (checkpoint_prepare or checkpoint_restore):
+        raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
     from ball_catching_sim.scene import generate
     directory.mkdir(parents=True)
     fixed = data['fixed']
@@ -623,6 +640,8 @@ def main():
     if args.bundle_from and not args.prepare_only:
         parser.error('--bundle-from requires --prepare-only')
     data = load_config(args.config, args.cpu_type)
+    if data['fixed']['transport_backend'] == 'dma' and (args.checkpoint_create or args.checkpoint_from):
+        parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
     all_points = plan(data)
     points = all_points
     if args.case:

@@ -281,3 +281,24 @@ def test_prebuilt_sdk_export_hashes_required_artifacts(tmp_path):
     assert len(files) == 6
     for path, digest in files.items():
         assert build._digest(output / path) == digest
+
+
+def test_dma_export_freezes_driver_and_keeps_kvm_for_cases(tmp_path):
+    disk, kernel, driver = [tmp_path / name for name in ('disk.img', 'kernel', 'driver.ko')]
+    for path in (disk, kernel, driver):
+        path.write_bytes(path.name.encode())
+    source = ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+    data = json.loads(source.read_text())
+    data['ramulator_config'] = str((source.parent / data['ramulator_config']).resolve())
+    data['fixed'].update(transport_backend='dma', dma_module=driver.name)
+    config = tmp_path / 'dma.json'
+    config.write_text(json.dumps(data))
+    inputs = tmp_path / 'inputs'
+    configure.configure(config, inputs, 'image', disk, kernel)
+    exported = json.loads((inputs / 'experiment.json').read_text())
+    assert exported['fixed']['transport_backend'] == 'dma'
+    assert exported['fixed']['dma_module'] == '/assets/inputs/chimaera_dma.ko'
+    assert (inputs / 'chimaera_dma.ko').read_bytes() == driver.read_bytes()
+    record = json.loads((inputs / 'inputs.json').read_text())
+    assert record['sha256']['chimaera_dma.ko'] == worker.digest(driver)
+    assert json.loads((inputs / 'runner.json').read_text())['devices'] == ['/dev/kvm']

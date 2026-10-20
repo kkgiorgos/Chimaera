@@ -87,6 +87,37 @@ def test_session_uses_the_resolved_package_prefix_for_container_staging(tmp_path
     assert trees == [dict(source='/opt/container/ball_catching_robot', destination='app')]
 
 
+@pytest.mark.parametrize('backend', ['m5', 'dma'])
+def test_transport_selection_and_checkpoint_rejection(tmp_path, monkeypatch, backend):
+    import ament_index_python.packages
+    import run_memory_suite as runner
+    monkeypatch.setattr(ament_index_python.packages, 'get_package_prefix', lambda name: '/test/' + name)
+    raw = configuration(tmp_path)
+    module = tmp_path / 'chimaera_dma.ko'
+    module.write_bytes(b'guest driver')
+    raw['fixed'].update(transport_backend=backend, dma_module=module.name)
+    data = load(tmp_path, raw)
+    assert data['fixed']['dma_module'] == str(module)
+    bridge = runner.session(tmp_path, data, plan(data)[0])['bridge']
+    assert bridge['transport_backend'] == backend
+    assert bridge['dma_module'] == runner.GUEST_ROOT + '/runtime/chimaera_dma.ko'
+    if backend == 'dma':
+        monkeypatch.setattr(sys, 'argv', ['suite', '--config', str(tmp_path / 'suite.json'),
+                                        '--checkpoint-create', '--dry-run'])
+        with pytest.raises(SystemExit) as error:
+            runner.main()
+        assert error.value.code == 2
+
+
+@pytest.mark.parametrize('changes', [dict(transport_backend='invalid'), dict(dma_module=1),
+                                     dict(dma_module='missing.ko')])
+def test_invalid_transport_configuration(tmp_path, changes):
+    raw = configuration(tmp_path)
+    raw['fixed'].update(changes)
+    with pytest.raises(ValueError):
+        load(tmp_path, raw)
+
+
 def test_baselines_not_duplicated_across_patterns(tmp_path):
     raw = configuration(tmp_path)
     raw['patterns'] = ['stream', 'stride', 'random']
@@ -379,7 +410,8 @@ def test_older_configs_keep_default_dds_transport(tmp_path):
 
 
 @pytest.mark.parametrize('segment', [0, 4 * 1024 * 1024, 8 * 1024 * 1024])
-def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch, segment):
+@pytest.mark.parametrize('backend', ['m5', 'dma'])
+def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch, segment, backend):
     monkeypatch.syspath_prepend(str(WORKSPACE.parent / 'chimaera_ros_ws/src/chimaera_ros_bridge'))
     import tarfile
     import ament_index_python.packages
@@ -408,17 +440,26 @@ def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch
     monkeypatch.setattr(subprocess, 'run', lambda command, **kwargs: subprocess.CompletedProcess(
         command, 0, stdout=f'libtest.so => {dependency} (0x1)\n'))
     data = load(tmp_path, configuration(tmp_path))
+    driver = tmp_path / 'chimaera_dma.ko'
+    driver.write_bytes(b'dma driver')
+    data['fixed'].update(transport_backend=backend, dma_module=str(driver) if backend == 'dma' else '')
     data['fixed']['guest_dds_shm_bytes'] = segment
     output = tmp_path / 'bundle'
     output.mkdir()
     bundle = prepare_bundle(output, data, plan(data))
     with tarfile.open(bundle) as archive:
         root = GUEST_ROOT.lstrip('/')
+        if backend == 'dma':
+            assert archive.extractfile(root + '/runtime/chimaera_dma.ko').read() == driver.read_bytes()
         assert archive.extractfile(root + '/lib/libchimaera_gem5_clock_addr.so').read() == clock.read_bytes()
         assert archive.extractfile(root + '/lib/librmw_fastrtps_cpp.so').read() == middleware.read_bytes()
         assert archive.extractfile(root + '/lib/libtest.so').read() == dependency.read_bytes()
         assert b'rm -f /tmp/chimaera-sim-time-origin.ns' in archive.extractfile(root + '/guest_start').read()
-        guest = bridge_plan(session(output, data, plan(data)[0]), 'guest', '/test/bridge')
+        from chimaera_ros.manifest import load as load_session
+        guest = bridge_plan(load_session(output / 'staging-session.json'), 'guest', '/test/bridge')
+        assert f'transport_backend:={backend}' in guest['processes'][0]['command']
+        if backend == 'dma':
+            assert 'dma_module:=' + GUEST_ROOT + '/runtime/chimaera_dma.ko' in guest['processes'][0]['command']
         assert guest['env']['ROS_LOCALHOST_ONLY'] == ('0' if segment else '1')
         assert guest['env']['RMW_IMPLEMENTATION'] == 'rmw_fastrtps_cpp'
         if segment:
@@ -626,3 +667,28 @@ def test_comparison_controls_preserve_outcomes_and_missing_measurements(tmp_path
         points.append(point)
     report = create_dashboard(trials, tmp_path / 'dashboard.html', points)
     subprocess.run(['node', str(WORKSPACE / 'tests/memory_dashboard_smoke.cjs'), str(report)], check=True)
+
+
+@pytest.mark.parametrize('backend', ['m5', 'dma'])
+def test_benchmark_launch_selects_the_same_backend_for_host_and_gem5(tmp_path, monkeypatch, backend):
+    import importlib.util
+    from types import SimpleNamespace
+    from launch import LaunchContext
+    spec = importlib.util.spec_from_file_location('benchmark_launch',
+        WORKSPACE / 'src/ball_catching_sim/launch/benchmark.launch.py')
+    launch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(launch)
+    monkeypatch.setattr(launch, 'get_package_share_directory', lambda name: '/test/' + name)
+    for name in ('Node', 'ExecuteProcess', 'IncludeLaunchDescription', 'OnProcessExit', 'RegisterEventHandler'):
+        monkeypatch.setattr(launch, name, lambda *args, **kwargs: SimpleNamespace(**kwargs))
+    data = load(tmp_path, configuration(tmp_path))
+    data['fixed']['transport_backend'] = backend
+    execution = tmp_path / 'execution.json'
+    execution.write_text(json.dumps(dict(gem5_root='/gem5', scripts='/scripts', options={}, rates={},
+        fixed=data['fixed'], bundle='/guest.tar.gz', image='/guest.img', kernel='/kernel', routes='/routes.json')))
+    monkeypatch.setenv('ROS_LOG_DIR', str(tmp_path / 'logs'))
+    context = LaunchContext()
+    context.launch_configurations.update(output=str(tmp_path), execution=str(execution))
+    _, bridge, simulator, *_ = launch.start(context)
+    assert simulator.cmd[simulator.cmd.index('--transport-backend') + 1] == backend
+    assert bridge.parameters[0]['transport_backend'] == backend

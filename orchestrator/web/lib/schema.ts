@@ -4,7 +4,11 @@ const vector = { type: 'array', items: { type: 'number' }, minItems: 3, maxItems
 const object = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, properties, required: Object.keys(properties) });
 export const experimentSchema = object({
   version: { const: 1 },
-  fixed: { ...object({ duration: positive, warmup: { type: 'number', minimum: 0 }, physics_step: positive,
+  fixed: { ...object({ transport_backend: { enum: ['m5', 'dma'], default: 'm5',
+      description: 'DMA uses a fresh KVM boot for every case; readiness checkpoints are unavailable.' },
+    dma_module: { type: 'string', default: '',
+      description: 'Repository-relative chimaera_dma.ko built for the guest kernel; empty uses a driver already loaded in the guest.' },
+    duration: positive, warmup: { type: 'number', minimum: 0 }, physics_step: positive,
     joint_hz: positive, camera_position: vector, camera_width: { type: 'integer', minimum: 64 },
     camera_height: { type: 'integer', minimum: 64 }, image_age_periods: positive,
     guest_dds_shm_bytes: { type: 'integer', minimum: 0, maximum: 67108864 }, cup_radius: positive,

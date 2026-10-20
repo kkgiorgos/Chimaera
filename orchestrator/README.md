@@ -7,6 +7,26 @@ Only one unfinished experiment can exist, including stopped runs. Finalized runs
 retain collected results; their working files are released automatically before
 another experiment can start.
 
+Select DMA by adding these fields inside the experiment's `fixed` object:
+
+```json
+"transport_backend": "dma",
+"dma_module": "path/to/chimaera_dma.ko"
+```
+
+The orchestrator resolves `dma_module` relative to the repository root. Supply a
+module built from `gem5-transport/kernel` for the exact guest kernel on each
+preparation machine. Preparation freezes and hashes the module, then bundles it
+for loading by the guest bridge. An empty or omitted module path requires a driver
+already loaded in your custom guest image; the automatically prepared guest needs
+the module supplied explicitly. Standalone suite configurations resolve the path
+relative to their JSON file.
+
+DMA uses fresh KVM boots for every case and skips readiness checkpoint creation,
+transfer, and restoration. Memory calibration and application images are still
+shared. The default `m5` backend retains the checkpoint workflow. DMA cannot be
+combined with the suite's checkpoint options.
+
 ## Deploy on the webserver
 
 Requirements:
@@ -14,8 +34,9 @@ Requirements:
 - Docker Engine with Compose, and an up-to-date checkout of this repository.
 - Linux x86-64 workers with Docker Engine/Compose, writable repositories,
   and permission for the SSH user to use Docker and the guest assets.
-- KVM on the selected preparation machine for its initial guest boot. Case
-  workers restore detailed checkpoints and do not need `/dev/kvm`.
+- With the default m5 backend, KVM on the selected preparation machine for its
+  initial guest boot. Case workers restore detailed checkpoints. With DMA, every
+  case worker needs `/dev/kvm` for a fresh guest boot.
 - Bash and gzip on workers for compressed image streams. The producer also needs
   Python 3 and an OpenSSH client on its host.
 - SSH key access from the webserver to each worker. No inbound worker HTTP ports
