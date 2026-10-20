@@ -3,3 +3,5 @@
 Import('*')
 
 Source('util.cc')
+SimObject('ChimaeraDma.py', sim_objects=['ChimaeraDma'])
+Source('dma_device.cc')
