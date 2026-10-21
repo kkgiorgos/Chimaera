@@ -1,0 +1,54 @@
+[
+  {
+    "case": "synthetic-bridge",
+    "wall_seconds": 1119.1394363769796,
+    "stats": {
+      "simSeconds": 1.752,
+      "hostSeconds": 1110.07,
+      "simInsts": 271297989.0,
+      "simOps": 545417201.0,
+      "hostInstRate": 244398.0
+    },
+    "stats_file": "synthetic-bridge-stats.txt.gz",
+    "stats_sha256": "f2c7bb2110f3eb87541d109b86308d73af20951229ff8a73ba175499b97ed1f9"
+  },
+  {
+    "case": "synthetic-fastdds",
+    "wall_seconds": 1459.9154090480297,
+    "stats": {
+      "simSeconds": 1.752,
+      "hostSeconds": 1450.82,
+      "simInsts": 345105901.0,
+      "simOps": 698508075.0,
+      "hostInstRate": 237869.0
+    },
+    "stats_file": "synthetic-fastdds-stats.txt.gz",
+    "stats_sha256": "c6fb9fe7fc47b8fc31d4c8b22b6ec1c65ed2e75e9200dc3db834d390e7e9ca58"
+  },
+  {
+    "case": "ball_catching-bridge",
+    "wall_seconds": 3893.677005917998,
+    "stats": {
+      "simSeconds": 1.766,
+      "hostSeconds": 3884.67,
+      "simInsts": 1018221171.0,
+      "simOps": 2062420564.0,
+      "hostInstRate": 262112.0
+    },
+    "stats_file": "ball_catching-bridge-stats.txt.gz",
+    "stats_sha256": "595024f705bd5713672aed4552f0e38cb3c09c3283658205a85a6dee8fe49711"
+  },
+  {
+    "case": "ball_catching-fastdds",
+    "wall_seconds": 4682.297802735004,
+    "stats": {
+      "simSeconds": 1.77,
+      "hostSeconds": 4672.54,
+      "simInsts": 1103642208.0,
+      "simOps": 2320233873.0,
+      "hostInstRate": 236197.0
+    },
+    "stats_file": "ball_catching-fastdds-stats.txt.gz",
+    "stats_sha256": "39f3b868b69aacfee60f7ccb61f6c69c83046c5e2b45c8eb0527b33b22364615"
+  }
+]

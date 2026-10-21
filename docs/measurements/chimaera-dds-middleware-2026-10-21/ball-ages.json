@@ -1,0 +1,15 @@
+{
+  "control": {
+    "sample_count": 35,
+    "mean_age_ms": 32.10458379999996,
+    "p95_age_ms": 41.47361400000005,
+    "maximum_age_ms": 42.95133899999992
+  },
+  "perception": {
+    "sample_count": 45,
+    "mean_age_ms": 34.091314000000054,
+    "p95_age_ms": 43.27096799999997,
+    "maximum_age_ms": 51.42884800000003
+  },
+  "scope": "Received records during the throw window; control feedback is sampled by the existing 25 Hz recorder."
+}

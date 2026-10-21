@@ -1,0 +1,106 @@
+{
+  "clocksource": "refined-jiffies",
+  "available_clocks": "refined-jiffies jiffies",
+  "timer_status": "Timer List Version: v0.9\nHRTIMER_MAX_CLOCK_BASES: 8\nnow at 7007009568 nsecs\n\ncpu: 0\n clock 0:\n  .base:       00000000158a2cc1\n  .index:      0\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n #0: <00000000ccf351d0>, hrtimer_wakeup, S:01\n # expires at 7010009872-7010059872 nsecs [in 3000304 to 3050304 nsecs]\n clock 1:\n  .base:       000000004552068c\n  .index:      1\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 2:\n  .base:       00000000b88961a0\n  .index:      2\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 3:\n  .base:       0000000076b092a9\n  .index:      3\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 4:\n  .base:       00000000b135241d\n  .index:      4\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n clock 5:\n  .base:       000000007b7376f8\n  .index:      5\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 6:\n  .base:       000000001582bb53\n  .index:      6\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 7:\n  .base:       000000003bc813ee\n  .index:      7\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n  .expires_next   : 984925064 nsecs\n  .hres_active    : 0\n  .nr_events      : 0\n  .nr_retries     : 0\n  .nr_hangs       : 0\n  .max_hang_time  : 0\n  .nohz_mode      : 0\n  .last_tick      : 0 nsecs\n  .tick_stopped   : 0\n  .idle_jiffies   : 0\n  .idle_calls     : 0\n  .idle_sleeps    : 0\n  .idle_entrytime : 7004010024 nsecs\n  .idle_waketime  : 0 nsecs\n  .idle_exittime  : 0 nsecs\n  .idle_sleeptime : 1999696 nsecs\n  .iowait_sleeptime: 0 nsecs\n  .last_jiffies   : 0\n  .next_timer     : 0\n  .idle_expires   : 0 nsecs\njiffies: 4294674304\n\ncpu: 1\n clock 0:\n  .base:       00000000685fd709\n  .index:      0\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n clock 1:\n  .base:       00000000f78fb382\n  .index:      1\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 2:\n  .base:       00000000a09daaf5\n  .index:      2\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 3:\n  .base:       00000000f907f390\n  .index:      3\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 4:\n  .base:       00000000167f7d85\n  .index:      4\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n clock 5:\n  .base:       00000000bf84a682\n  .index:      5\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 6:\n  .base:       00000000dee2821c\n  .index:      6\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 7:\n  .base:       00000000e5b8d993\n  .index:      7\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n  .expires_next   : 515996352 nsecs\n  .hres_active    : 0\n  .nr_events      : 0\n  .nr_retries     : 0\n  .nr_hangs       : 0\n  .max_hang_time  : 0\n  .nohz_mode      : 0\n  .last_tick      : 0 nsecs\n  .tick_stopped   : 0\n  .idle_jiffies   : 0\n  .idle_calls     : 0\n  .idle_sleeps    : 0\n  .idle_entrytime : 6997011088 nsecs\n  .idle_waketime  : 0 nsecs\n  .idle_exittime  : 0 nsecs\n  .idle_sleeptime : 3371515272 nsecs\n  .iowait_sleeptime: 852870344 nsecs\n  .last_jiffies   : 0\n  .next_timer     : 0\n  .idle_expires   : 0 nsecs\njiffies: 4294674304\n\ncpu: 2\n clock 0:\n  .base:       00000000ce5d5ae4\n  .index:      0\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n #0: <0000000067c2c74d>, hrtimer_wakeup, S:01\n # expires at 7009010024-7009060024 nsecs [in 2000456 to 2050456 nsecs]\n #1: <000000006847d88a>, hrtimer_wakeup, S:01\n # expires at 7073151536-7073201536 nsecs [in 66141968 to 66191968 nsecs]\n #2: <000000001b1e9dff>, hrtimer_wakeup, S:01\n # expires at 7872030088-7872080088 nsecs [in 865020520 to 865070520 nsecs]\n #3: <00000000e83ec947>, hrtimer_wakeup, S:01\n # expires at 9915327552-9915377552 nsecs [in 2908317984 to 2908367984 nsecs]\n clock 1:\n  .base:       00000000ab27c3ae\n  .index:      1\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 2:\n  .base:       0000000006d1a637\n  .index:      2\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 3:\n  .base:       0000000050831173\n  .index:      3\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 4:\n  .base:       000000009e22aa8c\n  .index:      4\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n clock 5:\n  .base:       0000000060749513\n  .index:      5\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 6:\n  .base:       000000000233d6b9\n  .index:      6\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 7:\n  .base:       0000000058519118\n  .index:      7\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n  .expires_next   : 5881232240 nsecs\n  .hres_active    : 0\n  .nr_events      : 0\n  .nr_retries     : 0\n  .nr_hangs       : 0\n  .max_hang_time  : 0\n  .nohz_mode      : 0\n  .last_tick      : 0 nsecs\n  .tick_stopped   : 0\n  .idle_jiffies   : 0\n  .idle_calls     : 0\n  .idle_sleeps    : 0\n  .idle_entrytime : 6998010936 nsecs\n  .idle_waketime  : 0 nsecs\n  .idle_exittime  : 0 nsecs\n  .idle_sleeptime : 3775448696 nsecs\n  .iowait_sleeptime: 843871712 nsecs\n  .last_jiffies   : 0\n  .next_timer     : 0\n  .idle_expires   : 0 nsecs\njiffies: 4294674304\n\ncpu: 3\n clock 0:\n  .base:       0000000089683e62\n  .index:      0\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n #0: <0000000000425e1a>, hrtimer_wakeup, S:01\n # expires at 7056017320-7056117320 nsecs [in 49007752 to 49107752 nsecs]\n #1: <000000003dc02a3e>, hrtimer_wakeup, S:01\n # expires at 7876029480-7876079480 nsecs [in 869019912 to 869069912 nsecs]\n #2: <000000002f089767>, hrtimer_wakeup, S:01\n # expires at 7880028872-7880078872 nsecs [in 873019304 to 873069304 nsecs]\n #3: <000000007e5c8186>, hrtimer_wakeup, S:01\n # expires at 8584225864-8584275864 nsecs [in 1577216296 to 1577266296 nsecs]\n #4: <00000000de6a589f>, hrtimer_wakeup, S:01\n # expires at 11872030088-11872080088 nsecs [in 4865020520 to 4865070520 nsecs]\n #5: <000000005d8dc6f3>, hrtimer_wakeup, S:01\n # expires at 11875029632-11875079632 nsecs [in 4868020064 to 4868070064 nsecs]\n #6: <0000000056bdf7b7>, hrtimer_wakeup, S:01\n # expires at 11878029176-11878079176 nsecs [in 4871019608 to 4871069608 nsecs]\n clock 1:\n  .base:       0000000060ebe4d8\n  .index:      1\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n #0: <000000002223608e>, hrtimer_wakeup, S:01\n # expires at 1325376007079049000-1325376007079099000 nsecs [in 72039432 to 72089432 nsecs]\n #1: <00000000be0b8ff8>, hrtimer_wakeup, S:01\n # expires at 1325376007337010000-1325376007337060000 nsecs [in 330000432 to 330050432 nsecs]\n #2: <000000007d98a49d>, hrtimer_wakeup, S:01\n # expires at 1325376007337010000-1325376007337060000 nsecs [in 330000432 to 330050432 nsecs]\n #3: <00000000f100eac8>, hrtimer_wakeup, S:01\n # expires at 1325376007337010000-1325376007337060000 nsecs [in 330000432 to 330050432 nsecs]\n clock 2:\n  .base:       00000000ced9d099\n  .index:      2\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 3:\n  .base:       00000000b794eeb9\n  .index:      3\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 4:\n  .base:       000000005a3118a0\n  .index:      4\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get\n  .offset:     0 nsecs\nactive timers:\n clock 5:\n  .base:       00000000e158d8c3\n  .index:      5\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_real\n  .offset:     1325376000000000000 nsecs\nactive timers:\n clock 6:\n  .base:       0000000029d43351\n  .index:      6\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_boottime\n  .offset:     0 nsecs\nactive timers:\n clock 7:\n  .base:       00000000e596857a\n  .index:      7\n  .resolution: 1000000 nsecs\n  .get_time:   ktime_get_clocktai\n  .offset:     1325376000000000000 nsecs\nactive timers:\n  .expires_next   : 3796497640 nsecs\n  .hres_active    : 0\n  .nr_events      : 0\n  .nr_retries     : 0\n  .nr_hangs       : 0\n  .max_hang_time  : 0\n  .nohz_mode      : 0\n  .last_tick      : 0 nsecs\n  .tick_stopped   : 0\n  .idle_jiffies   : 0\n  .idle_calls     : 0\n  .idle_sleeps    : 0\n  .idle_entrytime : 6999010784 nsecs\n  .idle_waketime  : 0 nsecs\n  .idle_exittime  : 0 nsecs\n  .idle_sleeptime : 4000410696 nsecs\n  .iowait_sleeptime: 480926888 nsecs\n  .last_jiffies   : 0\n  .next_timer     : 0\n  .idle_expires   : 0 nsecs\njiffies: 4294674304\n\nTick Device: mode:     0\nBroadcast device\nClock Event Device: pit\n max_delta_ns:   27461861\n min_delta_ns:   12572\n mult:           5124678\n shift:          32\n mode:           1\n next_event:     9223372036854775807 nsecs\n set_next_event: pit_next_event\n shutdown:       pit_shutdown\n periodic:       pit_set_periodic\n oneshot:        pit_set_oneshot\n event_handler:  clockevents_handle_noop\n\n retries:        0\n\ntick_broadcast_mask: 0\ntick_broadcast_oneshot_mask: 0\n\nTick Device: mode:     0\nPer CPU device: 0\nClock Event Device: lapic\n max_delta_ns:   183076186129\n min_delta_ns:   1279\n mult:           50379966\n shift:          32\n mode:           2\n next_event:     9223372036854775807 nsecs\n set_next_event: lapic_next_event\n shutdown:       lapic_timer_shutdown\n periodic:       lapic_timer_set_periodic\n oneshot:        lapic_timer_set_oneshot\n oneshot stopped: lapic_timer_shutdown\n event_handler:  tick_handle_periodic\n\n retries:        0\nWakeup Device: <NULL>\n\nTick Device: mode:     0\nPer CPU device: 1\nClock Event Device: lapic\n max_delta_ns:   183076186129\n min_delta_ns:   1279\n mult:           50379966\n shift:          32\n mode:           2\n next_event:     9223372036854775807 nsecs\n set_next_event: lapic_next_event\n shutdown:       lapic_timer_shutdown\n periodic:       lapic_timer_set_periodic\n oneshot:        lapic_timer_set_oneshot\n oneshot stopped: lapic_timer_shutdown\n event_handler:  tick_handle_periodic\n\n retries:        0\nWakeup Device: <NULL>\n\nTick Device: mode:     0\nPer CPU device: 2\nClock Event Device: lapic\n max_delta_ns:   183076186129\n min_delta_ns:   1279\n mult:           50379966\n shift:          32\n mode:           2\n next_event:     9223372036854775807 nsecs\n set_next_event: lapic_next_event\n shutdown:       lapic_timer_shutdown\n periodic:       lapic_timer_set_periodic\n oneshot:        lapic_timer_set_oneshot\n oneshot stopped: lapic_timer_shutdown\n event_handler:  tick_handle_periodic\n\n retries:        0\nWakeup Device: <NULL>\n\nTick Device: mode:     0\nPer CPU device: 3\nClock Event Device: lapic\n max_delta_ns:   183076186129\n min_delta_ns:   1279\n mult:           50379966\n shift:          32\n mode:           2\n next_event:     9223372036854775807 nsecs\n set_next_event: lapic_next_event\n shutdown:       lapic_timer_shutdown\n periodic:       lapic_timer_set_periodic\n oneshot:        lapic_timer_set_oneshot\n oneshot stopped: lapic_timer_shutdown\n event_handler:  tick_handle_periodic\n\n retries:        0\nWakeup Device: <NULL>\n\n",
+  "started_ns": 11392232,
+  "samples": [
+    {
+      "cpu": 0,
+      "requested_us": 1000,
+      "os_ns": 1999696,
+      "simulation_ns": 1980194
+    },
+    {
+      "cpu": 0,
+      "requested_us": 1000,
+      "os_ns": 1999696,
+      "simulation_ns": 2444427
+    },
+    {
+      "cpu": 0,
+      "requested_us": 5000,
+      "os_ns": 6998936,
+      "simulation_ns": 7911785
+    },
+    {
+      "cpu": 0,
+      "requested_us": 5000,
+      "os_ns": 5999088,
+      "simulation_ns": 5701075
+    },
+    {
+      "cpu": 1,
+      "requested_us": 1000,
+      "os_ns": 4999240,
+      "simulation_ns": 5196380
+    },
+    {
+      "cpu": 1,
+      "requested_us": 1000,
+      "os_ns": 2999544,
+      "simulation_ns": 2780321
+    },
+    {
+      "cpu": 1,
+      "requested_us": 5000,
+      "os_ns": 6998936,
+      "simulation_ns": 7354235
+    },
+    {
+      "cpu": 1,
+      "requested_us": 5000,
+      "os_ns": 5999088,
+      "simulation_ns": 7611605
+    },
+    {
+      "cpu": 2,
+      "requested_us": 1000,
+      "os_ns": 1999696,
+      "simulation_ns": 1908835
+    },
+    {
+      "cpu": 2,
+      "requested_us": 1000,
+      "os_ns": 4999240,
+      "simulation_ns": 4554202
+    },
+    {
+      "cpu": 2,
+      "requested_us": 5000,
+      "os_ns": 6998936,
+      "simulation_ns": 7852683
+    },
+    {
+      "cpu": 2,
+      "requested_us": 5000,
+      "os_ns": 5999088,
+      "simulation_ns": 5775663
+    },
+    {
+      "cpu": 3,
+      "requested_us": 1000,
+      "os_ns": 1999696,
+      "simulation_ns": 1393317
+    },
+    {
+      "cpu": 3,
+      "requested_us": 1000,
+      "os_ns": 1999696,
+      "simulation_ns": 1873545
+    },
+    {
+      "cpu": 3,
+      "requested_us": 5000,
+      "os_ns": 5999088,
+      "simulation_ns": 5918229
+    },
+    {
+      "cpu": 3,
+      "requested_us": 5000,
+      "os_ns": 6998936,
+      "simulation_ns": 7326985
+    }
+  ],
+  "updated_ns": 142606937,
+  "interrupts": "           CPU0       CPU1       CPU2       CPU3       \n  0:        245          0          0          0   IO-APIC   2-edge      timer\n  1:          0          0          0          9   IO-APIC   1-edge      i8042\n  2:          0          0          0          0    XT-PIC      cascade\n  8:          0          0          0          0   IO-APIC   8-edge      rtc0\n 12:          0          0        138          0   IO-APIC  12-edge      i8042\n 14:          0       2373          0          0   IO-APIC  14-edge      ata_piix\n 15:          0          0          0          0    XT-PIC      ata_piix\n 17:          0          0         99          0   IO-APIC  17-fasteoi   chimaera_dma\nNMI:          0          0          0          0   Non-maskable interrupts\nLOC:       6993       7377       7520       7747   Local timer interrupts\nSPU:          0          0          0          0   Spurious interrupts\nPMI:          0          0          0          0   Performance monitoring interrupts\nIWI:          0          0          0          0   IRQ work interrupts\nRTR:          0          0          0          0   APIC ICR read retries\nRES:         23         34         55         51   Rescheduling interrupts\nCAL:       1792       2502       1786       2200   Function call interrupts\nTLB:          7          8          7         28   TLB shootdowns\nTRM:          0          0          0          0   Thermal event interrupts\nTHR:          0          0          0          0   Threshold APIC interrupts\nDFR:          0          0          0          0   Deferred Error APIC interrupts\nMCE:          0          0          0          0   Machine check exceptions\nMCP:          0          0          0          0   Machine check polls\nERR:          0\nMIS:          0\nPIN:          0          0          0          0   Posted-interrupt notification event\nNPI:          0          0          0          0   Nested posted-interrupt event\nPIW:          0          0          0          0   Posted-interrupt wakeup event\n"
+}

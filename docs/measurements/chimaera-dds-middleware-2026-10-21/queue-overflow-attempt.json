@@ -1,0 +1,8 @@
+{
+  "attempt": "ball-acceptance-r4",
+  "state": "failed_before_throw",
+  "reason": "Host bridge: controller queue limit exceeded",
+  "simulated_seconds": 0.6195,
+  "output": ".chimaera-middleware/ball-acceptance-r4",
+  "exception": "Traceback (most recent call last):\n  File \"/work/middleware/validate_ball.py\", line 90, in <module>\n    raise SystemExit(main())\n  File \"/work/middleware/validate_ball.py\", line 83, in main\n    gem5_trial(output / \"baseline\", output, data, points[0], artifacts, {}, bundle)\n  File \"/work/ros/ball_catching_ws/scripts/run_memory_suite.py\", line 603, in gem5_trial\n    raise RuntimeError('Co-simulation failed: ' + failure)\nRuntimeError: Co-simulation failed: [gazebo_host_bridge-4] Host bridge: controller queue limit exceeded\n"
+}

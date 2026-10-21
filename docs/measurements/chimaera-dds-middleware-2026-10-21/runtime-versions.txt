@@ -1,0 +1,5 @@
+libstdc++6:amd64	12.3.0-1ubuntu1~22.04.3
+ros-humble-fastrtps	2.6.12-1jammy.20260723.233918
+ros-humble-rclcpp	16.0.21-1jammy.20260907.213403
+ros-humble-rmw-fastrtps-cpp	6.2.10-1jammy.20260907.210327
+Linux 8fdcee63449a 6.8.0-147-generic #147-Ubuntu SMP PREEMPT_DYNAMIC Thu Sep 24 11:33:16 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux

@@ -1,0 +1,14 @@
+{
+  "gem5_sim_seconds": 2.0245,
+  "gem5_wall_seconds": 9.675678761,
+  "gazebo_wall_seconds": 230.9276794,
+  "other_wall_seconds": 167.293345967,
+  "wall_seconds": 407.896704128,
+  "steps": 4049,
+  "startup_wall_seconds": 13.222037071,
+  "wall_fraction": {
+    "gem5_wall_seconds": 0.023720904491456064,
+    "gazebo_wall_seconds": 0.5661425480102279,
+    "other_wall_seconds": 0.4101365474983159
+  }
+}

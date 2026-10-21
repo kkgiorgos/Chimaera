@@ -1,0 +1,250 @@
+{
+  "librmw_fastrtps_cpp.so": {
+    "source": "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_cpp.so",
+    "sha256": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0"
+  },
+  "librclcpp.so": {
+    "source": "/opt/ros/humble/lib/librclcpp.so",
+    "sha256": "cd2a15b5df569fd66e7c9d0c336bff58d92b39932a701a670b6e02611b4f4119"
+  },
+  "libjson-c.so.5": {
+    "source": "/lib/x86_64-linux-gnu/libjson-c.so.5",
+    "sha256": "deb38a09f3c253c1d4046f53085d0ed3e9b2496a1a91605c065900fde808306f"
+  },
+  "libchimaera_dds_transport.so": {
+    "source": "/work/.chimaera-middleware/runtime-staging-r2/lib/libchimaera_dds_transport.so",
+    "sha256": "d6b725c9dc9c54b8bb52e767d9a9ca9ff4c0e6baf7fac85d50560f5df57db624"
+  },
+  "librcl.so": {
+    "source": "/opt/ros/humble/lib/librcl.so",
+    "sha256": "43f86a53ec1a6c75e7330b216253d8497cdee1fc1674fdd678166c804cf1921c"
+  },
+  "librcutils.so": {
+    "source": "/opt/ros/humble/lib/librcutils.so",
+    "sha256": "0ffe97d7ca8b02edb2259a25992f135df6005b0bda4f20e327401a93411b0bed"
+  },
+  "libstdc++.so.6": {
+    "source": "/lib/x86_64-linux-gnu/libstdc++.so.6",
+    "sha256": "ff0825e113603c3866680d5d52216bc6d8eedf3a59f52a0aef67ff01994db128"
+  },
+  "libgcc_s.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+    "sha256": "fc9d43b2f6c20e53b009238f767c5b949d202389e20de9e202ea684b4ba3729a"
+  },
+  "liblibstatistics_collector.so": {
+    "source": "/opt/ros/humble/lib/liblibstatistics_collector.so",
+    "sha256": "39a9a1dd1a0388df3f8d77e77fad860de1e09f242f6ff157eb2c885341d67cf5"
+  },
+  "librcl_yaml_param_parser.so": {
+    "source": "/opt/ros/humble/lib/librcl_yaml_param_parser.so",
+    "sha256": "bc719bcbebc8ddec01e220229893f0b1e9dbae5d6331563952e211b702051207"
+  },
+  "librosgraph_msgs__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/librosgraph_msgs__rosidl_typesupport_cpp.so",
+    "sha256": "ca605754eeb16788d731946b3d46ae5bf2dc1bc56f338cfbf44801886d15736a"
+  },
+  "libstatistics_msgs__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/libstatistics_msgs__rosidl_typesupport_cpp.so",
+    "sha256": "cb7c2602e305d6b80005b8d33ceb6fb9381a71e858b5ef4a467b74146f8b4e59"
+  },
+  "libtracetools.so": {
+    "source": "/opt/ros/humble/lib/libtracetools.so",
+    "sha256": "2f1130f9099a313ce83e38911a17e67646a59fd78ad598f8c192487a5f52f34b"
+  },
+  "librmw_implementation.so": {
+    "source": "/opt/ros/humble/lib/librmw_implementation.so",
+    "sha256": "10da394c1ba2fea1e16eaaf2193be3cfcc2c266ca77829147fd13fa4ae9a3c91"
+  },
+  "libament_index_cpp.so": {
+    "source": "/opt/ros/humble/lib/libament_index_cpp.so",
+    "sha256": "512d31ee3ace65980c2daefbf529289179b8324da00b5c3d89dc3e93998d95bf"
+  },
+  "librcl_logging_interface.so": {
+    "source": "/opt/ros/humble/lib/librcl_logging_interface.so",
+    "sha256": "e671d1f9f84da3abcdce0390f923b08121e5da546980c23b5ef7a49025cc7341"
+  },
+  "librmw.so": {
+    "source": "/opt/ros/humble/lib/librmw.so",
+    "sha256": "758059e7ab478777dd806b426b01eeaf1e5b77ebffa32a28bf977937aeffa24c"
+  },
+  "librcl_interfaces__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/librcl_interfaces__rosidl_typesupport_cpp.so",
+    "sha256": "0e0c094d9b39fe8757744dd653d6949a9a9749bdab067c259305a87e92742ab0"
+  },
+  "librcpputils.so": {
+    "source": "/opt/ros/humble/lib/librcpputils.so",
+    "sha256": "27aecc8a30a6e309b1b36ae1620c9a226573b560b11dbc8544133ff36eed2cdf"
+  },
+  "libfastrtps.so.2.6": {
+    "source": "/opt/ros/humble/lib/libfastrtps.so.2.6",
+    "sha256": "148cd881ab04a1ffeb27c15ebd5f7a08d4e3fe02d203582e812d3464a9c17b09"
+  },
+  "librcl_logging_spdlog.so": {
+    "source": "/opt/ros/humble/lib/librcl_logging_spdlog.so",
+    "sha256": "ead77d2b8a383d1ce310136f44ef9a8551fe9b966353a900e8ecd88f04d098cb"
+  },
+  "librcl_interfaces__rosidl_typesupport_c.so": {
+    "source": "/opt/ros/humble/lib/librcl_interfaces__rosidl_typesupport_c.so",
+    "sha256": "10b46e8613961f592ffc1347c0a1676f90fe9669d47828fcbec30bf1ff19f531"
+  },
+  "librcl_interfaces__rosidl_generator_c.so": {
+    "source": "/opt/ros/humble/lib/librcl_interfaces__rosidl_generator_c.so",
+    "sha256": "74c68263af27563641e8c84e131338c7ad4e83752a910fc86894125f996e84e2"
+  },
+  "librosidl_runtime_c.so": {
+    "source": "/opt/ros/humble/lib/librosidl_runtime_c.so",
+    "sha256": "3f445f190b04b6e96f167b7ffda0bd2455aea2bf7c9c0ff40c223538c3f82688"
+  },
+  "libyaml.so": {
+    "source": "/opt/ros/humble/lib/libyaml.so",
+    "sha256": "100d20b4cf923f304bc06876a7759a3e9a3db03afc06ac1b757379ba4118c206"
+  },
+  "librosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_cpp.so",
+    "sha256": "42fca7631866947fba14c7569eb2953ecfb76d7cc52eda02184be28916da0ccf"
+  },
+  "libfastcdr.so.1": {
+    "source": "/opt/ros/humble/lib/libfastcdr.so.1",
+    "sha256": "ae755da75d58c90c2db06398beff0b08b382e19c72ac223a9a57cb782d9a5575"
+  },
+  "libtinyxml2.so.9": {
+    "source": "/lib/x86_64-linux-gnu/libtinyxml2.so.9",
+    "sha256": "05059e5dd45e4f6bde1c827e20c7b229e659e5d7b523677afaf565db65d9badf"
+  },
+  "libssl.so.3": {
+    "source": "/lib/x86_64-linux-gnu/libssl.so.3",
+    "sha256": "51fc92556f11ddce62f3f988d3fe973fab8fb4742032e61a713688581c924262"
+  },
+  "libcrypto.so.3": {
+    "source": "/lib/x86_64-linux-gnu/libcrypto.so.3",
+    "sha256": "7cc817ff1841b59516d684f357bc0c3fc2cc52c3fa9b4ffb8ce8bdc215f02915"
+  },
+  "libspdlog.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libspdlog.so.1",
+    "sha256": "1de96ba8296808433bf3ad601f2410c179a3e422a05ad012b49e4ad364f72bc0"
+  },
+  "librosidl_typesupport_c.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_c.so",
+    "sha256": "ae872aaa9ca8d55153662d87c1f5bf66bddf103a03b809eb299ffeb87c9381f5"
+  },
+  "libbuiltin_interfaces__rosidl_generator_c.so": {
+    "source": "/opt/ros/humble/lib/libbuiltin_interfaces__rosidl_generator_c.so",
+    "sha256": "df0d194edccde639a7419d86bc8d51a018246a1cd0a474959a843938645a3d01"
+  },
+  "libfmt.so.8": {
+    "source": "/lib/x86_64-linux-gnu/libfmt.so.8",
+    "sha256": "d463bedd51d449b2346d329fad8080e0900120ad0aeab8bf93e325b6cff4a587"
+  },
+  "libignition-transport11.so.11": {
+    "source": "/lib/x86_64-linux-gnu/libignition-transport11.so.11",
+    "sha256": "514f13b738c3d1a21e52c02a6175622a2e638f987eefee1a8213b409aa06a4b2"
+  },
+  "libignition-msgs8.so.8": {
+    "source": "/lib/x86_64-linux-gnu/libignition-msgs8.so.8",
+    "sha256": "4f12759fe4120e8e3cdbb86634cc6d94dd6a241b011c242e960d27ba18b1c37d"
+  },
+  "libprotobuf.so.23": {
+    "source": "/lib/x86_64-linux-gnu/libprotobuf.so.23",
+    "sha256": "4698f37e13553d965c752239367336d048d803453a236cdbb04b683cbe42b590"
+  },
+  "libzmq.so.5": {
+    "source": "/lib/x86_64-linux-gnu/libzmq.so.5",
+    "sha256": "540a8defe7b1e1494ac553843a2bea88eaf5426bf367782b5ca6a5a01360989f"
+  },
+  "libuuid.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libuuid.so.1",
+    "sha256": "4472cf91dbc01395761fb45d0f4b25f6241406fe54cbf540c13755a3706a7b17"
+  },
+  "libignition-math6.so.6": {
+    "source": "/lib/x86_64-linux-gnu/libignition-math6.so.6",
+    "sha256": "d2f94e49dc23dac7ff31c3f9a93e7f56ce273f079c00bc0805e41dacb896d58f"
+  },
+  "libz.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libz.so.1",
+    "sha256": "64c206f0146cc58bbddc4f22054436f4ff278f5a554aa3ce6921ddf7e9133370"
+  },
+  "libbsd.so.0": {
+    "source": "/lib/x86_64-linux-gnu/libbsd.so.0",
+    "sha256": "e4ad21c203d8e8b9b7f49071311339af6b438026e1ad236403e3b379b022f23d"
+  },
+  "libsodium.so.23": {
+    "source": "/lib/x86_64-linux-gnu/libsodium.so.23",
+    "sha256": "f1e78ef8deb65b13d62873fab71546ccab06c77a0115891e55ce8fb108518f96"
+  },
+  "libpgm-5.3.so.0": {
+    "source": "/lib/x86_64-linux-gnu/libpgm-5.3.so.0",
+    "sha256": "fcc27728d8db55fff51c782a665f37f1e5c54f3a37872a272688800e962e0dda"
+  },
+  "libnorm.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libnorm.so.1",
+    "sha256": "cc5c631eb267f0159baee696a3fead708397ccc095ddbcde434f678582cb0481"
+  },
+  "libgssapi_krb5.so.2": {
+    "source": "/lib/x86_64-linux-gnu/libgssapi_krb5.so.2",
+    "sha256": "a8c1a62a7b925e198c5fb8f8123bb2900c235dd678d6dbf0c1e0b5f06175e84b"
+  },
+  "libmd.so.0": {
+    "source": "/lib/x86_64-linux-gnu/libmd.so.0",
+    "sha256": "bb376813876bb214535bbbdac70f2c0c4b00baecb81557dab78a79518248df06"
+  },
+  "libkrb5.so.3": {
+    "source": "/lib/x86_64-linux-gnu/libkrb5.so.3",
+    "sha256": "ecc1a3b592c3685e330499aba8eac3b635e9be80b99fa65b2ef3e4f0b2d8a166"
+  },
+  "libk5crypto.so.3": {
+    "source": "/lib/x86_64-linux-gnu/libk5crypto.so.3",
+    "sha256": "d3c3d1c5415f09918c67a5bb23cf5004aa9524b916003655af4a2bb15627760a"
+  },
+  "libcom_err.so.2": {
+    "source": "/lib/x86_64-linux-gnu/libcom_err.so.2",
+    "sha256": "f196091d8ec9790b4cd203ecdb0eab3b242d35ae8625ead7962d0a944a8fdfa5"
+  },
+  "libkrb5support.so.0": {
+    "source": "/lib/x86_64-linux-gnu/libkrb5support.so.0",
+    "sha256": "add5050d2a960ab105b568c714849d1e771cf2bd67a46dbfcc068a99de80eeec"
+  },
+  "libkeyutils.so.1": {
+    "source": "/lib/x86_64-linux-gnu/libkeyutils.so.1",
+    "sha256": "ad20d5fb89df5297073b46373c65bfbb01f33a00b4949894055d29a7fcf00900"
+  },
+  "libresolv.so.2": {
+    "source": "/lib/x86_64-linux-gnu/libresolv.so.2",
+    "sha256": "7230adfc1d3676f2485bec78f2d5c916d6becb15bc554ff95901f46800215194"
+  },
+  "libsensor_msgs__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/libsensor_msgs__rosidl_typesupport_cpp.so",
+    "sha256": "74b18da1b785f747246c06613682a08ff74cad600d5751feb8cd8b1162a2d8cf"
+  },
+  "libstd_msgs__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/libstd_msgs__rosidl_typesupport_cpp.so",
+    "sha256": "d8e584ed526e0d8e4d245560250c7c857cdeae2ef36c1fabfc0e21826a99e440"
+  },
+  "librmw_fastrtps_shared_cpp.so": {
+    "source": "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_shared_cpp.so",
+    "sha256": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18"
+  },
+  "librosidl_typesupport_fastrtps_c.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_fastrtps_c.so",
+    "sha256": "5ac89745240230aeed06dfd5f59397b7fdf2c832885fc90cd08f6099f0c0630e"
+  },
+  "librosidl_typesupport_fastrtps_cpp.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_fastrtps_cpp.so",
+    "sha256": "fa513d6a3607640c07a15020ab5da3e2d89429de504807fc66da3f4bdd77e6bd"
+  },
+  "librmw_dds_common.so": {
+    "source": "/opt/ros/humble/lib/librmw_dds_common.so",
+    "sha256": "d5a8c2f711016a747a08e9ed95fec95d1d6a35e209be840cdc20737b391314b8"
+  },
+  "librmw_dds_common__rosidl_typesupport_cpp.so": {
+    "source": "/opt/ros/humble/lib/librmw_dds_common__rosidl_typesupport_cpp.so",
+    "sha256": "f8758c2a984acc9eed0b2be601759bf71832e470c1d0dba485b188587bc21c45"
+  },
+  "librosidl_typesupport_introspection_cpp.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_introspection_cpp.so",
+    "sha256": "ff3a872917ae7fc15463dc88b664bd49e095898a70b54a66f33a3b05bea963e3"
+  },
+  "librosidl_typesupport_introspection_c.so": {
+    "source": "/opt/ros/humble/lib/librosidl_typesupport_introspection_c.so",
+    "sha256": "d9152be4e2244c286fd93233fe7761642a0c1f1f1c06da5c2c06ca73bbd49180"
+  }
+}

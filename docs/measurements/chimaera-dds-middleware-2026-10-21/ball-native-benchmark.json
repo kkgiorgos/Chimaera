@@ -1,0 +1,42 @@
+{
+  "mode": "native_preflight",
+  "point": {
+    "id": "case-000",
+    "cpu_type": "timing",
+    "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+    "label": "TIMING \u00b7 loft-3 \u00b7 camera_30 \u00b7 baseline",
+    "throw": {
+      "name": "loft-3",
+      "launch_position": [
+        1.8,
+        0.04,
+        3.0
+      ],
+      "launch_direction": [
+        -1.0,
+        0.0,
+        2.0
+      ],
+      "launch_speed": 3.0
+    },
+    "rates": {
+      "name": "camera_30",
+      "camera_hz": 30.0,
+      "planner_hz": 30.0,
+      "plan_interval": 0.06,
+      "control_hz": 250.0
+    },
+    "pattern": "none",
+    "pressure": 0.0,
+    "status": "pending",
+    "trials": [],
+    "expected_throws": 1
+  },
+  "memory": null,
+  "commands": {
+    "delivered_commands": 337,
+    "delivered_control_hz": 224.5238890745072,
+    "command_gap_p95_ms": 8.000000000000007,
+    "command_late_fraction": 0.12797619047619047
+  }
+}

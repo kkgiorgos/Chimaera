@@ -1,0 +1,12 @@
+[
+  {
+    "source": "ball-source.patch",
+    "compressed": "ball-source.patch.gz",
+    "sha256": "de28cce39adda4d586ca4c2c75bfd944f2bed69d7e83800cccafdeedf0777034"
+  },
+  {
+    "source": "latency-source.patch",
+    "compressed": "latency-source.patch.gz",
+    "sha256": "841312c47eb8853ea2f53b8fbc304223ebded28cf1f33be0c3bf911bcac06f70"
+  }
+]

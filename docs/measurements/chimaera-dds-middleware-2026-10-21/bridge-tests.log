@@ -1,0 +1,34 @@
+Internal ctest changing into directory: /work/.chimaera-middleware/build-v2/chimaera_ros_bridge
+Test project /work/.chimaera-middleware/build-v2/chimaera_ros_bridge
+      Start  1: completion_waitable_test
+ 1/14 Test  #1: completion_waitable_test .........   Passed    0.19 sec
+      Start  2: serialized_view_test
+ 2/14 Test  #2: serialized_view_test .............   Passed    0.01 sec
+      Start  3: bridge_test
+ 3/14 Test  #3: bridge_test ......................   Passed    0.17 sec
+      Start  4: sensor_bridge_test
+ 4/14 Test  #4: sensor_bridge_test ...............   Passed    0.41 sec
+      Start  5: stereo_freshness_test
+ 5/14 Test  #5: stereo_freshness_test ............   Passed    0.28 sec
+      Start  6: timing_integration
+ 6/14 Test  #6: timing_integration ...............   Passed   11.07 sec
+      Start  7: gem5_timing_test
+ 7/14 Test  #7: gem5_timing_test .................   Passed    0.17 sec
+      Start  8: manifest_test
+ 8/14 Test  #8: manifest_test ....................   Passed    0.71 sec
+      Start  9: latency_analysis_test
+ 9/14 Test  #9: latency_analysis_test ............   Passed    0.15 sec
+      Start 10: latency_dashboard_test
+10/14 Test #10: latency_dashboard_test ...........   Passed    0.72 sec
+      Start 11: latency_traffic_test
+11/14 Test #11: latency_traffic_test .............   Passed    0.11 sec
+      Start 12: latency_sessions_test
+12/14 Test #12: latency_sessions_test ............   Passed    0.14 sec
+      Start 13: latency_dma_test
+13/14 Test #13: latency_dma_test .................   Passed    0.10 sec
+      Start 14: latency_message_test
+14/14 Test #14: latency_message_test .............   Passed    2.04 sec
+
+100% tests passed, 0 tests failed out of 14
+
+Total Test time (real) =  16.27 sec

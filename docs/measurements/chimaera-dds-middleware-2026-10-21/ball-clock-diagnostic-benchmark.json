@@ -1,0 +1,144 @@
+{
+  "mode": "gem5",
+  "point": {
+    "id": "case-000",
+    "cpu_type": "kvm",
+    "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+    "label": "KVM \u00b7 loft-3 \u00b7 camera_30 \u00b7 baseline",
+    "throw": {
+      "name": "loft-3",
+      "launch_position": [
+        1.8,
+        0.04,
+        3.0
+      ],
+      "launch_direction": [
+        -1.0,
+        0.0,
+        2.0
+      ],
+      "launch_speed": 3.0
+    },
+    "rates": {
+      "name": "camera_30",
+      "camera_hz": 30.0,
+      "planner_hz": 30.0,
+      "plan_interval": 0.06,
+      "control_hz": 250.0
+    },
+    "pattern": "none",
+    "pressure": 0.0,
+    "status": "pending",
+    "trials": [],
+    "expected_throws": 1
+  },
+  "memory": {
+    "samples": 0,
+    "measurement_seconds": 1.5005,
+    "guest_retries": 0,
+    "aggressor_accepted": 0,
+    "aggressor_blocked_attempts": 0,
+    "aggressor_stall_cycles": 0,
+    "aggressor_accepted_gbps": 0.0,
+    "latency_resolution_ns": 1,
+    "histogram_label_resolution_ns": 1,
+    "latency_end": "Ramulator backend read completion",
+    "guest_scope": "all guest DRAM reads; instruction, data, OS and ROS clients",
+    "accepted_mean_ns": null,
+    "accepted_p95_ns": null,
+    "accepted_p99_ns": null,
+    "accepted_histogram_ns": [],
+    "total_mean_ns": null,
+    "total_p95_ns": null,
+    "total_p99_ns": null,
+    "total_histogram_ns": [],
+    "dram_bus_gbps": 0.0,
+    "dram_bus_peak_fraction": 0.0,
+    "dram_read_commands": 0,
+    "dram_write_commands": 0
+  },
+  "hardware": {
+    "cpu_type": "kvm",
+    "num_cores": 4,
+    "cpu_clock": "3GHz",
+    "l1d_size": "32KiB",
+    "l1i_size": "32KiB",
+    "l1_assoc": 8,
+    "l2_size": "8MiB",
+    "l2_assoc": 16
+  },
+  "aggressor": {
+    "read_percent": 80,
+    "stride": 4096,
+    "max_pending": 512,
+    "window": 268435456,
+    "seed": 1,
+    "backpressure": true,
+    "duty_percent": 100,
+    "period": 12000,
+    "pattern": "none",
+    "interval": 1,
+    "gbps": 0
+  },
+  "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+  "memory_profile": {
+    "standard": "LPDDR5",
+    "peak_gbps": 204.79999999999998
+  },
+  "calibrated_sustainable_gbps": null,
+  "peak_gbps": 204.79999999999998,
+  "wall_seconds": 468.05683719099034,
+  "telemetry": {
+    "clock": "gem5 simulation",
+    "records": {
+      "perception": 64,
+      "interception": 16,
+      "control": 50,
+      "control_timing": 471
+    },
+    "sequence_gaps": 0,
+    "scope": "Received completed updates; in-flight records at shutdown are excluded",
+    "instrumentation": "Per-update clock reads and small reliable ROS records; serialization/export follows the measured computation",
+    "coverage": {
+      "status": "no_missing_delivered_control_timings",
+      "delivered_command_stamps": 248,
+      "matched_control_timings": 248,
+      "missing_control_timings": 0,
+      "first_missing_command_time": null,
+      "last_missing_command_time": null,
+      "streams": {
+        "perception": {
+          "completed_records": 45,
+          "last_completion_time": 2.214858249,
+          "tail_seconds": 0.038141750999999946
+        },
+        "interception": {
+          "completed_records": 16,
+          "last_completion_time": 1.6726831940000002,
+          "tail_seconds": 0.5803168059999999
+        },
+        "control": {
+          "completed_records": 34,
+          "last_completion_time": 2.205437234,
+          "tail_seconds": 0.04756276599999998
+        },
+        "control_timing": {
+          "completed_records": 349,
+          "last_completion_time": 2.244771302,
+          "tail_seconds": 0.008228697999999923
+        }
+      },
+      "scope": "Matches independently received effort commands; does not prove delivery of every generated record"
+    }
+  },
+  "checkpoint": null,
+  "pressure_warmup_seconds": 0,
+  "requested_pressure_warmup_seconds": 0,
+  "measurement_window": "launch boundary to final evaluation; boundary quantization applies",
+  "commands": {
+    "delivered_commands": 247,
+    "delivered_control_hz": 164.82412060301507,
+    "command_gap_p95_ms": 12.9999999999999,
+    "command_late_fraction": 0.4065040650406504
+  }
+}

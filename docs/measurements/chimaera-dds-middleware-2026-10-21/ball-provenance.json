@@ -1,0 +1,30 @@
+{
+  "source_revision": "812a1994904d3e1eb5988321d459a1d70cd1a4fa",
+  "cpu_type": "kvm",
+  "middleware": "fastdds",
+  "backend": "dma",
+  "clock_probe": false,
+  "dma_diagnostics": false,
+  "artifacts": {
+    "image": {
+      "path": "/assets/ball-catching-8e49f8d3c0d75e47e718.img",
+      "sha256": "023f7c148ced26bc673f7c3451fb1c1df7b948faa583e45038488fc78adf6d50"
+    },
+    "kernel": {
+      "path": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/kernel",
+      "sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04"
+    },
+    "guest_bundle": {
+      "path": "/work/.chimaera-middleware/ball-acceptance-r5/guest.tar.gz",
+      "sha256": "5c5af7561fa7ee641792f3cad84d4cad2327dd9cc2736fa529a1f1a1b3d0794d"
+    },
+    "gem5": {
+      "path": "/opt/chimaera/gem5/build/X86/gem5.opt",
+      "sha256": "9399837b37e6ebb76405b83ece35d0505e52b9745768e54a621205dc9ff7ad70"
+    },
+    "dma_module": {
+      "path": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "sha256": "9673c22ff72d62a6832dc1b6f5bf788c63b731de17d9cea3c52f51153973090d"
+    }
+  }
+}

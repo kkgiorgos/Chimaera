@@ -1,0 +1,1 @@
+phase=before_service iteration=488 direct_allocations=641 heap_fallbacks=1350 staging_bytes=657064 rx_completed=1068 tx_completed=296 tx_submitted=297 outgoing=1 active=1

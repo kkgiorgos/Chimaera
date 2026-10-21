@@ -96,7 +96,7 @@ def main():
             flat[name + '_age_mean_ms'] = metric.get('age', {}).get('mean_ms')
         rows.append(flat)
     with (args.output / 'middleware-comparison.csv').open('w') as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
     print(f'{len(rows)} matched middleware stream/pair comparisons')

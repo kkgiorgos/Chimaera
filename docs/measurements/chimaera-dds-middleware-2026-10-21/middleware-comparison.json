@@ -1,0 +1,1403 @@
+{
+  "physical_host": "ubuntu-george",
+  "rows": [
+    {
+      "workload": "ball_catching",
+      "stream": "left_image",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": -17.644612382229084,
+      "metrics": {
+        "native_free": {
+          "id": 1,
+          "name": "left_image",
+          "label": "Left camera",
+          "topic": "/stereo/left/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 1.1,
+            "p50_ms": 1.0,
+            "p95_ms": 2.0,
+            "p99_ms": 2.0,
+            "max_ms": 2.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 1.4666666666666668,
+            "p50_ms": 1.333333,
+            "p95_ms": 2.666667,
+            "p99_ms": 2.666667,
+            "max_ms": 2.666667
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.3666666666666667,
+            "p50_ms": 0.333333,
+            "p95_ms": 0.666667,
+            "p99_ms": 1.666667,
+            "max_ms": 1.666667
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518456,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "id": 1,
+          "name": "left_image",
+          "label": "Left camera",
+          "topic": "/stereo/left/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 0.26666666666666666,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 0.6,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.3333333333333333,
+            "p50_ms": 0.333333,
+            "p95_ms": 0.666667,
+            "p99_ms": 0.666667,
+            "max_ms": 0.666667
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518456,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "id": 1,
+          "name": "left_image",
+          "label": "Left camera",
+          "topic": "/stereo/left/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 9.682571633333334,
+            "p50_ms": 9.703832,
+            "p95_ms": 10.713862,
+            "p99_ms": 10.985313,
+            "max_ms": 10.985313
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 10.349238300000001,
+            "p50_ms": 10.359519,
+            "p95_ms": 11.212584,
+            "p99_ms": 11.727097,
+            "max_ms": 11.727097
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518456,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "id": 1,
+          "name": "left_image",
+          "label": "Left camera",
+          "topic": "/stereo/left/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 11.391023866666668,
+            "p50_ms": 11.623523,
+            "p95_ms": 13.189646,
+            "p99_ms": 13.29913,
+            "max_ms": 13.29913
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 12.057690533333334,
+            "p50_ms": 12.518892,
+            "p95_ms": 13.864401,
+            "p99_ms": 14.272036,
+            "max_ms": 14.272036
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518456,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "ball_catching",
+      "stream": "right_image",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": -8.500674971569062,
+      "metrics": {
+        "native_free": {
+          "id": 2,
+          "name": "right_image",
+          "label": "Right camera",
+          "topic": "/stereo/right/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 1.3,
+            "p50_ms": 1.0,
+            "p95_ms": 4.0,
+            "p99_ms": 4.0,
+            "max_ms": 4.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 2.7333333333333334,
+            "p50_ms": 2.333333,
+            "p95_ms": 6.333333,
+            "p99_ms": 6.666667,
+            "max_ms": 6.666667
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 1.4333333333333333,
+            "p50_ms": 1.333333,
+            "p95_ms": 2.666667,
+            "p99_ms": 2.666667,
+            "max_ms": 2.666667
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518460,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "id": 2,
+          "name": "right_image",
+          "label": "Right camera",
+          "topic": "/stereo/right/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 0.2,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.4666666666666667,
+            "p50_ms": 0.333333,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518460,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "id": 2,
+          "name": "right_image",
+          "label": "Right camera",
+          "topic": "/stereo/right/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 19.0817173,
+            "p50_ms": 19.022089,
+            "p95_ms": 20.698479,
+            "p99_ms": 21.142202,
+            "max_ms": 21.142202
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 19.748383966666665,
+            "p50_ms": 19.688756,
+            "p95_ms": 21.612422,
+            "p99_ms": 21.808869,
+            "max_ms": 21.808869
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518460,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "id": 2,
+          "name": "right_image",
+          "label": "Right camera",
+          "topic": "/stereo/right/image_raw",
+          "type": "sensor_msgs/msg/Image",
+          "direction": "host_to_guest",
+          "rate_hz": 30.0,
+          "body_bytes": 518400,
+          "depth": 128,
+          "coalesce": false,
+          "coalesce_group": "stereo",
+          "latency": {
+            "count": 30,
+            "mean_ms": 20.703792066666665,
+            "p50_ms": 21.295562,
+            "p95_ms": 23.460645,
+            "p99_ms": 23.676328,
+            "max_ms": 23.676328
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 21.370458733333333,
+            "p50_ms": 21.554478,
+            "p95_ms": 24.271769,
+            "p99_ms": 25.009661,
+            "max_ms": 25.009661
+          },
+          "release_lag": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 30.0,
+          "p99_tail_samples": 0.3,
+          "serialized_bytes": 518460,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "ball_catching",
+      "stream": "joint_states",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": -16.35512344231248,
+      "metrics": {
+        "native_free": {
+          "id": 3,
+          "name": "joint_states",
+          "label": "Joint feedback",
+          "topic": "/robot/joint_states",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "host_to_guest",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 0.58,
+            "p50_ms": 0.0,
+            "p95_ms": 3.0,
+            "p99_ms": 7.0,
+            "max_ms": 7.0
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 0.64,
+            "p50_ms": 0.0,
+            "p95_ms": 3.0,
+            "p99_ms": 8.0,
+            "max_ms": 9.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.06,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 3.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 268,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "id": 3,
+          "name": "joint_states",
+          "label": "Joint feedback",
+          "topic": "/robot/joint_states",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "host_to_guest",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 268,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "id": 3,
+          "name": "joint_states",
+          "label": "Joint feedback",
+          "topic": "/robot/joint_states",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "host_to_guest",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 11.479218036,
+            "p50_ms": 10.997487,
+            "p95_ms": 24.871264,
+            "p99_ms": 26.982207,
+            "max_ms": 27.064418
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 11.479218036,
+            "p50_ms": 10.997487,
+            "p95_ms": 24.871264,
+            "p99_ms": 26.982207,
+            "max_ms": 27.064418
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 268,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "id": 3,
+          "name": "joint_states",
+          "label": "Joint feedback",
+          "topic": "/robot/joint_states",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "host_to_guest",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 13.356658315999999,
+            "p50_ms": 13.027333,
+            "p95_ms": 27.65056,
+            "p99_ms": 30.503337,
+            "max_ms": 31.157348
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 13.356658315999999,
+            "p50_ms": 13.027333,
+            "p95_ms": 27.65056,
+            "p99_ms": 30.503337,
+            "max_ms": 31.157348
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 268,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "ball_catching",
+      "stream": "effort_command",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": 55.78631160715517,
+      "metrics": {
+        "native_free": {
+          "id": 4,
+          "name": "effort_command",
+          "label": "Effort command",
+          "topic": "/robot/effort_command",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "guest_to_host",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 0.284,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 3.0
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 0.412,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 4.0,
+            "max_ms": 4.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.128,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 3.0,
+            "max_ms": 4.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 212,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "id": 4,
+          "name": "effort_command",
+          "label": "Effort command",
+          "topic": "/robot/effort_command",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "guest_to_host",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 0.0,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 0.0,
+            "max_ms": 0.0
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 212,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "id": 4,
+          "name": "effort_command",
+          "label": "Effort command",
+          "topic": "/robot/effort_command",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "guest_to_host",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 4.356937668,
+            "p50_ms": 1.939427,
+            "p95_ms": 13.855548,
+            "p99_ms": 15.7686,
+            "max_ms": 15.800955
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 7.112,
+            "p50_ms": 6.0,
+            "p95_ms": 14.0,
+            "p99_ms": 16.0,
+            "max_ms": 16.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 2.755062332,
+            "p50_ms": 1.218245,
+            "p95_ms": 7.991288,
+            "p99_ms": 9.903071,
+            "max_ms": 10.457551
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 212,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "id": 4,
+          "name": "effort_command",
+          "label": "Effort command",
+          "topic": "/robot/effort_command",
+          "type": "sensor_msgs/msg/JointState",
+          "direction": "guest_to_host",
+          "rate_hz": 250.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 250,
+            "mean_ms": 1.926362844,
+            "p50_ms": 1.388205,
+            "p95_ms": 5.226653,
+            "p99_ms": 7.210974,
+            "max_ms": 11.197841
+          },
+          "age": {
+            "count": 250,
+            "mean_ms": 5.136,
+            "p50_ms": 4.0,
+            "p95_ms": 10.0,
+            "p99_ms": 12.0,
+            "max_ms": 12.0
+          },
+          "release_lag": {
+            "count": 250,
+            "mean_ms": 3.209637156,
+            "p50_ms": 1.918847,
+            "p95_ms": 8.424318,
+            "p99_ms": 10.611795,
+            "max_ms": 11.616046
+          },
+          "published": 250,
+          "received": 250,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 250.0,
+          "p99_tail_samples": 2.5,
+          "serialized_bytes": 212,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "ball_catching",
+      "stream": "clock",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": -20.4816323659279,
+      "metrics": {
+        "native_free": {
+          "id": 5,
+          "name": "clock",
+          "label": "ROS clock",
+          "topic": "/clock",
+          "type": "rosgraph_msgs/msg/Clock",
+          "direction": "host_to_guest",
+          "rate_hz": 1000.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 1000,
+            "mean_ms": 0.534,
+            "p50_ms": 0.0,
+            "p95_ms": 3.0,
+            "p99_ms": 7.0,
+            "max_ms": 8.0
+          },
+          "age": {
+            "count": 1000,
+            "mean_ms": 0.586,
+            "p50_ms": 0.0,
+            "p95_ms": 3.0,
+            "p99_ms": 8.0,
+            "max_ms": 10.0
+          },
+          "release_lag": {
+            "count": 1000,
+            "mean_ms": 0.052,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 1.0,
+            "max_ms": 4.0
+          },
+          "published": 1000,
+          "received": 1000,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 1000.0,
+          "p99_tail_samples": 10.0,
+          "serialized_bytes": 12,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "id": 5,
+          "name": "clock",
+          "label": "ROS clock",
+          "topic": "/clock",
+          "type": "rosgraph_msgs/msg/Clock",
+          "direction": "host_to_guest",
+          "rate_hz": 1000.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 1000,
+            "mean_ms": 0.117,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 1000,
+            "mean_ms": 0.142,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "release_lag": {
+            "count": 1000,
+            "mean_ms": 0.025,
+            "p50_ms": 0.0,
+            "p95_ms": 0.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "published": 1000,
+          "received": 1000,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 1000.0,
+          "p99_tail_samples": 10.0,
+          "serialized_bytes": 12,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "id": 5,
+          "name": "clock",
+          "label": "ROS clock",
+          "topic": "/clock",
+          "type": "rosgraph_msgs/msg/Clock",
+          "direction": "host_to_guest",
+          "rate_hz": 1000.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 1000,
+            "mean_ms": 12.247371142999999,
+            "p50_ms": 11.96824,
+            "p95_ms": 25.176509,
+            "p99_ms": 27.111325,
+            "max_ms": 28.119097
+          },
+          "age": {
+            "count": 1000,
+            "mean_ms": 12.747371142999999,
+            "p50_ms": 12.614063,
+            "p95_ms": 25.698487,
+            "p99_ms": 27.481699,
+            "max_ms": 28.708945
+          },
+          "release_lag": {
+            "count": 1000,
+            "mean_ms": 0.5,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "published": 1000,
+          "received": 1000,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 1000.0,
+          "p99_tail_samples": 10.0,
+          "serialized_bytes": 12,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "id": 5,
+          "name": "clock",
+          "label": "ROS clock",
+          "topic": "/clock",
+          "type": "rosgraph_msgs/msg/Clock",
+          "direction": "host_to_guest",
+          "rate_hz": 1000.0,
+          "depth": 128,
+          "coalesce": false,
+          "latency": {
+            "count": 1000,
+            "mean_ms": 14.755832675,
+            "p50_ms": 14.29737,
+            "p95_ms": 29.405653,
+            "p99_ms": 41.24883,
+            "max_ms": 49.353883
+          },
+          "age": {
+            "count": 1000,
+            "mean_ms": 15.255832675,
+            "p50_ms": 14.940382,
+            "p95_ms": 29.98664,
+            "p99_ms": 41.32109,
+            "max_ms": 49.353883
+          },
+          "release_lag": {
+            "count": 1000,
+            "mean_ms": 0.5,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "published": 1000,
+          "received": 1000,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 1000.0,
+          "p99_tail_samples": 10.0,
+          "serialized_bytes": 12,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "ball_catching",
+      "stream": "stereo_pair",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": -8.500674971569062,
+      "metrics": {
+        "native_free": {
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "latency": {
+            "count": 30,
+            "mean_ms": 2.3666666666666667,
+            "p50_ms": 2.0,
+            "p95_ms": 6.0,
+            "p99_ms": 6.0,
+            "max_ms": 6.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 2.7333333333333334,
+            "p50_ms": 2.333333,
+            "p95_ms": 6.333333,
+            "p99_ms": 6.666667,
+            "max_ms": 6.666667
+          },
+          "callback_skew": {
+            "count": 30,
+            "mean_ms": 1.2666666666666668,
+            "p50_ms": 1.0,
+            "p95_ms": 4.0,
+            "p99_ms": 4.0,
+            "max_ms": 4.0
+          }
+        },
+        "native_stepped": {
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "latency": {
+            "count": 30,
+            "mean_ms": 0.3333333333333333,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 0.6666666666666666,
+            "p50_ms": 0.666667,
+            "p95_ms": 1.333333,
+            "p99_ms": 1.333333,
+            "max_ms": 1.333333
+          },
+          "callback_skew": {
+            "count": 30,
+            "mean_ms": 0.06666666666666667,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          }
+        },
+        "bridge": {
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "latency": {
+            "count": 30,
+            "mean_ms": 19.0817173,
+            "p50_ms": 19.022089,
+            "p95_ms": 20.698479,
+            "p99_ms": 21.142202,
+            "max_ms": 21.142202
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 19.748383966666665,
+            "p50_ms": 19.688756,
+            "p95_ms": 21.612422,
+            "p99_ms": 21.808869,
+            "max_ms": 21.808869
+          },
+          "callback_skew": {
+            "count": 30,
+            "mean_ms": 9.399145666666666,
+            "p50_ms": 8.793721,
+            "p95_ms": 10.740138,
+            "p99_ms": 10.964929,
+            "max_ms": 10.964929
+          }
+        },
+        "fastdds": {
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "latency": {
+            "count": 30,
+            "mean_ms": 20.703792066666665,
+            "p50_ms": 21.295562,
+            "p95_ms": 23.460645,
+            "p99_ms": 23.676328,
+            "max_ms": 23.676328
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 21.370458733333333,
+            "p50_ms": 21.554478,
+            "p95_ms": 24.271769,
+            "p99_ms": 25.009661,
+            "max_ms": 25.009661
+          },
+          "callback_skew": {
+            "count": 30,
+            "mean_ms": 9.312768199999999,
+            "p50_ms": 9.169467,
+            "p95_ms": 11.399676,
+            "p99_ms": 11.808139,
+            "max_ms": 11.808139
+          }
+        }
+      }
+    },
+    {
+      "workload": "synthetic",
+      "stream": "host_to_guest",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": 15.96055672518359,
+      "metrics": {
+        "native_free": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.9690721649484536,
+            "p50_ms": 1.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 1.4639175257731958,
+            "p50_ms": 1.484536,
+            "p95_ms": 1.948454,
+            "p99_ms": 1.989691,
+            "max_ms": 1.989691
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.4948453608247423,
+            "p50_ms": 0.494845,
+            "p95_ms": 0.948454,
+            "p99_ms": 0.989691,
+            "max_ms": 0.989691
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.17525773195876287,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 0.6804123711340206,
+            "p50_ms": 0.587629,
+            "p95_ms": 1.793814,
+            "p99_ms": 1.979381,
+            "max_ms": 1.979381
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.5051546391752577,
+            "p50_ms": 0.494845,
+            "p95_ms": 0.958763,
+            "p99_ms": 1.670103,
+            "max_ms": 1.670103
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.5532789587628866,
+            "p50_ms": 0.523418,
+            "p95_ms": 0.868226,
+            "p99_ms": 0.976788,
+            "max_ms": 0.976788
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 1.5429696804123711,
+            "p50_ms": 1.593655,
+            "p95_ms": 2.330712,
+            "p99_ms": 2.475571,
+            "max_ms": 2.475571
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.9896907216494846,
+            "p50_ms": 0.989691,
+            "p95_ms": 1.896907,
+            "p99_ms": 1.979381,
+            "max_ms": 1.979381
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.46497255670103094,
+            "p50_ms": 0.357506,
+            "p95_ms": 0.464071,
+            "p99_ms": 7.229769,
+            "max_ms": 7.229769
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 1.4546632783505156,
+            "p50_ms": 1.375806,
+            "p95_ms": 2.304393,
+            "p99_ms": 8.425645,
+            "max_ms": 8.425645
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.9896907216494846,
+            "p50_ms": 0.989691,
+            "p95_ms": 1.896907,
+            "p99_ms": 1.979381,
+            "max_ms": 1.979381
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": null
+        }
+      }
+    },
+    {
+      "workload": "synthetic",
+      "stream": "guest_to_host",
+      "delivery_valid": true,
+      "equal_source_count": true,
+      "mean_reduction_percent": 38.08884390629964,
+      "metrics": {
+        "native_free": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.18556701030927836,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 0.8350515463917525,
+            "p50_ms": 0.773196,
+            "p95_ms": 1.824742,
+            "p99_ms": 1.989691,
+            "max_ms": 1.989691
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.6494845360824743,
+            "p50_ms": 0.57732,
+            "p95_ms": 1.752577,
+            "p99_ms": 1.989691,
+            "max_ms": 1.989691
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": 1.0
+        },
+        "native_stepped": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.13402061855670103,
+            "p50_ms": 0.0,
+            "p95_ms": 1.0,
+            "p99_ms": 1.0,
+            "max_ms": 1.0
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 0.6494845360824743,
+            "p50_ms": 0.556701,
+            "p95_ms": 1.773196,
+            "p99_ms": 1.979381,
+            "max_ms": 1.979381
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.5154639175257731,
+            "p50_ms": 0.505155,
+            "p95_ms": 0.969072,
+            "p99_ms": 1.670103,
+            "max_ms": 1.670103
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": 1.0
+        },
+        "bridge": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 1.582254030927835,
+            "p50_ms": 1.647576,
+            "p95_ms": 2.293289,
+            "p99_ms": 2.368857,
+            "max_ms": 2.368857
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 2.288659793814433,
+            "p50_ms": 2.28866,
+            "p95_ms": 3.463918,
+            "p99_ms": 3.752577,
+            "max_ms": 3.752577
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.7064057628865978,
+            "p50_ms": 0.613927,
+            "p95_ms": 1.794169,
+            "p99_ms": 2.058348,
+            "max_ms": 2.058348
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": null
+        },
+        "fastdds": {
+          "latency": {
+            "count": 97,
+            "mean_ms": 0.9795917628865979,
+            "p50_ms": 1.387596,
+            "p95_ms": 1.455158,
+            "p99_ms": 2.388801,
+            "max_ms": 2.388801
+          },
+          "age": {
+            "count": 97,
+            "mean_ms": 1.5051546391752577,
+            "p50_ms": 1.505155,
+            "p95_ms": 2.412371,
+            "p99_ms": 3.195876,
+            "max_ms": 3.195876
+          },
+          "release_lag": {
+            "count": 97,
+            "mean_ms": 0.5255628762886597,
+            "p50_ms": 0.549365,
+            "p95_ms": 0.989603,
+            "p99_ms": 1.132685,
+            "max_ms": 1.132685
+          },
+          "published": 97,
+          "received": 97,
+          "missing_at_drain": 0,
+          "duplicates": 0,
+          "reordered": 0,
+          "delivery_fraction": 1.0,
+          "actual_source_hz": 97.0,
+          "p99_tail_samples": 0.97,
+          "serialized_bytes": null,
+          "native_clock_step_ms": null
+        }
+      }
+    }
+  ],
+  "definition": "Publication-to-callback delay in co-simulation milliseconds; age starts at scheduled release. Native timestamps use 1 ms buckets.",
+  "interpretation": "Percent reductions require complete, unique, ordered delivery and equal source counts. Negative reductions indicate increased mean delay.",
+  "source": {
+    "path": ".chimaera-middleware/latency-acceptance-r3/evidence/attempts.json",
+    "sha256": "b5536391eed004763692eed6cd75d7ffcec4e48e59ea6dfde445dc9452a01d27"
+  }
+}

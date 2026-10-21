@@ -1,0 +1,31 @@
+Internal ctest changing into directory: /work/.chimaera-middleware/build-v2/chimaera_dds_transport
+UpdateCTestConfiguration  from :/work/.chimaera-middleware/build-v2/chimaera_dds_transport/CTestConfiguration.ini
+Parse Config file:/work/.chimaera-middleware/build-v2/chimaera_dds_transport/CTestConfiguration.ini
+ Add coverage exclude regular expressions.
+UpdateCTestConfiguration  from :/work/.chimaera-middleware/build-v2/chimaera_dds_transport/CTestConfiguration.ini
+Parse Config file:/work/.chimaera-middleware/build-v2/chimaera_dds_transport/CTestConfiguration.ini
+Test project /work/.chimaera-middleware/build-v2/chimaera_dds_transport
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: dds_router_test
+
+1: Test command: /work/.chimaera-middleware/build-v2/chimaera_dds_transport/dds_router_test
+1: Test timeout computed to be: 15
+1: Router boundary, byte integrity, malformed ingress, endpoint lifecycle and capacity passed
+1/2 Test #1: dds_router_test ..................   Passed    0.02 sec
+test 2
+    Start 2: dds_transport_integration
+
+2: Test command: /work/.chimaera-middleware/build-v2/chimaera_dds_transport/dds_transport_integration
+2: Test timeout computed to be: 45
+2: DDS packets: host=111 guest=95; largest host packet=921772; endpoint status: host=0 guest=0
+2/2 Test #2: dds_transport_integration ........   Passed    0.66 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =   0.68 sec
