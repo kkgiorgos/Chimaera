@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import tarfile
 import unittest
+from unittest.mock import patch
 
 from chimaera_ros.latency import UNSET, make_report, routes, stage_guest, statistics, summarize, validate
 
@@ -114,10 +115,13 @@ class LatencyAnalysisTest(unittest.TestCase):
         binary.write_text('test executable')
         capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
         capabilities.parent.mkdir(parents=True)
-        capabilities.write_text('{"version":4,"transport_protocol":3}')
+        capabilities.write_text('{"version":4,"transport_protocol":3,'
+                                '"endpoint_features":["fastdds_transport"]}')
         output = self.root / 'stage'
         bundle = self.root / 'guest.tar.gz'
-        stage_guest(output, package, bundle)
+        with patch('chimaera_ros.latency.require_middleware_overlay',
+                   side_effect=ValueError('standard RMW')):
+            stage_guest(output, package, bundle)
         guest = json.loads((output / 'opt/chimaera/latency/session.json').read_text())
         self.assertEqual(guest['routes'], '/tmp/chimaera-latency-routes.json')
         self.assertTrue(guest['bridge']['simulation_time_from_readfile'])

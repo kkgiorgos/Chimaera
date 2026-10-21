@@ -55,8 +55,10 @@ def start(context):
             checkpoint_directory=str(checkpoint), checkpoint_output=str(output),
             pressure_warmup_ns=round(fixed['pressure_warmup'] * 1e9))
     bridge = Node(package='chimaera_ros_bridge', executable='gazebo_host_bridge', output='screen',
-        additional_env={'IGN_PARTITION': options['partition'], 'IGN_IP': options['transport_ip']},
+        additional_env={'IGN_PARTITION': options['partition'], 'IGN_IP': options['transport_ip'],
+                        'CHIMAERA_DDS_SOCKET': ''},
         parameters=[dict(transport_backend=fixed.get('transport_backend', 'm5'),
+            middleware_transport=fixed.get('middleware_transport', 'bridge'),
             config_file=execution['routes'], timing_socket='/tmp/chimaera_time.sock',
             timing_file=str(output / 'timing.csv'), gazebo_world='ball_catching',
             interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],

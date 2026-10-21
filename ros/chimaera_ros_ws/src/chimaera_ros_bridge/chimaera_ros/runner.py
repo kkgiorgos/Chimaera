@@ -27,6 +27,12 @@ def plan(data, side, package_prefix=None, simulate=False):
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
                   ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns', 'image_diagnostics',
                    'transport_backend')}}
+    middleware = data['bridge'].get('middleware_transport', 'bridge') == 'fastdds'
+    if middleware:
+        socket = data['bridge']['dds_' + side + '_socket']
+        parameters.update(middleware_transport='fastdds', dds_socket=socket)
+        env.update(CHIMAERA_DDS_SOCKET=socket, CHIMAERA_DDS_SIDE=side,
+                   CHIMAERA_DDS_ROUTES=data['routes'], RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
     if side == 'host':
         parameters.update({key: data['bridge'][key] for key in
                            ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',
@@ -50,6 +56,10 @@ def plan(data, side, package_prefix=None, simulate=False):
     args = [str(package_prefix / 'lib/chimaera_ros_bridge' / executable), '--ros-args']
     for key, value in parameters.items():
         args += ['-p', f'{key}:={str(value).lower() if isinstance(value, bool) else value}']
+    if middleware:
+        # The coordinator must create its listening socket before application
+        # RMW participants connect; its own ROS node stays on local Fast DDS.
+        args = ['env', '-u', 'CHIMAERA_DDS_SOCKET', *args]
     processes = [{'name': side + '_bridge', 'command': args}, *config['processes']]
     if simulate:
         sim = data.get('simulator')
@@ -208,7 +218,8 @@ def main():
         spec = plan(data, args.side, package_prefix='/unused' if args.guest_binary else None,
                     simulate=args.action == 'bringup')
         if args.guest_binary:
-            spec['processes'][0]['command'][0] = args.guest_binary
+            command = spec['processes'][0]['command']
+            command[command.index('/unused/lib/chimaera_ros_bridge/guest_bridge')] = args.guest_binary
         if args.action == 'plan':
             print(json.dumps(spec, indent=2))
             return 0

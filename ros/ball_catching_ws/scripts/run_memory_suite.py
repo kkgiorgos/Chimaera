@@ -79,13 +79,15 @@ def load_config(path, cpu_type=None):
     data['fixed'].setdefault('pressure_warmup', 0.05)
     data['fixed'].setdefault('transport_backend', 'm5')
     data['fixed'].setdefault('dma_module', '')
+    data['fixed'].setdefault('middleware_transport', 'bridge')
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
         'fixed': {'duration', 'warmup', 'physics_step', 'joint_hz', 'camera_position',
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
-                  'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module'},
+                  'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module',
+                  'middleware_transport'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -95,6 +97,8 @@ def load_config(path, cpu_type=None):
         if set(data[section]) != keys:
             raise ValueError(f'{section} fields must be: ' + ', '.join(sorted(keys)))
     fixed = data['fixed']
+    if fixed['middleware_transport'] not in ('bridge', 'fastdds'):
+        raise ValueError('middleware_transport must be bridge or fastdds')
     if fixed['transport_backend'] not in ('m5', 'dma'):
         raise ValueError('transport_backend must be m5 or dma')
     if not isinstance(fixed['dma_module'], str):
@@ -187,8 +191,10 @@ def load_config(path, cpu_type=None):
             or type(aggressor['read_percent']) is not int or not 0 <= aggressor['read_percent'] <= 100):
         raise ValueError('Aggressor alignment or read percentage is invalid')
     hardware = data['hardware']
-    if hardware['cpu_type'] not in ('timing', 'o3'):
-        raise ValueError('hardware cpu_type must be timing or o3')
+    if hardware['cpu_type'] not in ('kvm', 'timing', 'o3'):
+        raise ValueError('hardware cpu_type must be kvm, timing or o3')
+    if hardware['cpu_type'] == 'kvm' and any(data['pressure']):
+        raise ValueError('KVM smoke runs require zero memory pressure')
     for key in ('num_cores', 'l1_assoc', 'l2_assoc'):
         if type(hardware[key]) is not int or hardware[key] < 1:
             raise ValueError('Invalid hardware ' + key)
@@ -283,11 +289,13 @@ def session(output, data, point, calibration=None):
         guest_env['FASTRTPS_DEFAULT_PROFILES_FILE'] = GUEST_ROOT + '/dds.xml'
     return dict(version=1, routes=str(output / 'routes.json'),
         host=dict(domain_id=71, setup=['/opt/ros/humble/setup.bash'], processes=[]),
-        guest=dict(domain_id=72, setup=['/opt/ros/humble/setup.bash',
+        guest=dict(domain_id=71 if fixed.get('middleware_transport', 'bridge') == 'fastdds' else 72,
+                   setup=['/opt/ros/humble/setup.bash',
                     GUEST_ROOT + '/app/share/ball_catching_robot/local_setup.bash'],
                    localhost_only=not bool(fixed['guest_dds_shm_bytes']), env=guest_env,
                    processes=[dict(name='robot', command=robot)]),
         bridge=dict(transport_backend=fixed['transport_backend'],
+                    middleware_transport=fixed.get('middleware_transport', 'bridge'),
                     dma_module=GUEST_ROOT + '/runtime/chimaera_dma.ko' if fixed['dma_module'] else '',
                     interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
                     timing_backend='gazebo', gazebo_world='ball_catching',
@@ -333,6 +341,9 @@ def guest_dds_profile(segment_bytes):
 def prepare_bundle(output, data, points):
     from chimaera_ros.manifest import load
     from chimaera_ros.runner import stage
+    if data['fixed'].get('middleware_transport', 'bridge') == 'fastdds':
+        from chimaera_ros.dds import require_middleware_overlay
+        require_middleware_overlay()
     write_json(output / 'routes.json', routes())
     write_json(output / 'staging-session.json', session(output, data, points[0]))
     staged = output / 'staged'
@@ -375,8 +386,15 @@ def prepare_bundle(output, data, points):
         + 'exec python3 -m chimaera_ros.runner run /tmp/chimaera-ball-session.json --side guest --guest-binary '
         + shlex.quote(GUEST_ROOT + '/runtime/guest_bridge') + '\n')
     bundle = output / 'guest.tar.gz'
+    def archive_entry(member):
+        if '__pycache__' in Path(member.name).parts:
+            return None
+        # The boot RTC predates the build host; serial warnings for every
+        # staged file otherwise slow down fresh-boot validation substantially.
+        member.mtime = 0
+        return member
     with tarfile.open(bundle, 'w:gz', dereference=True) as archive:
-        archive.add(staged / 'opt', arcname='opt')
+        archive.add(staged / 'opt', arcname='opt', filter=archive_entry)
     return bundle
 
 
@@ -488,6 +506,10 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
                checkpoint_prepare=None, checkpoint_restore=None):
     if data['fixed'].get('transport_backend', 'm5') == 'dma' and (checkpoint_prepare or checkpoint_restore):
         raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
+    if (checkpoint_prepare or checkpoint_restore) and (
+            data['hardware'].get('cpu_type', 'timing') == 'kvm' or
+            data['fixed'].get('middleware_transport', 'bridge') == 'fastdds'):
+        raise ValueError('KVM and Fast DDS middleware validation require a fresh boot')
     from ball_catching_sim.scene import generate
     directory.mkdir(parents=True)
     fixed = data['fixed']
@@ -529,6 +551,10 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     environment = os.environ | {'ROS_DOMAIN_ID': '71', 'ROS_LOCALHOST_ONLY': '1',
                                'ROS_LOG_DIR': str(directory / 'ros_logs'),
                                'IGN_LOG_PATH': str(directory / 'gazebo_logs')}
+    if fixed.get('middleware_transport', 'bridge') == 'fastdds':
+        environment.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock',
+            CHIMAERA_DDS_SIDE='host', CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
+            RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
     started = time.monotonic()
     next_guest_check = started
     reset = False
@@ -614,7 +640,7 @@ def main():
     parser.add_argument('--gem5-root', type=Path, default=REPOSITORY / 'gem5')
     parser.add_argument('--image', type=Path)
     parser.add_argument('--kernel', type=Path)
-    parser.add_argument('--cpu-type', choices=('timing', 'o3'),
+    parser.add_argument('--cpu-type', choices=('kvm', 'timing', 'o3'),
                         help='Override the fixed detailed CPU model for this suite')
     parser.add_argument('--case', action='append', help='Select plan case IDs; repeatable')
     parser.add_argument('--dry-run', action='store_true')
@@ -645,6 +671,9 @@ def main():
     data = load_config(args.config, args.cpu_type)
     if data['fixed']['transport_backend'] == 'dma' and (args.checkpoint_create or args.checkpoint_from):
         parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
+    if (args.checkpoint_create or args.checkpoint_from) and (
+            data['hardware']['cpu_type'] == 'kvm' or data['fixed']['middleware_transport'] == 'fastdds'):
+        parser.error('KVM and Fast DDS middleware validation require a fresh boot')
     all_points = plan(data)
     points = all_points
     if args.case:

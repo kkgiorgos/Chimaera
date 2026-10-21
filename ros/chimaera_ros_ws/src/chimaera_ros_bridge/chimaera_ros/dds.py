@@ -4,6 +4,23 @@ This is the same transport configuration used by the ball-catching runner.
 Humble's localhost mode appends its own 512 KiB SHM transport, so callers must
 set ROS_LOCALHOST_ONLY=0 and use this profile's explicit loopback whitelist.
 """
+import ctypes
+from pathlib import Path
+
+
+def require_middleware_overlay():
+    """Reject a standard RMW plugin before starting an opted-in simulation."""
+    try:
+        from ament_index_python.packages import get_package_prefix
+        library = Path(get_package_prefix('rmw_fastrtps_cpp')) / 'lib/librmw_fastrtps_cpp.so'
+        plugin = ctypes.CDLL(str(library))
+        version = plugin.chimaera_rmw_transport_abi()
+    except (ImportError, LookupError, OSError, AttributeError) as error:
+        raise ValueError('Fast DDS routing requires the pinned middleware RMW overlay; '
+                         'build middleware/Dockerfile or follow middleware/README.md') from error
+    if version != 1:
+        raise ValueError('Incompatible Chimaera middleware RMW ABI')
+    return library
 
 
 def shared_memory_profile(segment_bytes):

@@ -43,11 +43,14 @@ int main(int argc, char ** argv)
       throw std::invalid_argument("transport_backend must be m5 or dma");
     std::shared_ptr<chimaera_ros_bridge::CompletionWaitable> completion;
     std::unique_ptr<chimaera::DmaGuestController> dma;
+    if (backend == "dma" || node->middleware_routing()) {
+      completion = std::make_shared<chimaera_ros_bridge::CompletionWaitable>();
+      node->get_node_waitables_interface()->add_waitable(completion, nullptr);
+      node->set_transport_notify([completion] { completion->notify(); });
+    }
     if (backend == "dma") {
       if (std::getenv("CHIMAERA_LATENCY_REUSE"))
         throw std::invalid_argument("DMA currently requires a fresh guest boot");
-      completion = std::make_shared<chimaera_ros_bridge::CompletionWaitable>();
-      node->get_node_waitables_interface()->add_waitable(completion, nullptr);
       dma = std::make_unique<chimaera::DmaGuestController>(
         [completion] { completion->notify(); },
         node->declare_parameter<std::string>("dma_device", "/dev/chimaera-dma"),

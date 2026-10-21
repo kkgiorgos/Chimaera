@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
+#include <chimaera_dds_transport/router.hpp>
 #include <chimaera/outgoing_queue.hpp>
 #include <chimaera_ros_bridge/config.hpp>
 #include <chimaera_ros_bridge/serialized_view.hpp>
@@ -58,6 +59,19 @@ public:
       if (!resolved_topics.insert(topic).second) {
         throw std::invalid_argument("remapped bridge topics overlap: " + topic);
       }
+    }
+    const auto middleware = declare_parameter<std::string>("middleware_transport", "bridge");
+    if (middleware != "bridge" && middleware != "fastdds")
+      throw std::invalid_argument("middleware_transport must be bridge or fastdds");
+    if (middleware == "fastdds") {
+      router_ = std::make_unique<chimaera_dds::Router>(
+        declare_parameter<std::string>("dds_socket", "/tmp/chimaera-dds-" + side + ".sock"),
+        side == "host" ? 1 : 2);
+      for (const auto & route : routes)
+        local_endpoints_.emplace_back(side == "host" ? route.host_topic : route.guest_topic,
+          (side == "host") == (route.direction == "host_to_guest"));
+      RCLCPP_INFO(get_logger(), "Fast DDS middleware routing enabled (%lu routes)", routes.size());
+      return;
     }
     for (const auto & route : routes) {
       const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
@@ -118,6 +132,14 @@ public:
 
   std::optional<chimaera::Message> take()
   {
+    if (router_) {
+      auto packet = router_->take();
+      if (!packet) return std::nullopt;
+      auto bytes = allocate(packet->size());
+      std::memcpy(bytes.data(), packet->data(), packet->size());
+      ++transmitted_;
+      return bytes;
+    }
     auto entry = outgoing_.take();
     if (!entry) {
       return std::nullopt;
@@ -129,6 +151,12 @@ public:
   void submit(chimaera::Message bytes)
   {
     if (on_receive) on_receive(bytes);
+    if (router_) {
+      router_->receive(bytes.data(), bytes.size());
+      ++received_;
+      last_receive_ = std::chrono::steady_clock::now();
+      return;
+    }
     if (bytes.size() >= 8 && std::memcmp(bytes.data(), "CBP1", 4) == 0) {
       const auto first = length_at(bytes.data() + 4);
       if (first > bytes.size() - 8) throw std::runtime_error("invalid stereo frame length");
@@ -252,6 +280,10 @@ public:
     if (pump) {
       pump();
     }
+    if (router_) {
+      while (auto packet = take()) controller.submit(std::move(*packet));
+      return;
+    }
     while (auto entry = outgoing_.take()) {
       ++transmitted_;
       controller.submit(std::move(entry->data), entry->key);
@@ -262,7 +294,10 @@ public:
   std::uint64_t received() const { return received_; }
   std::uint64_t stale_pairs() const { return stale_pairs_; }
   std::size_t unmatched_images() const { return stereo_.pending(); }
-  std::size_t pending() const { return outgoing_.size(); }
+  std::size_t pending() const { return router_ ? router_->pending() : outgoing_.size(); }
+  bool middleware_routing() const { return bool(router_); }
+  void set_transport_notify(std::function<void()> notify)
+  { if (router_) router_->set_notify(std::move(notify)); }
   std::size_t local_talkers() const
   {
     std::size_t count = 0;
@@ -281,6 +316,12 @@ public:
   }
   bool local_routes_ready() const
   {
+    if (router_) {
+      router_->check();
+      for (const auto & endpoint : local_endpoints_)
+        if (!router_->endpoint_ready(endpoint.first, endpoint.second)) return false;
+      return true;
+    }
     for (const auto & subscription : subscriptions_) {
       if (subscription->get_publisher_count() == 0) {
         return false;
@@ -338,5 +379,7 @@ private:
   std::chrono::steady_clock::time_point last_receive_{};
   std::map<std::string, rclcpp::GenericPublisher::SharedPtr> publishers_;
   std::vector<rclcpp::GenericSubscription::SharedPtr> subscriptions_;
+  std::unique_ptr<chimaera_dds::Router> router_;
+  std::vector<std::pair<std::string, bool>> local_endpoints_;
 };
 }  // namespace chimaera_ros_bridge

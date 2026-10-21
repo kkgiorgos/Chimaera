@@ -4,6 +4,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(chimaera_dds_transport REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(JSON_C REQUIRED IMPORTED_TARGET json-c)
 set(GEM5_TRANSPORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../gem5-transport"
@@ -15,7 +16,8 @@ add_subdirectory("${GEM5_TRANSPORT_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/gem5-tran
 
 add_library(bridge INTERFACE)
 target_include_directories(bridge INTERFACE include)
-target_link_libraries(bridge INTERFACE chimaera::transport PkgConfig::JSON_C)
+target_link_libraries(bridge INTERFACE chimaera::transport PkgConfig::JSON_C
+  chimaera_dds_transport::chimaera_dds_transport)
 add_executable(validate_routes src/validate_routes.cpp)
 target_link_libraries(validate_routes PRIVATE bridge)
 ament_target_dependencies(validate_routes PUBLIC rclcpp)

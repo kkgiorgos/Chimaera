@@ -1,0 +1,4 @@
+{"version":1,"topics":[
+  {"host_topic":"/chimaera/source","guest_topic":"/images","type":"sensor_msgs/msg/Image","direction":"host_to_guest","qos":{"history":"keep_last","depth":16,"reliability":"reliable","durability":"volatile"}},
+  {"host_topic":"/chimaera/ack","guest_topic":"/ack","type":"std_msgs/msg/UInt64","direction":"guest_to_host","qos":{"history":"keep_last","depth":16,"reliability":"reliable","durability":"volatile"}}
+]}

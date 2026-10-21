@@ -16,7 +16,7 @@ DEFAULT = dict(version=1, name='Bridge latency sweep', modes=list(MODES),
     duration=.5, warmup=.1, drain=.2, physics_step_ns=1000000,
     reliability='reliable', depth=128, timeout=300, repeats=1,
     gem5_configs=[dict(HARDWARE, name='KVM')], single_boot=True,
-    transport_backend='m5', dma_module='',
+    transport_backend='m5', dma_module='', middleware_transport='bridge',
     dma_module_options='buffer_mb=8 receive_slots=16 transmit_slots=4',
     delivery_policy='latest', verify_payload=False, dds_shm_bytes=0)
 
@@ -74,6 +74,10 @@ def plan_sweep(value):
         raise ValueError('single_boot must be boolean')
     if config['transport_backend'] == 'dma' and config['single_boot']:
         raise ValueError('DMA requires single_boot=false (fresh boots)')
+    if config['middleware_transport'] not in ('bridge', 'fastdds'):
+        raise ValueError('middleware_transport must be bridge or fastdds')
+    if config['middleware_transport'] == 'fastdds' and config['single_boot']:
+        raise ValueError('Fast DDS middleware routing requires single_boot=false')
     if config['version'] != 1 or type(config['version']) is not int:
         raise ValueError('Unsupported sweep version')
     if not isinstance(config['name'], str) or not 1 <= len(config['name'].strip()) <= 120:
@@ -134,7 +138,8 @@ def plan_sweep(value):
         if 1e9/config['physics_step_ns'] > 10000:
             raise ValueError('Ball-catching clock traffic is limited to 10,000 Hz')
     base = {key: config[key] for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout', 'workload', 'ball_catching',
-        'transport_backend', 'dma_module', 'dma_module_options', 'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
+        'transport_backend', 'middleware_transport', 'dma_module', 'dma_module_options',
+        'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
     cases = []
     for body, rate, repeat in itertools.product(config['payload_bytes'], config['rate_hz'], range(1, config['repeats'] + 1)):
         for mode in config['modes']:

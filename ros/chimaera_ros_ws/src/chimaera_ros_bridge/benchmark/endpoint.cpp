@@ -110,6 +110,7 @@ public:
     stop_ = warmup + duration;
     cutoff_ = stop_ + drain;
     ready_file_ = declare_parameter<std::string>("ready_file", "");
+    middleware_bootstrap_ = declare_parameter<bool>("middleware_bootstrap", false);
     done_file_ = declare_parameter<std::string>("done_file", "");
     const auto output = declare_parameter<std::string>("output_file", "");
     if (side_ == "host") {
@@ -180,6 +181,13 @@ public:
         subscriptions_.begin(), subscriptions_.end(),
         [](const auto & p) { return p->get_publisher_count() > 0; }) &&
       (reporter_ ? reporter_->get_subscription_count() > 0 : reports_->get_publisher_count() > 0);
+    // Direct DDS discovery crosses the simulation boundary. Announce local
+    // endpoint construction so the coordinator can start that discovery; actual
+    // traffic still waits for matching peers below.
+    if (middleware_bootstrap_ && !ready_file_.empty()) {
+      std::ofstream(ready_file_) << "endpoints-created\n";
+      middleware_bootstrap_ = false;
+    }
     if (!ready_ && peers) {
       ready_ = true;
       if (!ready_file_.empty()) std::ofstream(ready_file_) << "ready\n";
@@ -480,7 +488,7 @@ private:
   double rate_{};
   uint64_t stop_{}, cutoff_{}, sequence_{}, expected_chunk_{}, guest_count_{};
   size_t export_position_{}, export_sequence_{};
-  bool ready_{}, frozen_{}, exported_{}, guest_done_{}, done_{};
+  bool ready_{}, frozen_{}, exported_{}, guest_done_{}, done_{}, middleware_bootstrap_{};
   Packet packet_;
   std::vector<Event> events_;
   std::ofstream output_;

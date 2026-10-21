@@ -135,7 +135,11 @@ int main(int argc, char ** argv)
              "max_serialized_bytes",
              config->declare_parameter<int64_t>("max_serialized_bytes", 65536)),
            rclcpp::Parameter(
-             "max_image_age_ns", config->declare_parameter<int64_t>("max_image_age_ns", 0))}));
+             "max_image_age_ns", config->declare_parameter<int64_t>("max_image_age_ns", 0)),
+           rclcpp::Parameter("middleware_transport",
+             config->declare_parameter<std::string>("middleware_transport", "bridge")),
+           rclcpp::Parameter("dds_socket",
+             config->declare_parameter<std::string>("dds_socket", "/tmp/chimaera-dds-host.sock"))}));
       rclcpp::executors::SingleThreadedExecutor executor;
       executor.add_node(bridge);
       bridge->pump = [&] { bridge->drain_callbacks(executor); };

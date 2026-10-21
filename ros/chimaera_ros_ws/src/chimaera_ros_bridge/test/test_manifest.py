@@ -5,8 +5,9 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 from chimaera_ros.manifest import load
-from chimaera_ros.runner import plan, stage, supervise
+from chimaera_ros.runner import main, plan, stage, supervise
 
 
 class SessionTest(unittest.TestCase):
@@ -41,6 +42,25 @@ class SessionTest(unittest.TestCase):
         self.assertFalse(any(arg.startswith('ratio:=')
                              for arg in host['processes'][0]['command']))
 
+    def test_middleware_routing_shares_domain_and_excludes_coordinator_participant(self):
+        self.data['bridge'] = dict(middleware_transport='fastdds')
+        with self.assertRaisesRegex(ValueError, 'shared ROS domain'):
+            self.load()
+        self.data['guest']['domain_id'] = self.data['host']['domain_id']
+        data = self.load()
+        for side in ('host', 'guest'):
+            spec = plan(data, side, '/opt/bridge')
+            self.assertEqual(spec['env']['CHIMAERA_DDS_SIDE'], side)
+            self.assertEqual(spec['env']['CHIMAERA_DDS_ROUTES'], data['routes'])
+            self.assertEqual(spec['env']['CHIMAERA_DDS_SOCKET'],
+                             f'/tmp/chimaera-dds-{side}.sock')
+            self.assertEqual(spec['processes'][0]['command'][:3],
+                             ['env', '-u', 'CHIMAERA_DDS_SOCKET'])
+            self.assertIn('middleware_transport:=fastdds', spec['processes'][0]['command'])
+        self.data['bridge']['checkpoint_control'] = True
+        with self.assertRaisesRegex(ValueError, 'fresh boot'):
+            self.load()
+
     def test_gazebo_and_detailed_cpu_plan(self):
         self.data['bridge'] = dict(timing_backend='gazebo', gazebo_world='arena',
                                    interval_us=50000, physics_step_ns=1000000,
@@ -69,6 +89,18 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(simulator[simulator.index('-p') + 1],
                          '/opt/bridge/share/chimaera_ros_bridge/config')
         self.assertIn('/tmp/controller settings.yaml', simulator)
+
+    def test_staged_guest_binary_keeps_middleware_environment_wrapper(self):
+        self.data['bridge'] = dict(middleware_transport='fastdds')
+        self.data['guest']['domain_id'] = 41
+        self.load()
+        with patch('sys.argv', ['runner', 'run', str(self.root / 'session.json'),
+                               '--side', 'guest', '--guest-binary', '/staged/guest_bridge']), \
+                patch('chimaera_ros.runner.supervise', return_value=0) as run:
+            self.assertEqual(main(), 0)
+        command = run.call_args.args[0]['processes'][0]['command']
+        self.assertEqual(command[:4], ['env', '-u', 'CHIMAERA_DDS_SOCKET', '/staged/guest_bridge'])
+        self.assertFalse(any('/unused/' in arg for arg in command))
 
     def test_invalid_synchronization_and_simulator_configs(self):
         variants = [dict(timing_backend='unknown'), dict(timing_backend='gazebo'),

@@ -1,4 +1,4 @@
-"""Ball catching: detailed readiness checkpoints and KVM-free case restoration."""
+"""Ball catching: detailed execution, readiness checkpoints and KVM smoke validation."""
 import argparse
 import json
 from pathlib import Path
@@ -10,6 +10,7 @@ from gem5.components.boards.mem_mode import MemMode
 from gem5.components.cachehierarchies.ruby.mesi_two_level_cache_hierarchy import MESITwoLevelCacheHierarchy
 from gem5.components.memory.ramulator2 import Ramulator2Memory
 from gem5.components.processors.cpu_types import CPUTypes
+from gem5.components.processors.simple_processor import SimpleProcessor
 from gem5.components.processors.simple_core import SimpleCore
 from gem5.components.processors.switchable_processor import SwitchableProcessor
 from gem5.isas import ISA
@@ -32,27 +33,38 @@ args = parser.parse_args()
 experiment = json.loads(Path(args.experiment).read_text())
 hardware = experiment['hardware']
 cpu_type = hardware.get('cpu_type', 'timing')
-if cpu_type not in ('timing', 'o3'):
-    parser.error('hardware cpu_type must be timing or o3')
+if cpu_type not in ('kvm', 'timing', 'o3'):
+    parser.error('hardware cpu_type must be kvm, timing or o3')
+if cpu_type == 'kvm' and experiment['aggressor']['gbps']:
+    parser.error('KVM is a functional smoke mode and cannot measure memory pressure')
 configure_ticks()
 restore = experiment.get('checkpoint_restore')
 capture = experiment.get('checkpoint_prepare')
 if restore and capture:
     parser.error('Cannot prepare and restore a checkpoint together')
+if cpu_type == 'kvm' and (restore or capture):
+    parser.error('KVM functional validation requires a fresh boot')
 if args.transport_backend == 'dma' and (restore or capture):
     parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
 if capture and (experiment['aggressor']['pattern'] != 'none' or experiment['aggressor']['gbps']):
     parser.error('Readiness checkpoints require a disabled aggressor')
 # Keep the detailed CPU paths identical on producer and consumers. The restore
 # graph contains no KVM CPUs or KvmVM object, including switched-out objects.
-cores = {'detailed': [SimpleCore(cpu_type=CPUTypes(cpu_type), core_id=i, isa=ISA.X86)
-                      for i in range(hardware['num_cores'])]}
-if not restore:
-    cores['boot'] = [SimpleCore(cpu_type=CPUTypes.KVM, core_id=i, isa=ISA.X86)
-                     for i in range(hardware['num_cores'])]
-    for core in cores['boot']:
+if cpu_type == 'kvm':
+    processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86,
+                                num_cores=hardware['num_cores'])
+    for core in processor.get_cores():
         core.get_simobject().usePerf = False
-processor = SwitchableProcessor(switchable_cores=cores, starting_cores='detailed' if restore else 'boot')
+else:
+    cores = {'detailed': [SimpleCore(cpu_type=CPUTypes(cpu_type), core_id=i, isa=ISA.X86)
+                          for i in range(hardware['num_cores'])]}
+    if not restore:
+        cores['boot'] = [SimpleCore(cpu_type=CPUTypes.KVM, core_id=i, isa=ISA.X86)
+                         for i in range(hardware['num_cores'])]
+        for core in cores['boot']:
+            core.get_simobject().usePerf = False
+    processor = SwitchableProcessor(switchable_cores=cores,
+                                    starting_cores='detailed' if restore else 'boot')
 CacheHierarchy = MESITwoLevelCacheHierarchy
 if args.transport_backend == 'dma':
     from chimaera_dma import DmaCacheHierarchy, attach_dma
@@ -107,7 +119,8 @@ def prepare_clock():
     counts = re.findall(r'^CHIMAERA_ONLINE_CPUS=(\d+)\r?$', serial, re.MULTILINE)
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
-    processor.switch_to_processor('detailed')
+    if cpu_type != 'kvm':
+        processor.switch_to_processor('detailed')
     record_cpu()
     # Readiness and the throw use one detailed CPU and one clock origin.
     # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile

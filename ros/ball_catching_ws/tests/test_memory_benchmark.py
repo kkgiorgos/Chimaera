@@ -38,6 +38,17 @@ def test_default_has_one_binary_trial_per_point(tmp_path):
     assert len({point['id'] for point in points}) == len(points)
 
 
+def test_kvm_is_restricted_to_unpressured_functional_validation(tmp_path):
+    raw = configuration(tmp_path)
+    raw['hardware']['cpu_type'] = 'kvm'
+    with pytest.raises(ValueError, match='zero memory pressure'):
+        load(tmp_path, raw)
+    raw['pressure'] = [0]
+    raw['fixed']['middleware_transport'] = 'fastdds'
+    data = load(tmp_path, raw)
+    assert all(point['cpu_type'] == 'kvm' and point['pressure'] == 0 for point in plan(data))
+
+
 def test_timing_validation_preset_contains_only_the_qualified_baseline():
     data = load_config(WORKSPACE / 'experiments/memory_contention_timing_validation.json')
     points = plan(data)

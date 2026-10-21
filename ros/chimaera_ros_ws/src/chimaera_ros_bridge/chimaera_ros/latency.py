@@ -27,7 +27,7 @@ from .latency_workloads import BALL_DEFAULT, ball_routes, image_age, traffic
 from .latency_budget import wall_budget
 from .latency_session import SweepSessions, ordered_cases, validate_bundle
 from .latency_startup import startup_status, log_tail
-from .dds import shared_memory_profile
+from .dds import shared_memory_profile, require_middleware_overlay
 
 MODES = ('native_free', 'native_stepped', 'chimaera')
 UNSET = 2**64 - 1
@@ -98,10 +98,15 @@ def guest_session(cpu_type='kvm', config=None):
         result['guest'].update(localhost_only=False, env=dict(
             FASTRTPS_DEFAULT_PROFILES_FILE='/tmp/chimaera-latency-dds.xml',
             RMW_IMPLEMENTATION='rmw_fastrtps_cpp', RMW_FASTRTPS_USE_QOS_FROM_XML='0'))
+    if (config or {}).get('middleware_transport') == 'fastdds':
+        result['guest']['domain_id'] = result['host']['domain_id']
+        result['bridge']['middleware_transport'] = 'fastdds'
     return result
 
 
 def validate(config):
+    if config.get('middleware_transport', 'bridge') not in ('bridge', 'fastdds'):
+        raise ValueError('middleware_transport must be bridge or fastdds')
     shm = config.get('dds_shm_bytes', 0)
     if type(shm) is not int or shm < 0 or shm > 128 * 1024 * 1024:
         raise ValueError('dds_shm_bytes must be an integer between 0 and 128 MiB')
@@ -143,6 +148,11 @@ def validate(config):
 def stage_guest(output, package, bundle=None):
     capabilities = package/'share/chimaera_ros_bridge/config/latency_capabilities.json'
     metadata = json.loads(capabilities.read_text()) if capabilities.is_file() else {}
+    try:
+        require_middleware_overlay()
+    except ValueError:
+        metadata['endpoint_features'] = [feature for feature in metadata.get('endpoint_features', [])
+                                         if feature != 'fastdds_transport']
     if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
         raise ValueError('Rebuild the benchmark runtime before staging the current message protocol')
     output = output.resolve()
@@ -193,6 +203,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
              environment=None, cancelled=None, reuse=None):
     validate(config)
     required = []
+    if config.get('middleware_transport') == 'fastdds': required.append('fastdds_transport')
+    if config.get('middleware_transport') == 'fastdds': require_middleware_overlay()
     if config.get('delivery_policy') == 'lossless': required.append('lossless')
     if config.get('verify_payload'): required.append('image_integrity')
     if required:
@@ -203,6 +215,9 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     dma = config.get('transport_backend', 'm5') == 'dma'
     if dma and reuse is not None:
         raise ValueError('DMA requires fresh-boot cases; guest reuse is not supported')
+    middleware = config.get('middleware_transport', 'bridge') == 'fastdds'
+    if middleware and reuse is not None:
+        raise ValueError('Fast DDS middleware routing requires fresh-boot cases')
     if reuse is not None:
         if config['mode'] != 'chimaera':
             raise ValueError('Guest reuse requires Chimaera mode')
@@ -238,6 +253,11 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     config['guest_bundle'] = str(bundle) if bundle else None
     artifacts = [package / 'lib/chimaera_ros_bridge' / name for name in ('latency_endpoint', 'latency_driver')]
     artifacts.append(package / 'lib/libchimaera_latency_clock.so')
+    for name in ('librmw_fastrtps_cpp.so', 'librmw_fastrtps_shared_cpp.so',
+                 'libchimaera_dds_transport.so'):
+        library = package / 'lib' / name
+        if library.is_file():
+            artifacts.append(library)
     if bundle:
         artifacts.append(bundle)
     if dma and config['mode'] == 'chimaera':
@@ -274,6 +294,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         write_json(manifest, config)
     write_json(output / 'guest-session.json', guest)
     common = dict(payload_bytes=config['payload_bytes'], rate_hz=float(config['rate_hz']),
+                  middleware_bootstrap=middleware and config['mode'] == 'chimaera',
                   delivery_policy=config.get('delivery_policy', 'latest'),
                   verify_payload=config.get('verify_payload', False),
                   warmup_ns=round(config['warmup'] * 1e9),
@@ -300,6 +321,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         ready_file=str(output / 'guest-ready') if config['mode'] != 'chimaera'
                    else '/tmp/chimaera-latency-endpoint-ready'))
     parameters(output / 'driver.yaml', dict(mode=config['mode'],
+        middleware_transport='fastdds' if middleware and config['mode'] == 'chimaera' else 'bridge',
         transport_backend=config.get('transport_backend', 'm5'),
         reuse_guest=reuse is not None,
         start_case=reuse is not None and reuse.process is not None,
@@ -358,7 +380,6 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         (output / 'gem5.log').symlink_to(os.path.relpath(reuse.directory / 'gem5.log', output))
         commands = [(name, ['reuse-session', str(reuse.directory), 'START_CASE'] if name == 'gem5' else command)
                     for name, command in commands]
-    write_json(output / 'commands.json', commands)
     env = dict(base_env, ROS_DOMAIN_ID='41', ROS_LOCALHOST_ONLY='1',
                ROS_LOG_DIR=str(output / 'ros-logs'),
                IGN_PARTITION='chimaera-latency-' + config['run_id'],
@@ -367,6 +388,13 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     if config.get('dds_shm_bytes'):
         env.update(ROS_LOCALHOST_ONLY='0', RMW_IMPLEMENTATION='rmw_fastrtps_cpp',
             RMW_FASTRTPS_USE_QOS_FROM_XML='0', FASTRTPS_DEFAULT_PROFILES_FILE=str(output / 'dds.xml'))
+    if middleware and config['mode'] == 'chimaera':
+        env.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock', CHIMAERA_DDS_SIDE='host',
+                   CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
+                   RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+        commands = [(name, ['env', '-u', 'CHIMAERA_DDS_SOCKET', *command]
+                     if name in ('driver', 'gem5') else command) for name, command in commands]
+    write_json(output / 'commands.json', commands)
     processes, logs = [], []
     started = time.monotonic()
     try:
@@ -644,7 +672,8 @@ def make_report(root, write_outputs=True):
                 continue
             def fingerprints(config):
                 return {Path(path).name: digest for path, digest in config.get('artifact_sha256', {}).items()
-                        if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so', 'dds.xml')}
+                        if Path(path).name in ('latency_endpoint', 'libchimaera_latency_clock.so', 'dds.xml',
+                            'librmw_fastrtps_cpp.so', 'librmw_fastrtps_shared_cpp.so', 'libchimaera_dds_transport.so')}
             if fingerprints(measured['config']) != fingerprints(baseline['config']):
                 continue
             if baseline['config']['mode'] == 'native_stepped' and baseline['config']['interval_us'] != measured['config']['interval_us']:
@@ -760,6 +789,7 @@ def main():
         command.add_argument('--kernel', type=Path)
         command.add_argument('--guest-bundle', type=Path, help='Install a staged archive inside the guest at boot')
         command.add_argument('--transport-backend', choices=('m5', 'dma'), default='m5')
+        command.add_argument('--middleware-transport', choices=('bridge', 'fastdds'), default='bridge')
         command.add_argument('--dma-module', default='', help='Module built for the exact guest kernel')
         command.add_argument('--dma-module-options', default='buffer_mb=8 receive_slots=16 transmit_slots=4')
         command.add_argument('--delivery-policy', choices=('latest', 'lossless'), default='latest')
@@ -809,7 +839,8 @@ def main():
             return
         config = {key: getattr(args, key) for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout',
                   'cpu_clock', 'num_cores', 'l1d_size', 'l1i_size', 'l2_size', 'l1_assoc', 'l2_assoc',
-                  'transport_backend', 'dma_module', 'dma_module_options', 'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
+                  'transport_backend', 'middleware_transport', 'dma_module', 'dma_module_options',
+                  'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
         if args.action == 'run':
             config.update({key: getattr(args, key) for key in ('mode', 'payload_bytes', 'rate_hz', 'interval_us', 'poll_us', 'cpu_type')}, repeat=1)
             run_case(args.output, config, package, gem5_root, image, kernel, bundle)
@@ -817,6 +848,8 @@ def main():
         else:
             if args.transport_backend == 'dma' and not args.fresh_boots:
                 raise ValueError('DMA sweeps require --fresh-boots')
+            if args.middleware_transport == 'fastdds' and not args.fresh_boots:
+                raise ValueError('Fast DDS middleware sweeps require --fresh-boots')
             if args.repeats < 1:
                 raise ValueError('repeats must be positive')
             args.output.mkdir(parents=True, exist_ok=False)

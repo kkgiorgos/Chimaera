@@ -24,7 +24,9 @@ def identity(config):
 def fingerprints(config):
     return {Path(path).name: digest for path, digest in config.get('artifact_sha256', {}).items()
             if Path(path).name in ('latency_endpoint', 'latency_driver',
-                                   'libchimaera_latency_clock.so', 'dds.xml')}
+                                   'libchimaera_latency_clock.so', 'dds.xml',
+                                   'librmw_fastrtps_cpp.so', 'librmw_fastrtps_shared_cpp.so',
+                                   'libchimaera_dds_transport.so')}
 
 
 def collect(root):
@@ -89,6 +91,7 @@ def summarize(runs):
                        age_max_ms=metrics.get('age', {}).get('max_ms'),
                        missing_at_drain=metrics.get('missing_at_drain'),
                        transport_backend=config.get('transport_backend', 'm5'),
+                       middleware_transport=config.get('middleware_transport', 'bridge'),
                        delivery_policy=config.get('delivery_policy', 'latest'),
                        release_lag_mean_ms=metrics['release_lag'].get('mean_ms'),
                        wall_seconds=config['wall_seconds'])

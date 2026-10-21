@@ -11,7 +11,9 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False,
                 checkpoint_control=False, application_ready_file='', transport_backend='m5',
                 dma_device='/dev/chimaera-dma', dma_module='', dma_module_options='', dma_diagnostics=False,
-                dma_h2g='/tmp/chimaera_dma_h2g', dma_g2h='/tmp/chimaera_dma_g2h')
+                dma_h2g='/tmp/chimaera_dma_h2g', dma_g2h='/tmp/chimaera_dma_g2h',
+                middleware_transport='bridge', dds_host_socket='/tmp/chimaera-dds-host.sock',
+                dds_guest_socket='/tmp/chimaera-dds-guest.sock')
 
 
 def fields(value, allowed, required=()):
@@ -81,11 +83,21 @@ def load(path):
             names.add(name)
             if not strings(process['command']):
                 raise ValueError("Process command cannot be empty")
-    if data['host']['domain_id'] == data['guest']['domain_id']:
-        raise ValueError("Host and guest ROS domains must differ")
     bridge = data.setdefault('bridge', {})
     fields(bridge, DEFAULTS)
     bridge = data['bridge'] = DEFAULTS | bridge
+    if bridge['middleware_transport'] not in ('bridge', 'fastdds'):
+        raise ValueError('middleware_transport must be bridge or fastdds')
+    same_domain = data['host']['domain_id'] == data['guest']['domain_id']
+    if bridge['middleware_transport'] == 'bridge' and same_domain:
+        raise ValueError('Host and guest ROS domains must differ')
+    if bridge['middleware_transport'] == 'fastdds' and not same_domain:
+        raise ValueError('Fast DDS middleware routing requires one shared ROS domain ID')
+    for key in ('dds_host_socket', 'dds_guest_socket'):
+        if not Path(string(bridge[key])).is_absolute():
+            raise ValueError(key + ' must be absolute')
+    if bridge['middleware_transport'] == 'fastdds' and bridge['checkpoint_control']:
+        raise ValueError('Fast DDS middleware routing currently requires a fresh boot')
     if bridge['transport_backend'] not in ('m5', 'dma'):
         raise ValueError('transport_backend must be m5 or dma')
     if type(bridge['dma_diagnostics']) is not bool:
