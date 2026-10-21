@@ -27,11 +27,19 @@ from .latency_workloads import BALL_DEFAULT, ball_routes, image_age, traffic
 from .latency_budget import wall_budget
 from .latency_session import SweepSessions, ordered_cases, validate_bundle
 from .latency_startup import startup_status, log_tail
-from .dds import shared_memory_profile, require_middleware_overlay
+from .dds import shared_memory_profile, udp_loopback_profile, require_middleware_overlay
 
 MODES = ('native_free', 'native_stepped', 'chimaera')
 UNSET = 2**64 - 1
 GUEST_ROOT = '/opt/chimaera/latency'
+
+
+def dds_profile(config):
+    if config.get('dds_tuning') == 'udp_loopback':
+        if config['mode'] not in ('native_free', 'native_stepped') or config.get('dds_shm_bytes'):
+            raise ValueError('UDP-only reference requires a native mode and dds_shm_bytes=0')
+        return udp_loopback_profile()
+    return shared_memory_profile(config['dds_shm_bytes']) if config.get('dds_shm_bytes') else None
 
 
 def write_json(path, value):
@@ -204,6 +212,7 @@ def stage_guest(output, package, bundle=None):
 def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
              environment=None, cancelled=None, reuse=None):
     validate(config)
+    profile = dds_profile(config)
     required = []
     if config.get('middleware_transport') == 'fastdds': required.append('fastdds_transport')
     if config.get('middleware_transport') == 'fastdds': require_middleware_overlay()
@@ -246,7 +255,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     config = dict(config, schema_version=1, status='running', run_id=str(uuid.uuid4()),
                   created=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                   hostname=platform.node(), platform=platform.platform(),
-                  rmw='rmw_fastrtps_cpp' if config.get('dds_shm_bytes') else base_env.get('RMW_IMPLEMENTATION', 'ROS default'),
+                  rmw='rmw_fastrtps_cpp' if profile is not None else base_env.get('RMW_IMPLEMENTATION', 'ROS default'),
                   cpu=cpu_type if config['mode'] == 'chimaera' else 'native',
                   clock_contract='gem5 elapsed time; host callbacks use completed gem5 boundary'
                     if config['mode'] == 'chimaera' else 'Gazebo PreUpdate simulation time',
@@ -280,8 +289,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         with path.open('xb') as handle:
             handle.write(struct.pack('<QQ', 0x434c42434c4f434b, UNSET))
     (output / 'world.sdf').write_text(world(physics, config['physics_step_ns']))
-    if config.get('dds_shm_bytes'):
-        (output / 'dds.xml').write_text(shared_memory_profile(config['dds_shm_bytes']))
+    if profile is not None:
+        (output / 'dds.xml').write_text(profile)
         config['artifact_sha256']['dds.xml'] = hashlib.sha256((output / 'dds.xml').read_bytes()).hexdigest()
         write_json(manifest, config)
     write_json(output / 'routes.json', routes(config['reliability'], config['depth'], config))
@@ -351,7 +360,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         if config.get('gem5_debug_flags'):
             commands[-1][1][1:1] = ['--debug-flags=' + config['gem5_debug_flags'],
                 '--debug-file=' + str(output / 'gem5/dma-debug.log')]
-        if config.get('dds_shm_bytes'):
+        if profile is not None:
             commands[-1][1].extend(['--guest-file',
                 '/tmp/chimaera-latency-dds.xml=' + str(output / 'dds.xml')])
         for key, default in dict(cpu_type='kvm', cpu_clock='3GHz', num_cores=2,
@@ -387,7 +396,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
                IGN_PARTITION='chimaera-latency-' + config['run_id'],
                IGN_GAZEBO_SYSTEM_PLUGIN_PATH=str(package / 'lib') + ':' + base_env.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
                IGN_LOG_PATH=str(output / 'ign-logs'))
-    if config.get('dds_shm_bytes'):
+    if profile is not None:
         env.update(ROS_LOCALHOST_ONLY='0', RMW_IMPLEMENTATION='rmw_fastrtps_cpp',
             RMW_FASTRTPS_USE_QOS_FROM_XML='0', FASTRTPS_DEFAULT_PROFILES_FILE=str(output / 'dds.xml'))
     if middleware and config['mode'] == 'chimaera':
@@ -412,7 +421,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
                 injected = [('/tmp/chimaera-latency.yaml', 'guest.yaml'),
                         ('/tmp/chimaera-latency-session.json', 'guest-session.json'),
                         ('/tmp/chimaera-latency-routes.json', 'routes.json')]
-                if config.get('dds_shm_bytes'):
+                if profile is not None:
                     injected.append(('/tmp/chimaera-latency-dds.xml', 'dds.xml'))
                 for destination, source in injected:
                     encoded = base64.b64encode((output / source).read_bytes()).decode()

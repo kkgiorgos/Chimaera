@@ -102,7 +102,7 @@ speed comparison.
   graph discovery and alias queries work with normal `rclcpp` APIs. Router tests
   cover boundary admission, malformed packets, queue overflow, endpoint reference
   counts and connection cleanup.
-- 230 bridge/ball/middleware workflow tests pass, with two environment-dependent skips;
+- 235 bridge/ball/middleware workflow tests pass, with two environment-dependent skips;
   both robot CTest targets pass. The native baseline catches the ball, with
   `inside_cup_at_deadline` and `cup_capture` scoring.
 - Rebuilt the simulator with `ed9c7a6`'s interrupt acknowledgement fix after
@@ -192,6 +192,70 @@ controls and delivery counts are retained in the
 and [interactive report](measurements/chimaera-dds-middleware-2026-10-21/report.html).
 The eight-case [attempt record](measurements/chimaera-dds-middleware-2026-10-21/attempts.json)
 and compressed gem5 statistics retain provenance and resource counters.
+
+### Additional native baseline with SHM disabled
+
+Four additional host-only cases run the same two workloads in native-free and
+native-stepped modes. They use the exact compiled endpoint/RMW/transport
+libraries from the original matrix, with matching traffic, QoS, source/drain
+windows and clock settings. All cases deliver every selected message, ordered
+and unique, including all 30 stereo pairs. These are message benchmarks; no VM
+or robot simulation acceptance rerun is involved.
+
+The new profile explicitly selects UDPv4 on `127.0.0.1`, disables builtin
+transports and DDS data-sharing, and sets `ROS_LOCALHOST_ONLY=0`. Setting that
+variable to 1 would make Humble add a SHM transport. Live endpoint inspection
+confirms the selected profile/environment, no Chimaera socket and no Fast DDS
+transport SHM files in the container.
+
+Observed mean publication-to-callback delay, in native simulation milliseconds:
+
+| Stream | Free / SHM | Free / UDP | Stepped / SHM | Stepped / UDP |
+| --- | ---: | ---: | ---: | ---: |
+| Left image | 1.100 | 1.967 | 0.267 | 0.300 |
+| Right image | 1.300 | 2.833 | 0.200 | 1.000 |
+| Complete stereo pair | 2.367 | 3.933 | 0.333 | 1.200 |
+| Joint feedback | 0.580 | 67.044 | 0.000 | 0.096 |
+| Effort command | 0.284 | 0.352 | 0.000 | 0.000 |
+| Clock | 0.534 | 1.475 | 0.117 | 1.780 |
+| 64-byte host → guest | 0.969 | 0.103 | 0.175 | 0.103 |
+| 64-byte guest → host | 0.186 | 0.072 | 0.134 | 0.124 |
+
+Free-running pair p95 increases from 6 to 12 ms. Joint feedback has a particularly
+large UDP tail: p95 231 ms, p99 259 ms and maximum 267 ms, despite complete
+delivery. This benchmark does not identify the internal cause of that tail or
+establish its repeatability. It must not be hidden by comparing delivery counts
+alone. Stepped pair p95 remains 1 ms, but its observed maximum increases from
+1 to 26 ms.
+
+Native timestamps use 1 ms buckets. A zero records delivery within one bucket,
+and ratios against zero are withheld. Stepped mode also pauses between physics
+ticks, allowing DDS wall time to deliver without advancing the measurement
+clock. The sub-millisecond small-message means and short independent windows
+do not support a robust ranking of UDP versus SHM.
+
+UDP uses its 65,500-byte packet limit; the original SHM profile uses 1 MiB.
+Large images therefore also change fragmentation behavior. This compares
+complete DDS transport configurations, not isolated SHM copy cost. The original
+eight-case data and SHM-matched gem5 comparisons remain unchanged; UDP controls
+are exported separately in
+[JSON](measurements/chimaera-dds-middleware-2026-10-21/native-comparison.json),
+[CSV](measurements/chimaera-dds-middleware-2026-10-21/native-comparison.csv) and
+an [interactive native report](measurements/chimaera-dds-middleware-2026-10-21/native-report.html).
+
+Reproduce on the same physical host with the frozen runtime sourced:
+
+```sh
+python3 middleware/native_baseline.py \
+  --reference docs/measurements/chimaera-dds-middleware-2026-10-21/attempts.json \
+  --output /path/to/new-native-output --runtime /path/to/matched-overlay \
+  --physical-host ubuntu-george --timeout 300
+```
+
+The first native attempt exceeded an inadequate 60 s wall watchdog in stepped
+mode and was stopped. It is retained separately and excluded from this table.
+The complete rerun uses a 300 s watchdog; the stepped cases take roughly 90 s
+because of Gazebo acknowledgements, which is not DDS throughput.
 
 ### Method and reproduction
 

@@ -1,0 +1,604 @@
+{
+  "physical_host": "ubuntu-george",
+  "attempts": [
+    {
+      "case": "ball_catching-native_free-udp",
+      "result": "complete",
+      "provenance": {
+        "host": "f0cc314cc766",
+        "loadavg": [
+          1.30517578125,
+          1.900390625,
+          2.6123046875
+        ],
+        "native_only": true,
+        "environment": {
+          "ROS_LOCALHOST_ONLY": "0",
+          "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+          "RMW_FASTRTPS_USE_QOS_FROM_XML": "0"
+        },
+        "dds_transport": "UDPv4 loopback only",
+        "shared_memory": false,
+        "data_sharing": false
+      },
+      "summary": {
+        "config": {
+          "workload": "ball_catching",
+          "payload_bytes": 64,
+          "rate_hz": 97.0,
+          "duration": 1.0,
+          "warmup": 0.25,
+          "drain": 0.5,
+          "physics_step_ns": 1000000,
+          "interval_us": 2000,
+          "poll_us": 1000,
+          "reliability": "reliable",
+          "depth": 128,
+          "ball_catching": {
+            "camera_width": 480,
+            "camera_height": 360,
+            "camera_hz": 30.0,
+            "joint_hz": 250.0,
+            "control_hz": 250.0,
+            "image_age_periods": 2.0
+          },
+          "delivery_policy": "lossless",
+          "verify_payload": true,
+          "transport_backend": "dma",
+          "dds_shm_bytes": 0,
+          "dds_tuning": "udp_loopback",
+          "dds_max_message_bytes": 65500,
+          "rmw": "rmw_fastrtps_cpp",
+          "cpu_type": "timing",
+          "num_cores": 2,
+          "cpu_clock": "3GHz",
+          "l1d_size": "16KiB",
+          "l1i_size": "16KiB",
+          "l2_size": "256KiB",
+          "l1_assoc": 8,
+          "l2_assoc": 16,
+          "mode": "native_free",
+          "repeat": 1,
+          "timeout": 60,
+          "schema_version": 1,
+          "status": "complete",
+          "run_id": "307c5ae4-40c0-4ad5-9799-47c0b1560cd4",
+          "created": "2026-10-21T19:08:07.789327+00:00",
+          "hostname": "f0cc314cc766",
+          "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+          "cpu": "native",
+          "clock_contract": "Gazebo PreUpdate simulation time",
+          "packet_header_bytes": 0,
+          "telemetry": "buffered until measurement and drain finish",
+          "image": null,
+          "guest_bundle": null,
+          "artifact_sha256": {
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_driver": "b40daa895e5d04baffbe38c2a70516edcb2b417c45f4c4138938d5d500a13891",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/libchimaera_dds_transport.so": "d6b725c9dc9c54b8bb52e767d9a9ca9ff4c0e6baf7fac85d50560f5df57db624",
+            "dds.xml": "3305ad8a0229d71e68eb793f0314f4fda2b953ffce9b1b21b158e5afab1b04df"
+          },
+          "git_commit": "2c20b3ac0f7c3b3374e17ec7ddb5c8dd5890dab4",
+          "git_dirty": true,
+          "wall_seconds": 4.314059104013722
+        },
+        "directions": {
+          "host_to_guest": {
+            "latency": {
+              "count": 1308,
+              "mean_ms": 31.78669724770642,
+              "p50_ms": 1.0,
+              "p95_ms": 176.0,
+              "p99_ms": 290.0,
+              "max_ms": 342.0
+            },
+            "age": {
+              "count": 1308,
+              "mean_ms": 31.84021406727829,
+              "p50_ms": 1.0,
+              "p95_ms": 176.0,
+              "p99_ms": 290.0,
+              "max_ms": 342.0
+            },
+            "release_lag": {
+              "count": 1310,
+              "mean_ms": 0.05343511450381679,
+              "p50_ms": 0.0,
+              "p95_ms": 0.666667,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "published": 1310,
+            "received": 1308,
+            "missing_at_drain": 2,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 0.9984732824427481,
+            "actual_source_hz": 1310.0,
+            "p99_tail_samples": 13.08,
+            "serialized_bytes": null,
+            "native_clock_step_ms": 1.0
+          },
+          "guest_to_host": {
+            "latency": {
+              "count": 250,
+              "mean_ms": 0.016,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 1.0
+            },
+            "age": {
+              "count": 250,
+              "mean_ms": 0.044,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "release_lag": {
+              "count": 250,
+              "mean_ms": 0.028,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "published": 250,
+            "received": 250,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 250.0,
+            "p99_tail_samples": 2.5,
+            "serialized_bytes": null,
+            "native_clock_step_ms": 1.0
+          }
+        },
+        "streams": {
+          "left_image": {
+            "id": 1,
+            "name": "left_image",
+            "label": "Left camera",
+            "topic": "/stereo/left/image_raw",
+            "type": "sensor_msgs/msg/Image",
+            "direction": "host_to_guest",
+            "rate_hz": 30.0,
+            "body_bytes": 518400,
+            "depth": 128,
+            "coalesce": false,
+            "coalesce_group": "stereo",
+            "latency": {
+              "count": 30,
+              "mean_ms": 1.7666666666666668,
+              "p50_ms": 0.0,
+              "p95_ms": 11.0,
+              "p99_ms": 11.0,
+              "max_ms": 11.0
+            },
+            "age": {
+              "count": 30,
+              "mean_ms": 2.1,
+              "p50_ms": 0.666667,
+              "p95_ms": 11.333333,
+              "p99_ms": 11.666667,
+              "max_ms": 11.666667
+            },
+            "release_lag": {
+              "count": 30,
+              "mean_ms": 0.3333333333333333,
+              "p50_ms": 0.333333,
+              "p95_ms": 0.666667,
+              "p99_ms": 0.666667,
+              "max_ms": 0.666667
+            },
+            "published": 30,
+            "received": 30,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 30.0,
+            "p99_tail_samples": 0.3,
+            "serialized_bytes": 518456,
+            "native_clock_step_ms": 1.0
+          },
+          "right_image": {
+            "id": 2,
+            "name": "right_image",
+            "label": "Right camera",
+            "topic": "/stereo/right/image_raw",
+            "type": "sensor_msgs/msg/Image",
+            "direction": "host_to_guest",
+            "rate_hz": 30.0,
+            "body_bytes": 518400,
+            "depth": 128,
+            "coalesce": false,
+            "coalesce_group": "stereo",
+            "latency": {
+              "count": 30,
+              "mean_ms": 6.266666666666667,
+              "p50_ms": 1.0,
+              "p95_ms": 31.0,
+              "p99_ms": 55.0,
+              "max_ms": 55.0
+            },
+            "age": {
+              "count": 30,
+              "mean_ms": 6.966666666666667,
+              "p50_ms": 2.0,
+              "p95_ms": 31.0,
+              "p99_ms": 55.333333,
+              "max_ms": 55.333333
+            },
+            "release_lag": {
+              "count": 30,
+              "mean_ms": 0.7,
+              "p50_ms": 0.666667,
+              "p95_ms": 1.666667,
+              "p99_ms": 1.666667,
+              "max_ms": 1.666667
+            },
+            "published": 30,
+            "received": 30,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 30.0,
+            "p99_tail_samples": 0.3,
+            "serialized_bytes": 518460,
+            "native_clock_step_ms": 1.0
+          },
+          "joint_states": {
+            "id": 3,
+            "name": "joint_states",
+            "label": "Joint feedback",
+            "topic": "/robot/joint_states",
+            "type": "sensor_msgs/msg/JointState",
+            "direction": "host_to_guest",
+            "rate_hz": 250.0,
+            "depth": 128,
+            "coalesce": false,
+            "latency": {
+              "count": 250,
+              "mean_ms": 95.956,
+              "p50_ms": 57.0,
+              "p95_ms": 294.0,
+              "p99_ms": 334.0,
+              "max_ms": 342.0
+            },
+            "age": {
+              "count": 250,
+              "mean_ms": 95.992,
+              "p50_ms": 57.0,
+              "p95_ms": 294.0,
+              "p99_ms": 334.0,
+              "max_ms": 342.0
+            },
+            "release_lag": {
+              "count": 250,
+              "mean_ms": 0.036,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 1.0
+            },
+            "published": 250,
+            "received": 250,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 250.0,
+            "p99_tail_samples": 2.5,
+            "serialized_bytes": 268,
+            "native_clock_step_ms": 1.0
+          },
+          "effort_command": {
+            "id": 4,
+            "name": "effort_command",
+            "label": "Effort command",
+            "topic": "/robot/effort_command",
+            "type": "sensor_msgs/msg/JointState",
+            "direction": "guest_to_host",
+            "rate_hz": 250.0,
+            "depth": 128,
+            "coalesce": false,
+            "latency": {
+              "count": 250,
+              "mean_ms": 0.016,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 1.0
+            },
+            "age": {
+              "count": 250,
+              "mean_ms": 0.044,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "release_lag": {
+              "count": 250,
+              "mean_ms": 0.028,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "published": 250,
+            "received": 250,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 250.0,
+            "p99_tail_samples": 2.5,
+            "serialized_bytes": 212,
+            "native_clock_step_ms": 1.0
+          },
+          "clock": {
+            "id": 5,
+            "name": "clock",
+            "label": "ROS clock",
+            "topic": "/clock",
+            "type": "rosgraph_msgs/msg/Clock",
+            "direction": "host_to_guest",
+            "rate_hz": 1000.0,
+            "depth": 128,
+            "coalesce": false,
+            "latency": {
+              "count": 998,
+              "mean_ms": 17.381763527054108,
+              "p50_ms": 1.0,
+              "p95_ms": 96.0,
+              "p99_ms": 118.0,
+              "max_ms": 127.0
+            },
+            "age": {
+              "count": 998,
+              "mean_ms": 17.41182364729459,
+              "p50_ms": 1.0,
+              "p95_ms": 96.0,
+              "p99_ms": 118.0,
+              "max_ms": 127.0
+            },
+            "release_lag": {
+              "count": 1000,
+              "mean_ms": 0.03,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 1.0,
+              "max_ms": 2.0
+            },
+            "published": 1000,
+            "received": 998,
+            "missing_at_drain": 2,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 0.998,
+            "actual_source_hz": 1000.0,
+            "p99_tail_samples": 9.98,
+            "serialized_bytes": 12,
+            "native_clock_step_ms": 1.0
+          }
+        },
+        "stereo_pairs": {
+          "published": 30,
+          "received": 30,
+          "missing_at_drain": 0,
+          "latency": {
+            "count": 30,
+            "mean_ms": 6.966666666666667,
+            "p50_ms": 2.0,
+            "p95_ms": 31.0,
+            "p99_ms": 55.0,
+            "max_ms": 55.0
+          },
+          "age": {
+            "count": 30,
+            "mean_ms": 7.3,
+            "p50_ms": 2.333333,
+            "p95_ms": 31.0,
+            "p99_ms": 55.333333,
+            "max_ms": 55.333333
+          },
+          "callback_skew": {
+            "count": 30,
+            "mean_ms": 5.533333333333333,
+            "p50_ms": 1.0,
+            "p95_ms": 31.0,
+            "p99_ms": 44.0,
+            "max_ms": 44.0
+          }
+        }
+      }
+    },
+    {
+      "case": "ball_catching-native_stepped-udp",
+      "result": "failed",
+      "provenance": {
+        "host": "f0cc314cc766",
+        "loadavg": [
+          2.24169921875,
+          2.0849609375,
+          2.66845703125
+        ],
+        "native_only": true,
+        "environment": {
+          "ROS_LOCALHOST_ONLY": "0",
+          "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+          "RMW_FASTRTPS_USE_QOS_FROM_XML": "0"
+        },
+        "dds_transport": "UDPv4 loopback only",
+        "shared_memory": false,
+        "data_sharing": false
+      },
+      "error": "native_stepped exceeded its 60 s wall timeout at 1.150 / 1.75 simulated seconds. Gazebo step timed out. Small synchronization steps add wall time; planning estimate 98 s, suggested timeout at least 180 s (detailed CPU execution may need more)."
+    },
+    {
+      "case": "synthetic-native_free-udp",
+      "result": "complete",
+      "provenance": {
+        "host": "f0cc314cc766",
+        "loadavg": [
+          2.8046875,
+          2.265625,
+          2.693359375
+        ],
+        "native_only": true,
+        "environment": {
+          "ROS_LOCALHOST_ONLY": "0",
+          "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+          "RMW_FASTRTPS_USE_QOS_FROM_XML": "0"
+        },
+        "dds_transport": "UDPv4 loopback only",
+        "shared_memory": false,
+        "data_sharing": false
+      },
+      "summary": {
+        "config": {
+          "workload": "synthetic",
+          "payload_bytes": 64,
+          "rate_hz": 97.0,
+          "duration": 1.0,
+          "warmup": 0.25,
+          "drain": 0.5,
+          "physics_step_ns": 1000000,
+          "interval_us": 2000,
+          "poll_us": 1000,
+          "reliability": "reliable",
+          "depth": 128,
+          "delivery_policy": "lossless",
+          "verify_payload": true,
+          "transport_backend": "dma",
+          "dds_shm_bytes": 0,
+          "dds_tuning": "udp_loopback",
+          "dds_max_message_bytes": 65500,
+          "rmw": "rmw_fastrtps_cpp",
+          "cpu_type": "timing",
+          "num_cores": 2,
+          "cpu_clock": "3GHz",
+          "l1d_size": "16KiB",
+          "l1i_size": "16KiB",
+          "l2_size": "256KiB",
+          "l1_assoc": 8,
+          "l2_assoc": 16,
+          "mode": "native_free",
+          "repeat": 1,
+          "timeout": 60,
+          "schema_version": 1,
+          "status": "complete",
+          "run_id": "bdaed2a2-4116-411b-bda1-4b06f6792dcb",
+          "created": "2026-10-21T19:09:12.635718+00:00",
+          "hostname": "f0cc314cc766",
+          "platform": "Linux-6.8.0-147-generic-x86_64-with-glibc2.35",
+          "cpu": "native",
+          "clock_contract": "Gazebo PreUpdate simulation time",
+          "packet_header_bytes": 40,
+          "telemetry": "buffered until measurement and drain finish",
+          "image": null,
+          "guest_bundle": null,
+          "artifact_sha256": {
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_driver": "b40daa895e5d04baffbe38c2a70516edcb2b417c45f4c4138938d5d500a13891",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+            "/work/.chimaera-middleware/runtime-staging-r2/lib/libchimaera_dds_transport.so": "d6b725c9dc9c54b8bb52e767d9a9ca9ff4c0e6baf7fac85d50560f5df57db624",
+            "dds.xml": "3305ad8a0229d71e68eb793f0314f4fda2b953ffce9b1b21b158e5afab1b04df"
+          },
+          "git_commit": "2c20b3ac0f7c3b3374e17ec7ddb5c8dd5890dab4",
+          "git_dirty": true,
+          "wall_seconds": 4.31586429401068
+        },
+        "directions": {
+          "host_to_guest": {
+            "latency": {
+              "count": 97,
+              "mean_ms": 0.3402061855670103,
+              "p50_ms": 0.0,
+              "p95_ms": 1.0,
+              "p99_ms": 1.0,
+              "max_ms": 1.0
+            },
+            "age": {
+              "count": 97,
+              "mean_ms": 1.0103092783505154,
+              "p50_ms": 0.979381,
+              "p95_ms": 1.948454,
+              "p99_ms": 3.938144,
+              "max_ms": 3.938144
+            },
+            "release_lag": {
+              "count": 97,
+              "mean_ms": 0.6701030927835051,
+              "p50_ms": 0.587629,
+              "p95_ms": 1.721649,
+              "p99_ms": 3.938144,
+              "max_ms": 3.938144
+            },
+            "published": 97,
+            "received": 97,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 97.0,
+            "p99_tail_samples": 0.97,
+            "serialized_bytes": null,
+            "native_clock_step_ms": 1.0
+          },
+          "guest_to_host": {
+            "latency": {
+              "count": 97,
+              "mean_ms": 0.051546391752577324,
+              "p50_ms": 0.0,
+              "p95_ms": 0.0,
+              "p99_ms": 3.0,
+              "max_ms": 3.0
+            },
+            "age": {
+              "count": 97,
+              "mean_ms": 0.5463917525773196,
+              "p50_ms": 0.505155,
+              "p95_ms": 0.979381,
+              "p99_ms": 3.938144,
+              "max_ms": 3.938144
+            },
+            "release_lag": {
+              "count": 97,
+              "mean_ms": 0.4948453608247423,
+              "p50_ms": 0.494845,
+              "p95_ms": 0.948454,
+              "p99_ms": 0.989691,
+              "max_ms": 0.989691
+            },
+            "published": 97,
+            "received": 97,
+            "missing_at_drain": 0,
+            "duplicates": 0,
+            "reordered": 0,
+            "delivery_fraction": 1.0,
+            "actual_source_hz": 97.0,
+            "p99_tail_samples": 0.97,
+            "serialized_bytes": null,
+            "native_clock_step_ms": 1.0
+          }
+        },
+        "streams": {}
+      }
+    }
+  ],
+  "reference_sha256": "b5536391eed004763692eed6cd75d7ffcec4e48e59ea6dfde445dc9452a01d27",
+  "source_sha256": "1247270037e1af0acc9f200b04d352c14bbef9a5fd93a86db02d9c51fc622cb6",
+  "host_identity_note": "Physical host supplied by operator; container hostnames differ.",
+  "interruption": "Stopped after confirming stepped control exceeded the initial 60 s watchdog; complete rerun uses 300 s. This attempt is excluded from performance comparison."
+}

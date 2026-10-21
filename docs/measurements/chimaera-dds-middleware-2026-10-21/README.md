@@ -56,3 +56,24 @@ Source patches use gzip compression to preserve their exact bytes, including Git
 patch context whitespace. `source-patches.json` records uncompressed hashes;
 `gzip -dc FILE.patch.gz` recovers a patch. The ball run's base revision is in
 `ball-provenance.json`, with its changes in `ball-source.patch.gz`.
+
+The additional SHM-disabled host-only baseline is retained separately:
+
+- `native-attempts.json`: four complete UDP cases, exact configuration and binary hashes.
+- `native-comparison.json` / `.csv`: 16 matched stream/pair comparisons against
+  the original native SHM controls; no original gem5 comparison is replaced.
+- `native-report.html`: interactive native comparison. The main `report.html`
+  also includes both new UDP native references in its detail table.
+- `native-udp.xml` and `native-udp-process-check.json`: explicit UDP-only profile
+  and live process environment/transport-SHM absence check.
+- `native-base-revision.txt`, `native-source.patch.gz`, `native-source.tar.gz`:
+  exact launcher source snapshot. `native-workflow-tests.log` records 235 passing
+  tests and two environment-dependent skips after the change.
+- `native-initial-attempt.json`: the excluded 60 s watchdog attempt. Its complete
+  rerun uses a 300 s watchdog; raw/interrupted output remains locally in
+  `.chimaera-middleware/native-udp-r1`, with final runs in `native-udp-r2`.
+
+The free-running UDP stereo-pair mean is 3.933 ms versus 2.367 ms with SHM.
+Joint feedback has a 67.044 ms mean and 231 ms p95 despite complete delivery.
+The 1 ms native timestamp buckets, short single-repeat window, UDP fragmentation
+and stepped clock pacing limit interpretation; see the main report.

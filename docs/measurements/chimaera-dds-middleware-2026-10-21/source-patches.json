@@ -8,5 +8,10 @@
     "source": "latency-source.patch",
     "compressed": "latency-source.patch.gz",
     "sha256": "841312c47eb8853ea2f53b8fbc304223ebded28cf1f33be0c3bf911bcac06f70"
+  },
+  {
+    "source": "native-source.patch",
+    "compressed": "native-source.patch.gz",
+    "sha256": "00dc27548c1a8adc20351ed475ebf9688890f6607490f45eed07e724a9e90078"
   }
 ]

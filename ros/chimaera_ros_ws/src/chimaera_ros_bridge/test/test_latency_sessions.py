@@ -9,7 +9,7 @@ import tarfile
 import unittest
 from unittest.mock import Mock, patch
 
-from chimaera_ros.latency import driver_failure, run_case
+from chimaera_ros.latency import dds_profile, driver_failure, run_case
 from chimaera_ros.latency_config import DEFAULT, plan_sweep
 from chimaera_ros.latency_guest import read_script
 from chimaera_ros.latency_session import GuestSession, SweepSessions, ordered_cases, validate_bundle
@@ -17,6 +17,38 @@ from chimaera_ros.latency_startup import log_tail, startup_status
 
 
 class SessionTest(unittest.TestCase):
+    def test_udp_native_baseline_cannot_reenable_shm_through_localhost_mode(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            package = root/'package'
+            for path in [package/'lib/chimaera_ros_bridge/latency_endpoint',
+                         package/'lib/chimaera_ros_bridge/latency_driver',
+                         package/'lib/libchimaera_latency_clock.so']:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'fixture')
+            config = plan_sweep(dict(DEFAULT, modes=['native_free']))['cases'][0]['config']
+            config.update(dds_tuning='udp_loopback', dds_shm_bytes=0)
+            launches = []
+            def launch(command, **kwargs):
+                launches.append(kwargs['env'])
+                if command[0].endswith('latency_driver'):
+                    (Path(command[-1]).parent/'complete').write_text('complete\n')
+                process = Mock(returncode=0)
+                process.poll.return_value = 0
+                return process
+            with patch('chimaera_ros.latency.subprocess.check_output', return_value='commit'), \
+                    patch('chimaera_ros.latency.subprocess.Popen', side_effect=launch), \
+                    patch('chimaera_ros.latency.summarize', return_value={}):
+                run_case(root/'native', config, package, root/'no-gem5', root/'no-disk', root/'no-kernel')
+            self.assertTrue(all(env['ROS_LOCALHOST_ONLY'] == '0' and
+                env['RMW_FASTRTPS_USE_QOS_FROM_XML'] == '0' and
+                env['FASTRTPS_DEFAULT_PROFILES_FILE'] == str(root/'native/dds.xml') for env in launches))
+            self.assertEqual((root/'native/dds.xml').read_text(), dds_profile(config))
+            with self.assertRaisesRegex(ValueError, 'native mode'):
+                dds_profile(dict(config, mode='chimaera'))
+            with self.assertRaisesRegex(ValueError, 'dds_shm_bytes=0'):
+                dds_profile(dict(config, dds_shm_bytes=16777216))
+
     def test_groups_hardware_without_changing_case_identity_or_native_controls(self):
         config = dict(DEFAULT, payload_bytes=[64, 128], gem5_configs=[
             dict(name='KVM', cpu_type='kvm'), dict(name='Timing', cpu_type='timing')])

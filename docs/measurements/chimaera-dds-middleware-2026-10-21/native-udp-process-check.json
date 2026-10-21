@@ -1,0 +1,27 @@
+{
+  "fastrtps_shm_files": [],
+  "processes": [
+    {
+      "pid": "132",
+      "command": "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_endpoint --ros-args --params-file /work/.chimaera-middleware/native-udp-r2/ball_catching-native_stepped-udp/host.yaml ",
+      "environment": {
+        "ROS_LOCALHOST_ONLY": "0",
+        "FASTRTPS_DEFAULT_PROFILES_FILE": "/work/.chimaera-middleware/native-udp-r2/ball_catching-native_stepped-udp/dds.xml",
+        "RMW_FASTRTPS_USE_QOS_FROM_XML": "0",
+        "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp"
+      },
+      "middleware_socket_present": false
+    },
+    {
+      "pid": "133",
+      "command": "/work/.chimaera-middleware/runtime-staging-r2/lib/chimaera_ros_bridge/latency_endpoint --ros-args --params-file /work/.chimaera-middleware/native-udp-r2/ball_catching-native_stepped-udp/guest.yaml ",
+      "environment": {
+        "ROS_LOCALHOST_ONLY": "0",
+        "FASTRTPS_DEFAULT_PROFILES_FILE": "/work/.chimaera-middleware/native-udp-r2/ball_catching-native_stepped-udp/dds.xml",
+        "RMW_FASTRTPS_USE_QOS_FROM_XML": "0",
+        "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp"
+      },
+      "middleware_socket_present": false
+    }
+  ]
+}

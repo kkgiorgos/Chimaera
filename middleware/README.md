@@ -124,3 +124,24 @@ and simulator identity. Percentage reductions require complete, ordered, unique
 delivery across the workload and equal source counts for the compared stream.
 Regenerate them with `python3 middleware/report.py PATH/evidence/attempts.json
 --output PATH/evidence`.
+
+Add a second host-only reference with DDS shared memory disabled:
+
+```sh
+python3 middleware/native_baseline.py \
+  --reference PATH/evidence/attempts.json \
+  --output .chimaera-middleware/native-udp \
+  --runtime .chimaera-middleware/install --physical-host YOUR_MACHINE
+```
+
+Run this on the same physical host as the reference, with its exact compiled
+runtime sourced. It derives both workloads and native clock modes from the
+retained matrix and runs no VM. The profile uses only UDPv4 on `127.0.0.1`,
+disables builtin transports and DDS data-sharing, and sets `ROS_LOCALHOST_ONLY=0`
+so Humble does not add SHM. Traffic, QoS, clock settings and runtime hashes are
+checked against the SHM references. The UDP packet limit is 65,500 bytes, versus
+1 MiB for the existing SHM profile; this compares complete DDS transport
+configurations, including fragmentation. Results are exported separately as
+`native-attempts.json` and `native-comparison.json`/`.csv`. They do not replace
+the SHM-matched controls in the gem5 comparison. Use `--report-only` with the
+same arguments to regenerate comparisons without rerunning the cases.
