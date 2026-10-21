@@ -19,8 +19,10 @@ struct Router::Impl
   struct Client
   {
     std::vector<wire::Locator> channels;
-    std::vector<uint8_t> input;
-    std::deque<std::vector<uint8_t>> output;
+    std::array<uint8_t, wire::header_bytes> header{};
+    Packet input;
+    std::size_t filled{};
+    std::deque<Packet> output;
     std::size_t offset{};
     uint32_t process{};
     bool transport{};
@@ -32,7 +34,7 @@ struct Router::Impl
   std::atomic<bool> stopped{false};
   mutable std::mutex mutex;
   std::map<int, Client> clients;
-  std::deque<std::vector<uint8_t>> outgoing;
+  std::deque<Packet> outgoing;
   std::map<std::pair<std::string, bool>, std::map<uint32_t, std::size_t>> endpoints;
   std::string failure;
   std::function<void()> notify;
@@ -80,7 +82,7 @@ struct Router::Impl
     if (size > limit - queued) throw std::runtime_error("DDS runtime queue capacity exceeded");
     queued += size;
   }
-  void forward(const std::vector<uint8_t> & packet, int sender = -1)
+  void forward(const Packet & packet, int sender = -1)
   {
     const auto destination = wire::locator(packet.data() + 28);
     if (destination.address[0] && destination.address[0] != side) return;
@@ -96,7 +98,7 @@ struct Router::Impl
       }
     }
   }
-  void accept_packet(int fd, const std::vector<uint8_t> & packet)
+  void accept_packet(int fd, const Packet & packet)
   {
     const auto source = wire::locator(packet.data() + 8);
     const auto destination = wire::locator(packet.data() + 28);
@@ -104,24 +106,24 @@ struct Router::Impl
       throw std::runtime_error("invalid DDS client locator role");
     auto & client = clients.at(fd);
     client.process = wire::read32(source.address + 4);
-    if (packet[5] == wire::open) {
+    if (packet.data()[5] == wire::open) {
       if (packet.size() != wire::header_bytes || client.channels.size() >= 16)
         throw std::runtime_error("invalid DDS channel registration");
       client.channels.push_back(destination);
       client.transport = true;
-    } else if (packet[5] == wire::close) {
+    } else if (packet.data()[5] == wire::close) {
       client.channels.erase(
         std::remove(client.channels.begin(), client.channels.end(), destination),
         client.channels.end());
-    } else if (packet[5] == wire::endpoint) {
+    } else if (packet.data()[5] == wire::endpoint) {
       if (
         packet.size() < wire::header_bytes + 2 || packet.size() > wire::header_bytes + 258 ||
-        (packet[wire::header_bytes] & 0x7e))
+        (packet.data()[wire::header_bytes] & 0x7e))
         throw std::runtime_error("invalid DDS endpoint registration");
       const auto key = std::make_pair(
-        std::string(packet.begin() + wire::header_bytes + 1, packet.end()),
-        bool(packet[wire::header_bytes] & 1));
-      if (packet[wire::header_bytes] & 0x80) {
+        std::string(packet.data() + wire::header_bytes + 1, packet.data() + packet.size()),
+        bool(packet.data()[wire::header_bytes] & 1));
+      if (packet.data()[wire::header_bytes] & 0x80) {
         auto found = endpoints.find(key);
         if (found != endpoints.end()) {
           auto owner = found->second.find(client.process);
@@ -148,25 +150,28 @@ struct Router::Impl
     auto & client = clients.at(fd);
     bool alive = true;
     if (events & (POLLIN | POLLHUP)) {
-      uint8_t buffer[65536];
       while (true) {
-        const auto size = ::recv(fd, buffer, sizeof(buffer), 0);
+        // Read exactly one header, validate its length before allocating, then
+        // receive directly into the allocation shared by all downstream queues.
+        const auto target = client.input.size() ? client.input.size() : wire::header_bytes;
+        auto * bytes = client.input.size() ? client.input.data() : client.header.data();
+        const auto size = ::recv(fd, bytes + client.filled, target - client.filled, 0);
         if (size < 0 && errno == EINTR) continue;
         if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
         if (size <= 0) {
           alive = false;
           break;
         }
-        if (
-          client.input.size() + std::size_t(size) >
-          max_packet_bytes + wire::header_bytes + sizeof(buffer))
-          throw std::runtime_error("DDS client input capacity exceeded");
-        client.input.insert(client.input.end(), buffer, buffer + size);
-        while (const auto length = wire::length(client.input.data(), client.input.size())) {
-          if (client.input.size() < length) break;
-          std::vector<uint8_t> packet(client.input.begin(), client.input.begin() + length);
-          client.input.erase(client.input.begin(), client.input.begin() + length);
-          accept_packet(fd, packet);
+        client.filled += std::size_t(size);
+        if (!client.input.size() && client.filled == wire::header_bytes) {
+          const auto length = wire::length(client.header.data(), wire::header_bytes);
+          client.input = Packet::for_overwrite(length);
+          std::memcpy(client.input.data(), client.header.data(), wire::header_bytes);
+        }
+        if (client.input.size() && client.filled == client.input.size()) {
+          accept_packet(fd, client.input);
+          client.input = {};
+          client.filled = 0;
         }
       }
     }
@@ -271,7 +276,7 @@ void Router::check() const
   std::lock_guard lock(impl_->mutex);
   if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
 }
-std::optional<std::vector<uint8_t>> Router::take()
+std::optional<Packet> Router::take()
 {
   std::lock_guard lock(impl_->mutex);
   if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
@@ -281,9 +286,10 @@ std::optional<std::vector<uint8_t>> Router::take()
   impl_->queued -= packet.size();
   return packet;
 }
-void Router::receive(const void * data, std::size_t size)
+void Router::receive(Packet packet)
 {
-  auto bytes = static_cast<const uint8_t *>(data);
+  const auto * bytes = packet.data();
+  const auto size = packet.size();
   if (size < wire::header_bytes || wire::length(bytes, size) != size || bytes[5] != wire::data)
     throw std::runtime_error("invalid cross-simulator DDS packet");
   const auto source = wire::locator(bytes + 8), destination = wire::locator(bytes + 28);
@@ -294,8 +300,16 @@ void Router::receive(const void * data, std::size_t size)
     throw std::runtime_error("invalid cross-simulator DDS source, destination or payload");
   std::lock_guard lock(impl_->mutex);
   if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
-  impl_->forward(std::vector<uint8_t>(bytes, bytes + size));
+  impl_->forward(packet);
   impl_->signal();
+}
+void Router::receive(const void * data, std::size_t size)
+{
+  if (size < wire::header_bytes || wire::length(static_cast<const uint8_t *>(data), size) != size)
+    throw std::runtime_error("invalid cross-simulator DDS packet");
+  auto packet = Packet::for_overwrite(size);
+  std::memcpy(packet.data(), data, size);
+  receive(std::move(packet));
 }
 bool Router::endpoint_ready(const std::string & topic, bool publisher) const
 {

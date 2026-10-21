@@ -1,0 +1,80 @@
+{
+  "base_revision": "0e7640bdcf50022c66031f8697a6bda2a88b59d0",
+  "measurement_checkout_revision": "3f6bc0e350dd87c75524462147c1c0041d09629c",
+  "sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+  "physical_host": "ubuntu-george",
+  "simulation_cpu": "X86KvmCPU only",
+  "native_tests_run": false,
+  "guest_image": {
+    "image": "sha256:8f3ac1bd91a1abe85726ed6f3f3adb4b94fe19aa2a4d650c34ce064c7b1107d8",
+    "image_id": "sha256:8f3ac1bd91a1abe85726ed6f3f3adb4b94fe19aa2a4d650c34ce064c7b1107d8",
+    "recipe": "3bfa7850efbe1e33efb92a2d4064b78c0a9c83ac04949ed0388bdc3965ca7cdc",
+    "sha256": "8b3a23e802f685c0bc78b08e811c5ebb6012a34edd57d8c0ef96a403a77a6aec"
+  },
+  "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+  "files": {
+    "candidate-source.tar.gz": "ad35a9f4fdbb2cf256d7f58c947ac92a98d6dd8ad30c0d14f3bc95a7eb729b36",
+    "candidate-process-libraries.json": "780b2d76b550f22a6a81680b78c27939ab5d2d4c29a580c2292c475817bbdbab",
+    "bounded-summary.json": "5226e549a3cc5e41ef2cb7d57641ca0de2acfaba49b3d27af750903e63c92998",
+    "bounded-retry-cases.json": "76f7730b25f051bbb0b3a2bc5e052eb769907c5f53f29d5489ce45fa63ab0ac3",
+    "cases.json": "1e9fff559d8741c21108b2930eb7bd48de6138150a2d218d49f0bfd697df4117",
+    "comparison.json": "e750a85e249789c77f8d51169d870c7c7a8b7b6019b95f0891b713fa399253da",
+    "verified-repeat-cases.json": "bc20d383b30899daf2f6a0e28dc07192a19126e9b3a7604c32dcf202b8e42cd5",
+    "bounded-cases.json": "3af7bd449917712fe8bc884898dca862a9401e9dafe88867f0a10a4ead3c8b0f",
+    "experiment-tools.tar.gz": "809407716dad917c3119e70673c31ff0d7a97753a74f5c9408d810b25af24aaa",
+    "raw-evidence.tar.gz": "f17a0371c16213740140fe4fdeb6daa5f0b0ad34f51815e8d6386dc32324bdf9",
+    "comparison.csv": "99ca948aa61ec73b9d1c5e3b8b0794c1f0ae5e9579d094e509f03a5e530af725",
+    "baseline-source.tar.gz": "ea600b6fa4c3049161b5e8fad18b1ff8276b251ead7fda95bd2e25710396345a",
+    "report.html": "42b7cc9446c1167d73f5df21c6d7a656e0676fcfcd33dc14235a604b62a038d9"
+  },
+  "runtime_files": {
+    "baseline": {
+      "lib/libchimaera_gem5_clock_addr.so": "cab037bd257640eef735d3c891c11e559346690675febfa38e5bfecec5a6e96e",
+      "lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+      "lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+      "lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+      "lib/libchimaera_dds_transport.so": "d6b725c9dc9c54b8bb52e767d9a9ca9ff4c0e6baf7fac85d50560f5df57db624",
+      "lib/libchimaera_gem5_clock.so": "3d102e02677d7efde4a1b50a9a3374b08b5570282639827722a62135ecf1f2a5",
+      "lib/chimaera_ros_bridge/chimaera_ros": "9a20d89938dd8c655e5edf7f2f5f45b8de0a64087845c92fbc44def871458580",
+      "lib/chimaera_ros_bridge/gazebo_host_bridge": "c28be94dd43e06f6dc3ec03bc14edae20265bee01694a9348016e23bd3f314ec",
+      "lib/chimaera_ros_bridge/latency_driver": "3ed5e2654ad862249f863840e754a49a2657b869c97a5ad9657ec3436453d651",
+      "lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+      "lib/chimaera_ros_bridge/validate_routes": "e46082750a1780642cf93b77d621f3055ff0bacf83e336c8b06e391901102881",
+      "lib/chimaera_ros_bridge/guest_bridge": "325332407443e6e4d0930dcee8aed16d9b961439e128dc1bd7369098b3d72efa",
+      "lib/chimaera_ros_bridge/host_bridge": "6c176f3b2657f8a9b85f68a4a661a33e92d9817c146598aaeae19148582e2584",
+      "lib/chimaera_ros_bridge/deploy_image.sh": "a51a8878d6ec2e245ff71321e5d7d50be9d7e361bf4e196a2d4496832b46cb43",
+      "lib/chimaera_ros_bridge/chimaera_latency": "3dc8805980ad2af1dbbba17cac35cd13fcf49ed0a774cfc2ed6fc7fa5bbeff91"
+    },
+    "candidate": {
+      "lib/libchimaera_gem5_clock_addr.so": "cab037bd257640eef735d3c891c11e559346690675febfa38e5bfecec5a6e96e",
+      "lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+      "lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+      "lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+      "lib/libchimaera_dds_transport.so": "0ff4c02dc48f0d1d4e34597b2ebb9eb7f781767509c289736c92e6156ff5001e",
+      "lib/libchimaera_gem5_clock.so": "3d102e02677d7efde4a1b50a9a3374b08b5570282639827722a62135ecf1f2a5",
+      "lib/chimaera_ros_bridge/dds_router_test": "f86d188f1032645829af1fb540df45ccb8d8330fce5a7d33175b809e740d37d4",
+      "lib/chimaera_ros_bridge/chimaera_ros": "9a20d89938dd8c655e5edf7f2f5f45b8de0a64087845c92fbc44def871458580",
+      "lib/chimaera_ros_bridge/gazebo_host_bridge": "d8368c7b6e16c9f2faef22ea63dcc8f8bb20ce12919b0b2bd0e05be2623e879f",
+      "lib/chimaera_ros_bridge/latency_driver": "a549ec99cf2a894897452f7a1562b05ef99ec1cd079eb62977d5a0ca571a5738",
+      "lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+      "lib/chimaera_ros_bridge/validate_routes": "eca030b8704be003093a962de73a916b18b6752316359df13b9c663521603116",
+      "lib/chimaera_ros_bridge/guest_bridge": "ec6a536a8a0f590619ddd16edd92506db81495480e0e01aeb01cbb24932f9c7b",
+      "lib/chimaera_ros_bridge/host_bridge": "2ddd5fdd26c88b766eeef3a82fff49003a39a5f1f0e9bcd78812dde358d82e11",
+      "lib/chimaera_ros_bridge/deploy_image.sh": "a51a8878d6ec2e245ff71321e5d7d50be9d7e361bf4e196a2d4496832b46cb43",
+      "lib/chimaera_ros_bridge/chimaera_latency": "3dc8805980ad2af1dbbba17cac35cd13fcf49ed0a774cfc2ed6fc7fa5bbeff91"
+    }
+  },
+  "guest_bundle_sha256": {
+    "guest-baseline.tar.gz": "3565435dfae36a84371e37197b572faa6a4ec48d8c3b32b8b15ccef10e0419d0",
+    "guest-candidate.tar.gz": "b9551df572c8bc663acde957c45486213410ab61d69267a7df3b383d28c3f5fb",
+    "guest-bounded.tar.gz": "b82ce64beb3e2ac3037f301c4aa928414746460bb7d0fc369f85324eb409470a"
+  },
+  "notes": [
+    "Generic run_cases source_snapshot identifies the candidate source archive for the matrix. Baseline source is retained separately from git archive of base_revision.",
+    "The candidate runtime source archive was frozen before measurement. Final orchestration/export helpers are in experiment-tools.tar.gz.",
+    "Raw evidence omits generated readfiles containing repeated base64 guest bundles; commands, bundle hashes, source snapshots and runtime file hashes are retained.",
+    "The first candidate run completes the guarded router regression before endpoint startup; serial output may remain buffered at managed shutdown.",
+    "The first bounded-pool attempt with an additional preflight log exporter failed during guest startup before measurement. Its raw failure remains retained. The retry omits that extra exporter and uses the original fail-fast regression guard.",
+    "Kernel and guest image were mounted read-only; no image deployment was performed."
+  ]
+}

@@ -1,0 +1,18 @@
+[
+  {
+    "command": "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/chimaera_ros_bridge/latency_endpoint",
+    "libraries": [
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/libchimaera_dds_transport.so",
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/librmw_fastrtps_cpp.so",
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/librmw_fastrtps_shared_cpp.so"
+    ]
+  },
+  {
+    "command": "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/chimaera_ros_bridge/latency_driver",
+    "libraries": [
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/libchimaera_dds_transport.so",
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/librmw_fastrtps_cpp.so",
+      "/work/.chimaera-middleware/copy-reduction-20261021/runtime-candidate/lib/librmw_fastrtps_shared_cpp.so"
+    ]
+  }
+]

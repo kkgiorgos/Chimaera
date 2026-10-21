@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chimaera_dds_transport/packet.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -19,7 +20,9 @@ public:
   ~Router();
   Router(const Router &) = delete;
   Router & operator=(const Router &) = delete;
-  std::optional<std::vector<uint8_t>> take();
+  std::optional<Packet> take();
+  void receive(Packet packet);
+  // Copying fallback for callers that cannot retain their input's storage.
   void receive(const void * data, std::size_t size);
   bool endpoint_ready(const std::string & topic, bool publisher) const;
   void check() const;

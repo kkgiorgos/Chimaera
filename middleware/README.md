@@ -65,6 +65,27 @@ In middleware mode, the original endpoints own QoS, history and freshness.
 Legacy bridge queue coalescing and bridge-level stereo expiry are bypassed;
 the existing ball-catching consumer still rejects expired or unmatched frames.
 
+Router queues share owning `Packet` buffers, including local fanout. A packet
+must remain immutable after submission. `Router::take()` transfers its owner to
+the coordinator; `receive(Packet)` retains that owner until each matching socket
+has accepted the bytes or disconnected. The bridge adopts received DMA loans,
+so a receive slot is reposted only after the last socket queue releases it.
+The raw-pointer `receive(data, size)` overload makes one defensive copy for
+callers without an owner. Queue capacity still charges the complete packet per
+recipient, even when those recipients share storage.
+
+The participant sends the CDDS header and RTPS payload using scatter/gather I/O.
+The router reads each validated payload directly into its final allocation.
+These changes remove seven of the eight full-payload userspace copies previously
+counted on the host-to-guest path; the host mailbox copy, socket-kernel copies,
+DDS history and typed serialization/deserialization remain. Guest-to-host traffic
+also retains TX staging and the paused host mailbox read. Rebuild the DDS library
+and bridge together and restage the guest bundle when upgrading the `Packet` API.
+The [KVM comparison](../docs/chimaera-dds-copy-reduction-2026-10-21.md) records
+mixed latency results: lower means without the image verifier, higher means
+with it, and variable tails. Reduced copying alone does not guarantee lower
+callback delay under application CPU load.
+
 The RMW overlay also carries `ros_discovery_info`, translates graph queries
 through the configured aliases, checks endpoint message types and reports
 endpoint creation/disposal to the runtime. Unselected application endpoints

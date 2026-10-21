@@ -2,6 +2,7 @@
 #include <fastdds/rtps/transport/TransportReceiverInterface.h>
 
 #include <atomic>
+#include <chimaera_dds_transport/packet.hpp>
 #include <chimaera_dds_transport/transport.hpp>
 #include <chrono>
 #include <cstdio>
@@ -45,11 +46,14 @@ class Transport final : public TransportInterface
   std::map<unsigned, std::shared_ptr<Channel>> channels_;
   std::thread reader_;
 
-  bool send_packet(const std::vector<uint8_t> & packet)
+  bool send_packet(
+    wire::Type type, const wire::Locator & source, const wire::Locator & destination,
+    const void * body = nullptr, std::size_t size = 0)
   {
+    const auto prefix = wire::header(type, source, destination, size);
     std::lock_guard lock(send_mutex_);
     if (stopped_) return false;
-    if (wire::send_all(fd_, packet.data(), packet.size())) return true;
+    if (wire::send_frame(fd_, prefix, body, size)) return true;
     // A timed-out stream write may contain only part of a frame. Retire the
     // connection so another packet cannot be mistaken for its remaining bytes.
     stopped_ = true;
@@ -59,10 +63,12 @@ class Transport final : public TransportInterface
   void read()
   {
     try {
-      std::vector<uint8_t> packet(wire::header_bytes);
-      while (!stopped_ && wire::receive_all(fd_, packet.data(), wire::header_bytes)) {
-        const auto size = wire::length(packet.data(), packet.size());
-        packet.resize(size);
+      std::array<uint8_t, wire::header_bytes> prefix;
+      Packet packet;
+      while (!stopped_ && wire::receive_all(fd_, prefix.data(), prefix.size())) {
+        const auto size = wire::length(prefix.data(), prefix.size());
+        if (packet.size() < size) packet = Packet::for_overwrite(size);
+        std::memcpy(packet.data(), prefix.data(), prefix.size());
         if (!wire::receive_all(fd_, packet.data() + wire::header_bytes, size - wire::header_bytes))
           break;
         const auto destination = wire::locator(packet.data() + 28);
@@ -83,7 +89,6 @@ class Transport final : public TransportInterface
               packet.data() + wire::header_bytes, uint32_t(size - wire::header_bytes),
               channel->locator, wire::locator(packet.data() + 8));
         }
-        packet.resize(wire::header_bytes);
       }
     } catch (const std::exception & error) {
       std::fprintf(stderr, "Chimaera DDS receive: %s\n", error.what());
@@ -190,9 +195,8 @@ public:
             std::fprintf(
               stderr, "Chimaera DDS destination: port=%u side=%u\n", (**begin).port,
               (**begin).address[0]);
-          success = send_packet(wire::packet(
-                      wire::data, wire::local(descriptor_.side), **begin, bytes, size)) &&
-                    success;
+          success =
+            send_packet(wire::data, wire::local(descriptor_.side), **begin, bytes, size) && success;
         }
         return success;
       }));
@@ -214,7 +218,7 @@ public:
       if (channels_.count(locator.port)) return false;
       channels_[locator.port] = channel;
     }
-    return send_packet(wire::packet(wire::open, wire::local(descriptor_.side), locator));
+    return send_packet(wire::open, wire::local(descriptor_.side), locator);
   }
   bool CloseInputChannel(const Locator & locator) override
   {
@@ -230,7 +234,7 @@ public:
       std::lock_guard lock(channel->mutex);
       channel->receiver = nullptr;
     }
-    return send_packet(wire::packet(wire::close, wire::local(descriptor_.side), locator));
+    return send_packet(wire::close, wire::local(descriptor_.side), locator);
   }
   bool DoInputLocatorsMatch(const Locator & a, const Locator & b) const override
   {

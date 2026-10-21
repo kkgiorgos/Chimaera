@@ -2,9 +2,11 @@
 
 #include <fastdds/rtps/common/Locator.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <array>
 #include <cerrno>
 #include <chimaera_dds_transport/transport.hpp>
 #include <cstdint>
@@ -54,18 +56,26 @@ inline Locator local(unsigned side, unsigned port = 0)
   write32(value.address + 4, uint32_t(::getpid()));
   return value;
 }
-inline std::vector<uint8_t> packet(
-  Type type, const Locator & source, const Locator & destination, const void * body = nullptr,
-  std::size_t length = 0)
+inline std::array<uint8_t, header_bytes> header(
+  Type type, const Locator & source, const Locator & destination, std::size_t length = 0)
 {
   if (length > max_packet_bytes) throw std::length_error("DDS packet exceeds transport limit");
-  std::vector<uint8_t> result(header_bytes + length);
+  std::array<uint8_t, header_bytes> result{};
   std::memcpy(result.data(), "CDDS", 4);
   result[4] = 1;
   result[5] = type;
   locator(result.data() + 8, source);
   locator(result.data() + 28, destination);
   write32(result.data() + 48, uint32_t(length));
+  return result;
+}
+inline std::vector<uint8_t> packet(
+  Type type, const Locator & source, const Locator & destination, const void * body = nullptr,
+  std::size_t length = 0)
+{
+  const auto prefix = header(type, source, destination, length);
+  std::vector<uint8_t> result(header_bytes + length);
+  std::memcpy(result.data(), prefix.data(), header_bytes);
   if (length) std::memcpy(result.data() + header_bytes, body, length);
   return result;
 }
@@ -95,6 +105,33 @@ inline bool send_all(int fd, const uint8_t * bytes, std::size_t size)
     if (count <= 0) return false;
     bytes += count;
     size -= std::size_t(count);
+  }
+  return true;
+}
+// The caller serializes complete frames on the stream. sendmsg may stop inside
+// either segment; advance both iovecs without rebuilding/copying the payload.
+inline bool send_frame(
+  int fd, const std::array<uint8_t, header_bytes> & prefix, const void * body, std::size_t size)
+{
+  iovec segments[2]{
+    {const_cast<uint8_t *>(prefix.data()), prefix.size()}, {const_cast<void *>(body), size}};
+  msghdr message{};
+  message.msg_iov = segments;
+  message.msg_iovlen = size ? 2 : 1;
+  while (message.msg_iovlen) {
+    const auto count = ::sendmsg(fd, &message, MSG_NOSIGNAL);
+    if (count < 0 && errno == EINTR) continue;
+    if (count <= 0) return false;
+    auto remaining = std::size_t(count);
+    while (message.msg_iovlen && remaining >= message.msg_iov->iov_len) {
+      remaining -= message.msg_iov->iov_len;
+      ++message.msg_iov;
+      --message.msg_iovlen;
+    }
+    if (message.msg_iovlen) {
+      message.msg_iov->iov_base = static_cast<uint8_t *>(message.msg_iov->iov_base) + remaining;
+      message.msg_iov->iov_len -= remaining;
+    }
   }
   return true;
 }

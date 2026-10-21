@@ -128,11 +128,11 @@ int main(int argc, char ** argv)
         }
         host_bytes += packet->size();
         largest_host_packet = std::max(largest_host_packet, packet->size());
-        guest.receive(packet->data(), packet->size());
+        guest.receive(std::move(*packet));
         ++host_packets;
       }
       while (auto packet = guest.take()) {
-        host.receive(packet->data(), packet->size());
+        host.receive(std::move(*packet));
         ++guest_packets;
       }
       if (host_status == -1) {

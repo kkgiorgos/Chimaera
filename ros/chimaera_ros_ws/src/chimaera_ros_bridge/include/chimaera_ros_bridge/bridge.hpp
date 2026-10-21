@@ -136,8 +136,8 @@ public:
     if (router_) {
       auto packet = router_->take();
       if (!packet) return std::nullopt;
-      auto bytes = allocate(packet->size());
-      std::memcpy(bytes.data(), packet->data(), packet->size());
+      auto bytes = chimaera::Message::adopt(
+        reinterpret_cast<std::byte *>(packet->data()), packet->size(), packet->owner());
       ++transmitted_;
       return bytes;
     }
@@ -153,7 +153,8 @@ public:
   {
     if (on_receive) on_receive(bytes);
     if (router_) {
-      router_->receive(bytes.data(), bytes.size());
+      auto owner = std::make_shared<chimaera::Message>(std::move(bytes));
+      router_->receive(chimaera_dds::Packet::adopt(owner->data(), owner->size(), owner));
       ++received_;
       last_receive_ = std::chrono::steady_clock::now();
       return;

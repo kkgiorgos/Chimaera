@@ -77,8 +77,11 @@ int main()
       pollfd before{receiver.fd, POLLIN, 0};
       require(::poll(&before, 1, 0) == 0, "packet bypassed the simulation boundary");
       auto transferred = host.take();
-      require(transferred && *transferred == packet, "outgoing packet changed");
-      guest.receive(transferred->data(), transferred->size());
+      require(
+        transferred && transferred->size() == packet.size() &&
+          !std::memcmp(transferred->data(), packet.data(), packet.size()),
+        "outgoing packet changed");
+      guest.receive(std::move(*transferred));
       pollfd after{receiver.fd, POLLIN, 0};
       require(::poll(&after, 1, 2000) == 1, "admitted packet not delivered");
       std::vector<uint8_t> received(packet.size());
@@ -155,9 +158,96 @@ int main()
       }
       require(rejected, "runtime failure did not persist");
     }
+    {
+      Router host(root + "/fragmented", 1);
+      Client sender(root + "/fragmented");
+      std::vector<uint8_t> body(921600, 0xa5);
+      std::memcpy(body.data(), "RTPS", 4);
+      const auto packet =
+        wire::packet(wire::data, wire::local(1), wire::local(2), body.data(), body.size());
+      // Deliberately split the header and payload; the next frame immediately
+      // follows the first on the same byte stream.
+      for (const auto [begin, end] :
+           {std::pair{0u, 7u}, {7u, 51u}, {51u, 63u}, {63u, unsigned(packet.size())}}) {
+        require(wire::send_all(sender.fd, packet.data() + begin, end - begin), "split send failed");
+        std::this_thread::sleep_for(1ms);
+      }
+      sender.send(packet);
+      require(wait([&] { return host.pending() == 2; }), "split/coalesced frames missing");
+      for (unsigned i = 0; i < 2; ++i) {
+        auto received = host.take();
+        require(
+          received && received->size() == packet.size() &&
+            !std::memcmp(received->data(), packet.data(), packet.size()),
+          "split/coalesced frame corrupted");
+      }
+    }
+    {
+      Router guest(root + "/loans", 2);
+      Client fast(root + "/loans"), slow(root + "/loans");
+      const auto local = wire::local(2, 7);
+      for (auto * receiver : {&fast, &slow}) {
+        receiver->send(wire::packet(wire::open, local, local));
+        const std::string topic = receiver == &fast ? "/fast" : "/slow";
+        std::vector<uint8_t> registration{0};
+        registration.insert(registration.end(), topic.begin(), topic.end());
+        receiver->send(
+          wire::packet(wire::endpoint, local, local, registration.data(), registration.size()));
+        require(wait([&] { return guest.endpoint_ready(topic, false); }), "fanout not ready");
+      }
+      std::vector<uint8_t> body(chimaera_dds::max_packet_bytes, 0x5a);
+      std::memcpy(body.data(), "RTPS", 4);
+      auto destination = local;
+      destination.address[0] = 0;  // Broadcast to both local recipients.
+      const auto expected =
+        wire::packet(wire::data, wire::local(1), destination, body.data(), body.size());
+      auto storage = std::make_shared<std::vector<uint8_t>>(expected);
+      std::weak_ptr<void> lifetime = storage;
+      guest.receive(chimaera_dds::Packet::adopt(storage->data(), storage->size(), storage));
+      storage.reset();
+      require(!lifetime.expired(), "queued loan released early");
+      std::vector<uint8_t> received(expected.size());
+      require(
+        wire::receive_all(fast.fd, received.data(), received.size()) && received == expected,
+        "loaned fanout corrupted");
+      require(!lifetime.expired(), "slow recipient lost its loan");
+      ::close(slow.fd);
+      slow.fd = -1;
+      require(wait([&] { return lifetime.expired(); }), "disconnected recipient retained loan");
+      guest.check();
+    }
+    {
+      int sockets[2];
+      require(!::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets), "socketpair failed");
+      int capacity = 1024;
+      ::setsockopt(sockets[0], SOL_SOCKET, SO_SNDBUF, &capacity, sizeof(capacity));
+      timeval timeout{0, 10000};
+      ::setsockopt(sockets[0], SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+      std::vector<uint8_t> body(chimaera_dds::max_packet_bytes, 0x3c);
+      const auto prefix = wire::header(wire::data, wire::local(1), wire::local(2), body.size());
+      std::vector<uint8_t> received(prefix.size() + body.size());
+      bool complete = false;
+      std::thread reader(
+        [&] { complete = wire::receive_all(sockets[1], received.data(), received.size()); });
+      const auto sent = wire::send_frame(sockets[0], prefix, body.data(), body.size());
+      ::shutdown(sockets[0], SHUT_WR);
+      reader.join();
+      require(
+        sent && complete && !std::memcmp(received.data(), prefix.data(), prefix.size()) &&
+          !std::memcmp(received.data() + prefix.size(), body.data(), body.size()),
+        "scatter/gather stream corrupted");
+      const auto empty = wire::header(wire::open, wire::local(1), wire::local(1));
+      require(wire::send_frame(sockets[1], empty, nullptr, 0), "empty frame send failed");
+      require(
+        wire::receive_all(sockets[0], received.data(), empty.size()) &&
+          !std::memcmp(received.data(), empty.data(), empty.size()),
+        "empty frame corrupted");
+      ::close(sockets[0]);
+      ::close(sockets[1]);
+    }
     std::filesystem::remove(root);
     std::cout << "Router boundary, byte integrity, malformed ingress, endpoint lifecycle and "
-                 "capacity passed\n";
+                 "capacity; split frames, shared loans, fanout and scatter/gather passed\n";
     return 0;
   } catch (const std::exception & error) {
     std::cerr << error.what() << '\n';
