@@ -12,6 +12,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ros/ball_catching_ws/scripts"))
 from run_memory_suite import gem5_trial, load_config, plan, prepare_bundle, routes, write_json
+import run_memory_suite
 
 
 def sha256(path):
@@ -32,6 +33,8 @@ def main():
     parser.add_argument("--middleware", choices=("bridge", "fastdds"), default="fastdds")
     parser.add_argument("--backend", choices=("m5", "dma"), default="m5")
     parser.add_argument("--dma-module", type=Path)
+    parser.add_argument("--clock-probe", action="store_true",
+                        help="Include an optional diagnostic process; exclude from final measurements")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -50,6 +53,18 @@ def main():
     if len(points) != 1 or points[0]["pressure"]:
         raise ValueError("Acceptance configuration must contain one unpressured baseline")
     write_json(output / "routes.json", routes())
+    if args.clock_probe:
+        original_session = run_memory_suite.session
+
+        def diagnostic_session(*values, **kwargs):
+            spec = original_session(*values, **kwargs)
+            spec['deploy']['install_trees'].append(dict(
+                source=str(ROOT / 'middleware'), destination='diagnostics'))
+            spec['guest']['processes'].append(dict(name='clock_probe', command=[
+                'python3', run_memory_suite.GUEST_ROOT + '/diagnostics/clock_probe.py']))
+            return spec
+
+        run_memory_suite.session = diagnostic_session
     bundle = prepare_bundle(output, data, points)
     artifacts = dict(image=args.image, kernel=args.kernel, guest_bundle=bundle,
                      gem5=args.gem5_root / 'build/X86/gem5.opt')
@@ -59,6 +74,7 @@ def main():
         source_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
                                                 text=True).strip(),
         cpu_type=args.cpu_type, middleware=args.middleware, backend=args.backend,
+        clock_probe=args.clock_probe,
         artifacts={name: dict(path=str(path.resolve()), sha256=sha256(path))
                    for name, path in artifacts.items()}))
     (output / 'source.patch').write_bytes(subprocess.check_output(
