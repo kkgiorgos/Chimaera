@@ -1,0 +1,27 @@
+{
+  "base_revision": "0e7640bdcf50022c66031f8697a6bda2a88b59d0",
+  "sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+  "physical_host": "ubuntu-george",
+  "gated_runtime_source_sha256": "91454c6dfa8ba63436040a9203c9a22bd1a852f8b61f0dcefc86c1b8052855e0",
+  "quantum_config_sha256": "2137f74b5f30d9f4405e31ea6940fd3c705b06a2652a784614e1d51f4d39b2ec",
+  "runtime_source_sha256": "e0019a78c4085db4431414863909662d266cd31c60a58bc42d50a4c8c90a4512",
+  "profiler_sha256": {
+    "profiling/chimaera_rewrite/analyze_pipeline.py": "972d05d7fd65cde7881b4956dbc9af179a7e512c4f820724af8b56c403f9c479",
+    "profiling/chimaera_rewrite/instrument_pipeline.py": "090bc0314062b4c48804c86340c59a4d71c55abee47bec33d79abe0d8d69371d",
+    "profiling/chimaera_rewrite/run_pipeline.py": "196b458f7bba64d1e7455ed46a76b1c10c1190547ba1206e27821628fd402c7b",
+    "profiling/chimaera_rewrite/test_analyze_pipeline.py": "4cdd45c6ce6510241a3638130078db06ca0fdf3d807b403bf2d6d5ce7a8d33e9",
+    "profiling/chimaera_rewrite/pipeline_trace.hpp": "1a22cced6f9053f3801ac23928fd7b2e6f2847a8ddbdb06dcb1703537008832c",
+    "profiling/chimaera_rewrite/render_pipeline.py": "5a9c9f8da1e83fd01ebf7d75cce22e97b9cea25038c45f78689134edb5a558e1",
+    "profiling/chimaera_rewrite/test_pipeline_trace.cpp": "a44fb2629c85e254ecc39cfbfcb9e76aafc5c5f7233f2a135c34358080d0945f",
+    "profiling/chimaera_rewrite/pipeline_trace.cpp": "62a57dd463414e14bb8f0fdcfb681bd758872d820f86b1eee7633fa27ea951a4"
+  },
+  "assumptions": [
+    "All newly executed guest simulations use X86KvmCPU; native modes execute without a guest.",
+    "The frozen no-verify KVM baseline overlapped the start of the first traced pilot; later traced cases and controls ran sequentially. Treat this as a scheduling confound, not a controlled overhead estimate.",
+    "The first followup with guest_diagnostics stalled before complete guest event export. It was stopped by SIGTERM to its driver and is retained as failed.",
+    "The first two KVM cases in baseline failed preflight because the container lacked the KVM device group; no VM measurement was produced.",
+    "The quantum experiment changes only the installed gem5 Python config to a 100 us KVM event-queue quantum; guest binary hashes remain unchanged.",
+    "The original overlay-off controls leave the export deadline clock read enabled. The gated-off controls disable it with the recorder; the separate gated source archive records this correction.",
+    "Clock and CPU-time fields from guest Linux are quantized. Cross-core KVM stages can violate causal timestamp order; rejected joins remain in analysis.json."
+  ]
+}

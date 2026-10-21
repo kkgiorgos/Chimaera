@@ -1,0 +1,134 @@
+[
+  {
+    "group": "baseline",
+    "name": "chimaera-verify0",
+    "result": "failed",
+    "error": "KVM mode requires a readable/writable /dev/kvm"
+  },
+  {
+    "group": "baseline",
+    "name": "chimaera-verify1",
+    "result": "failed",
+    "error": "KVM mode requires a readable/writable /dev/kvm"
+  },
+  {
+    "group": "baseline",
+    "name": "native_free-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "baseline",
+    "name": "native_free-verify1",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "baseline",
+    "name": "native_stepped-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "baseline",
+    "name": "native_stepped-verify1",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "kvm-baseline",
+    "name": "kvm-chimaera-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "kvm-baseline",
+    "name": "kvm-chimaera-verify1",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "kvm-trace-10ms",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "kvm-trace-1ms",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "kvm-trace-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "kvm-trace-verify1",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "native-free-trace",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "traces",
+    "name": "native-stepped-trace",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "followup",
+    "name": "kvm-clean-trace-4cores",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "followup",
+    "name": "kvm-clean-trace-verify1",
+    "result": "failed",
+    "error": "Physics wait cancelled; see driver.log"
+  },
+  {
+    "group": "overlay-off",
+    "name": "kvm-overlay-off-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "overlay-off",
+    "name": "kvm-overlay-off-verify1",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "quantum",
+    "name": "kvm-clean-trace-verify1-q100us",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "quantum",
+    "name": "kvm-trace-1ms-q100us",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "gated-off",
+    "name": "kvm-gated-off-verify0",
+    "result": "complete",
+    "error": null
+  },
+  {
+    "group": "gated-off",
+    "name": "kvm-gated-off-verify1",
+    "result": "complete",
+    "error": null
+  }
+]

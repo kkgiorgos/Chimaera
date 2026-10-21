@@ -153,6 +153,63 @@ RX transfers agrees. It then checks that the intervals reconstruct callback
 latency; otherwise it reports separate intervals and the reason it refused
 attribution. Completion-to-ACK includes IRQ delivery and driver handling.
 
+### DDS image pipeline diagnostics in KVM
+
+`instrument_pipeline.py OUTPUT --rmw-source PATCHED_RMW_SOURCE` copies the bridge,
+transport and pinned RMW sources into an isolated diagnostic overlay. It adds a
+shared buffered recorder to the DDS library and traces image identities from the
+CDR header through serialization, both local IPC hops, router queues, DMA
+completion, typed deserialization and callback verification. It leaves the
+repository's application/transport sources and the wire protocol unchanged.
+Build all four overlay packages in Release mode: `chimaera_dds_transport`,
+`rmw_fastrtps_shared_cpp`, `rmw_fastrtps_cpp` and `chimaera_ros_bridge`. Enable
+`BUILD_LATENCY_BENCHMARK` and `BUILD_GAZEBO_BRIDGE`, and set
+`GEM5_TRANSPORT_ROOT=OUTPUT/transport` and the matching gem5 include/libm5 paths.
+Stage the resulting runtime with the ordinary latency `stage` command.
+
+Use the existing explicit case-list format, `cpu_type: "kvm"`,
+`middleware_transport: "fastdds"`, `transport_backend: "dma"`, and
+`gem5_debug_flags: "ChimaeraDma"`. The runner rejects detailed guest CPU models.
+Keep matched native controls and run tracing-disabled controls separately:
+
+```bash
+python3 profiling/chimaera_rewrite/dds_large_messages.py \
+  profiling/chimaera_rewrite/run_pipeline.py CASES.json RUNS \
+  --runtime RUNTIME --bundle GUEST_BUNDLE --gem5-root GEM5_ROOT \
+  --image READ_ONLY_IMAGE --kernel MATCHING_KERNEL
+python3 profiling/chimaera_rewrite/analyze_pipeline.py RUNS --output analysis.json
+python3 profiling/chimaera_rewrite/render_pipeline.py analysis.json report.html
+```
+
+The guest exports CSVs through address-mode m5 only after the source/drain
+window. The host buffers its records until that same boundary. No per-image
+console logging or pixel hashing is added. The analyzer uses the endpoint's
+original publication/callback timestamps, checks every stage's image identity
+and monotonicity, and verifies that its intervals reconstruct each latency.
+Device traces still require a FIFO join; bulk count, bytes, uniqueness and
+completion ordering must agree. Missing, duplicated or inconsistent records
+remain explicit rejections. Subintervals involving concurrent RTPS processing
+can overlap and are reported separately from the additive partition.
+
+KVM trace calls perturb execution. Compare them with the same overlay with
+`CHIMAERA_PIPELINE` unset; do not subtract a traced stage distribution from an
+untraced total or a historical detailed-CPU result. KVM uses
+`atomic_noncaching` memory and its DMA transfer can have zero simulated
+duration. The default 1 ms KVM event-queue quantum also limits cross-core
+timestamp precision. Retain the deployed `gem5/config.json`, rejected joins and
+quantum changes with the evidence. Guest OS and thread CPU clocks may be
+quantized; they are additional diagnostics, not replacement simulation clocks.
+
+Validate the image parser and attribution guards with:
+
+```bash
+c++ -std=c++17 -O2 -pthread profiling/chimaera_rewrite/pipeline_trace.cpp \
+  profiling/chimaera_rewrite/test_pipeline_trace.cpp -o /tmp/pipeline-trace-test
+/tmp/pipeline-trace-test
+PYTHONPATH=profiling/chimaera_rewrite python3 -m unittest discover \
+  -s profiling/chimaera_rewrite -p test_analyze_pipeline.py
+```
+
 Serial-console tracing can add modeled delay. `make_tmpfs_trace_bundle.py
 BASE_BUNDLE M5_UTILITY NEW_BUNDLE` keeps runtime binaries unchanged, redirects
 guest stderr into RAM, and exports the file during drain with address-mode m5.
