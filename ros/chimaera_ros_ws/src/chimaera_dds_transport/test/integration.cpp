@@ -155,12 +155,12 @@ int main(int argc, char ** argv)
       ::waitpid(guest_pid, &guest_status, 0);
     }
     std::printf(
-      "DDS packets: host=%u guest=%u; endpoint status: host=%d guest=%d\n", host_packets,
-      guest_packets, host_status, guest_status);
+      "DDS packets: host=%u guest=%u; largest host packet=%zu; endpoint status: host=%d guest=%d\n",
+      host_packets, guest_packets, largest_host_packet, host_status, guest_status);
     // All three unbounded images must have crossed the controlled packet path;
     // graph traffic alone cannot make a local DDS bypass pass this test.
     return host_status == 0 && guest_status == 0 && host_bytes >= 3 * 921600 &&
-               largest_host_packet > 900000 && guest_packets
+               largest_host_packet > 921600 && guest_packets
              ? 0
              : 1;
   } catch (const std::exception & error) {
