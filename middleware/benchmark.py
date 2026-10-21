@@ -93,6 +93,10 @@ def main():
                     duplicates=metric['duplicates'], reordered=metric['reordered']))
     (output / 'delivery-check.json').write_text(json.dumps(dict(
         all_cases_complete=complete, failures=failures), indent=2) + '\n')
+    if complete:
+        subprocess.run([sys.executable, str(ROOT / 'middleware/report.py'),
+                        str(output / 'evidence/attempts.json'), '--output',
+                        str(output / 'evidence')], check=True)
     return 0 if complete and not failures else 1
 
 

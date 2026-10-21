@@ -118,3 +118,9 @@ bundle's `lib/` directory and records their hashes in `runtime-libraries.json`.
 The guest keeps its own glibc and loader. This avoids depending on source/build
 paths or on a preinstalled unpatched RMW. Old Fast DDS bundles without these
 libraries are rejected before boot.
+Completed matrices also export `evidence/middleware-comparison.json` and `.csv`.
+The comparison rechecks native references, runtime/DDS fingerprints, CPU geometry
+and simulator identity. Percentage reductions require complete, ordered, unique
+delivery across the workload and equal source counts for the compared stream.
+Regenerate them with `python3 middleware/report.py PATH/evidence/attempts.json
+--output PATH/evidence`.
