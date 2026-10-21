@@ -1,0 +1,8 @@
+3275001000133: board.pc.south_bridge.ide.disks: Posting Interrupt
+3275001000133: board.pc.south_bridge.ide.int_primary[1]: Raise interrupt.
+3275001000133: board.pc.south_bridge.io_apic: Received interrupt 14.
+3275001000133: board.pc.south_bridge.ide.disks: Clearing Interrupt
+3275001000133: board.pc.south_bridge.ide.int_primary[1]: Lower interrupt.
+3276006001001: board.pc.south_bridge.ide.disks: Posting Interrupt
+3276006001001: board.pc.south_bridge.ide.int_primary[1]: Raise interrupt.
+3276006001001: board.pc.south_bridge.io_apic: Received interrupt 14.

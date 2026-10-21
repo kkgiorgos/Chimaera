@@ -300,9 +300,12 @@ X86ISA::I8259::raiseInterruptPin(int number)
     if (number >= NumLines)
         fatal("Line number %d doesn't exist. The max is %d.\n",
                 number, NumLines - 1);
-    if (!pinStates[number])
+    if (!pinStates[number]) {
+        // Delivery can release our event queue while a KVM CPU handles the
+        // interrupt. Preserve any nested acknowledgement that lowers the pin.
+        pinStates[number] = true;
         signalInterrupt(number);
-    pinStates[number] = true;
+    }
 }
 
 void

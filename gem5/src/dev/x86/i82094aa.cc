@@ -269,9 +269,13 @@ void
 X86ISA::I82094AA::raiseInterruptPin(int number)
 {
     assert(number < TableSize);
-    if (!pinStates[number])
+    if (!pinStates[number]) {
+        // Atomic delivery can migrate to a KVM CPU's event queue, allowing
+        // the device to acknowledge and lower this pin before we return.
+        // Publish the edge first so that we do not overwrite that lowering.
+        pinStates[number] = true;
         requestInterrupt(number);
-    pinStates[number] = true;
+    }
 }
 
 void

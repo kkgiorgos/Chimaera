@@ -1,0 +1,7 @@
+gem5 compiled Oct 21 2026 11:22:09
+gem5 started Oct 21 2026 08:28:06
+command line: /candidate --outdir=/output/suite/case-007-attempt-001/gem5 --debug-flags=I82094AA,IntPin,IdeDisk --debug-file=interrupts.log -p /opt/chimaera/ros/share/chimaera_ros_bridge/config /app/ros/ball_catching_ws/scripts/gem5_ball_catching.py --gem5-root /opt/chimaera/gem5 --experiment /output/suite/case-007-attempt-001/execution.json --bundle /assets/inputs/prepared/guest.tar.gz --transport-backend dma --image /assets/guest.img --kernel /assets/kernel --managed-shutdown --guest-file /tmp/chimaera-ball-session.json=/output/suite/case-007-attempt-001/guest-session.json --guest-file /tmp/chimaera-ball.urdf=/output/suite/case-007-attempt-001/robot.urdf --guest-file /tmp/chimaera-ball-start=/output/suite/case-007-attempt-001/start-guest.sh
+[host] Booting until the guest bridge's workbegin marker
+switching cpus
+[host] Timing socket ready at /tmp/chimaera_time.sock; gem5 paused at 267610218963274
+[host] Timing server stopped at tick 267610218963274

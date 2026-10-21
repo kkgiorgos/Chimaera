@@ -1,0 +1,34 @@
+2200001000133: board.pc.south_bridge.ide.disks: doWriteDone: curPrd byte count 4096, eot 0x8000 cmd bytes left:0
+2200001000133: board.pc.south_bridge.ide.disks: Posting Interrupt
+2200001000133: board.pc.south_bridge.ide.int_primary[0]: Raise interrupt.
+2200001000133: board.pc.south_bridge.ide.int_primary[1]: Raise interrupt.
+2200001000133: board.pc.south_bridge.io_apic: Received interrupt 14.
+2200001000133: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x2 data 0x50
+2200001000133: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x2 data 0x50
+2200001000133: board.pc.south_bridge.ide.disks: Clearing Interrupt
+2200001000133: board.pc.south_bridge.ide.int_primary[0]: Lower interrupt.
+2200001000133: board.pc.south_bridge.ide.int_primary[1]: Lower interrupt.
+2200001000133: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x7 data 0x50
+2202000000000: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x7 data 0x50
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x6 data 0xa0
+2202000000000: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x2 data 0x50
+2202000000000: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x7 data 0x50
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x1 data 0
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x2 data 0x8
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x3 data 0xa0
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x4 data 0xb0
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x5 data 0x5b
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x6 data 0xe0
+2202000000000: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x7 data 0x50
+2202000000000: board.pc.south_bridge.ide.disks: Setting cmdBytesLeft to 4096 in readdma
+2202000000000: board.pc.south_bridge.ide.disks: Write to disk at offset: 0x7 data 0xc8
+2202000000000: board.pc.south_bridge.ide.disks: Read to disk at offset: 0x2 data 0x58
+2202000000125: board.pc.south_bridge.ide.disks: PRD: baseAddr:0x2754000 (0x2754000) byteCount:4096 (8) eot:0x8000 sector:6008992
+2202000000125: board.pc.south_bridge.ide.disks: doDmaWrite, diskDelay: 1000000 totalDiskDelay: 1000008
+2202000000125: board.pc.south_bridge.ide.disks: doDmaWrite, bytesRead: 4096 cmdBytesLeft: 0
+2202001000133: board.pc.south_bridge.ide.disks: doDmaWrite: not done curPrd byte count 4096, eot 0x8000
+2202001000133: board.pc.south_bridge.ide.disks: doDmaWrite: done curPrd byte count 4096, eot 0x8000
+2202001000133: board.pc.south_bridge.ide.disks: doWriteDone: curPrd byte count 4096, eot 0x8000 cmd bytes left:0
+2202001000133: board.pc.south_bridge.ide.disks: Posting Interrupt
+2202001000133: board.pc.south_bridge.ide.int_primary[0]: Raise interrupt.
+2202001000133: board.pc.south_bridge.ide.int_primary[1]: Raise interrupt.

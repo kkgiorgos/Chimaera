@@ -1,0 +1,47 @@
+{
+  "experiment": "dc58cdec8a3f4b308f46f7ef1d5916f3",
+  "cases": [
+    {
+      "machine": "pop-os",
+      "attempt": "5988fabd0756460d866e7b980fadcb10",
+      "case": "case-007",
+      "archive_sha256": "b1da7686814d2fd152651105a141f0e88c31ebea61118e4aae058f852deeda40",
+      "exit_code": 2,
+      "oom": false,
+      "serial_evidence": [
+        "[   31.723252] ata1: lost interrupt (Status 0x50)",
+        "[   62.441582] ata1: lost interrupt (Status 0x50)",
+        "[   62.623554] blk_update_request: I/O error, dev sda, sector 40496 op 0x0:(READ) flags 0x80000 phys_seg 27 prio class 0",
+        "[   62.624554] EXT4-fs error (device sda2): __ext4_get_inode_loc_noinmem:4437: inode #55864: block 4550: comm init: unable to read itable block",
+        "[   93.153913] ata1: lost interrupt (Status 0x50)",
+        "[   93.323887] blk_update_request: I/O error, dev sda, sector 37128 op 0x0:(READ) flags 0x80000 phys_seg 3 prio class 0",
+        "[   93.324887] EXT4-fs error (device sda2): __ext4_get_inode_loc_noinmem:4437: inode #49132: block 4129: comm python3: unable to read itable block",
+        "Fatal Python error: init_import_site: Failed to import the site module",
+        "ModuleNotFoundError: No module named 'site'",
+        "CHIMAERA_GUEST_INIT_FAILED=1"
+      ],
+      "launch_evidence": [
+        "[gem5.opt-5] RuntimeError: guest finished before its bridge was ready: m5_fail instruction encountered (code 1); see /output/suite/case-007-attempt-001/gem5/board.pc.com_1.device",
+        "[gazebo_host_bridge-4] Controller shutdown: gem5 timing: connect /tmp/chimaera_time.sock: No such file or directory",
+        "[gazebo_host_bridge-4] Host bridge: startup cancelled"
+      ]
+    },
+    {
+      "machine": "ubuntu-george",
+      "attempt": "e0a541ac3d2e40458f2794b8ab30e9a9",
+      "case": "case-001",
+      "archive_sha256": "70dd473e7d7f7c3aa439dd2a0f644f68d0829e07290c673e28e5fd1a152ee418",
+      "exit_code": 2,
+      "oom": false,
+      "serial_evidence": [
+        "[   32.237180] ata1: lost interrupt (Status 0x50)",
+        "[   32.448148] blk_update_request: I/O error, dev sda, sector 4029928 op 0x0:(READ) flags 0x80700 phys_seg 1 prio class 0"
+      ],
+      "launch_evidence": [
+        "[gazebo_host_bridge-4] Controller shutdown: gem5 timing: connect /tmp/chimaera_time.sock: No such file or directory",
+        "[gazebo_host_bridge-4] Host bridge: timed out waiting for gem5 timing socket /tmp/chimaera_time.sock",
+        "[gem5.opt-5] RuntimeError: guest finished before its bridge was ready: user interrupt received (code 0); see /output/suite/case-001-attempt-001/gem5/board.pc.com_1.device"
+      ]
+    }
+  ]
+}

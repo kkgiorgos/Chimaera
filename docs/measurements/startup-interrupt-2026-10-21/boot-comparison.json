@@ -1,0 +1,16 @@
+{
+  "old": {
+    "lost_interrupts": 4,
+    "disk_errors": 3,
+    "result": "failed: Guest disk I/O errors during kernel/driver smoke"
+  },
+  "fixed": {
+    "lost_interrupts": 0,
+    "disk_errors": 0,
+    "result": {
+      "status": "passed",
+      "cause": "m5_exit instruction encountered",
+      "code": 0
+    }
+  }
+}

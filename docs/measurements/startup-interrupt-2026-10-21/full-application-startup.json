@@ -1,0 +1,27 @@
+{
+  "result": "passed startup protocol and detailed-CPU switch",
+  "experiment": "dc58cdec8a3f4b308f46f7ef1d5916f3",
+  "case": "case-007",
+  "application_image": "sha256:84ba441391caeca0517d51fec925c82ad6d5de5f409ce942247fb082bbf88a0b",
+  "simulator_sha256": "efec60ae5c8535e397c8d9cef40bb5ea01960d4de17bfdd93bab253ec98574d3",
+  "protocol_assertions": {
+    "status": "PAUSED",
+    "quit": "BYE",
+    "gem5_exit_code": 0
+  },
+  "cpu_roi": {
+    "cpu_type": "timing",
+    "num_cores": 4,
+    "simobjects": [
+      "BaseTimingSimpleCPU",
+      "BaseTimingSimpleCPU",
+      "BaseTimingSimpleCPU",
+      "BaseTimingSimpleCPU"
+    ],
+    "tick": 267610218963274
+  },
+  "lost_interrupts": 0,
+  "disk_errors": 0,
+  "detailed_steps": 0,
+  "harness_note": "STATUS, QUIT and simulator-exit assertions passed. The wrapper then failed its serial readiness-string assertion: UART output was truncated at workbegin. Post-run validation uses the timing-server ready/stopped messages, saved four-core detailed CPU state, and absence of disk errors. No full catch was simulated."
+}
