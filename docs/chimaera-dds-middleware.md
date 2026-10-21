@@ -55,8 +55,12 @@ semantics. Do not describe the implementation as zero-copy.
 - 223 bridge/ball workflow tests pass, with two environment-dependent skips;
   both robot CTest targets pass. The native baseline catches the ball, with
   `inside_cup_at_deadline` and `cup_capture` scoring.
-- The SDK simulator predates `ed9c7a6` and lost ATA interrupts during a disposable
-  KVM attempt. That attempt was stopped and retained; the current simulator is
-  being rebuilt before full-system acceptance.
+- Rebuilt the simulator with `ed9c7a6`'s interrupt acknowledgement fix after
+  identifying lost ATA interrupts in the older SDK binary. The corrected binary
+  boots the four-core guest and reaches the application workbegin barrier.
+- Removed the UDP packet-size ceiling for explicit local-only participant
+  profiles. A full 640x480 RGB image now crosses the tested path in one RTPS
+  packet. The matched benchmark gives both implementations the same 1 MiB
+  SHM-only profile to isolate middleware handoff costs.
 - End-to-end acceptance and matched performance measurements remain in progress;
   no latency improvement has yet been measured.

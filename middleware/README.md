@@ -52,6 +52,10 @@ simulation-clock qualification; the initial acceptance uses the existing
 application's default infinite policies. DDS fragmentation and per-topic QoS
 remain active. Camera pairing occurs at the consumer by capture timestamp;
 this transport does not provide a cross-topic DDS transaction.
+For explicitly local profiles containing only SHM and loopback-whitelisted UDP,
+the hook retains SHM with a 1 MiB RTPS packet limit and removes loopback UDP.
+Otherwise UDP's approximately 64 KiB limit fragments each camera image even
+when its destination uses Chimaera. Networked transport profiles are preserved.
 In middleware mode, the original endpoints own QoS, history and freshness.
 Legacy bridge queue coalescing and bridge-level stereo expiry are bypassed;
 the existing ball-catching consumer still rejects expired or unmatched frames.
@@ -97,3 +101,6 @@ The default window is two seconds, with 0.25 s warmup and 0.75 s drain. Every
 attempt is retained, and the source patch/archive and binary hashes identify
 the measured implementation. KVM mode is available for harness smoke checks;
 TimingSimpleCPU is the default for latency qualification.
+All matrix cases use the same SHM-only, 1 MiB local DDS profile, including the
+native controls and legacy bridge, to keep packet-size tuning out of the
+middleware handoff comparison.

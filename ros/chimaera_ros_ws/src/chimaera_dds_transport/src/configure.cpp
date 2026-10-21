@@ -1,5 +1,8 @@
+#include <fastdds/rtps/transport/UDPTransportDescriptor.h>
+#include <fastdds/rtps/transport/shared_mem/SharedMemTransportDescriptor.h>
 #include <json-c/json.h>
 
+#include <algorithm>
 #include <chimaera_dds_transport/transport.hpp>
 #include <cstdio>
 #include <cstdlib>
@@ -80,6 +83,36 @@ const Configuration & config()
   static const Configuration value;
   return value;
 }
+void configure_local_transports(eprosima::fastdds::dds::DomainParticipantQos & qos)
+{
+  using eprosima::fastdds::rtps::SharedMemTransportDescriptor;
+  using eprosima::fastdds::rtps::UDPTransportDescriptor;
+  auto & transports = qos.transport().user_transports;
+  bool local_only = !qos.transport().use_builtin_transports && !transports.empty();
+  std::shared_ptr<SharedMemTransportDescriptor> shared;
+  for (const auto & transport : transports) {
+    if (auto udp = std::dynamic_pointer_cast<UDPTransportDescriptor>(transport)) {
+      local_only = local_only && !udp->interfaceWhiteList.empty() &&
+                   std::all_of(
+                     udp->interfaceWhiteList.begin(), udp->interfaceWhiteList.end(),
+                     [](const std::string & address) {
+                       return address == "127.0.0.1" || address == "::1" || address == "lo";
+                     });
+    } else if (auto shm = std::dynamic_pointer_cast<SharedMemTransportDescriptor>(transport)) {
+      if (!shared || shm->segment_size() > shared->segment_size()) shared = shm;
+    } else {
+      local_only = false;
+    }
+  }
+  if (!local_only || !shared) return;
+  // A participant's smallest transport limit determines RTPS fragmentation.
+  // Local UDP would split a camera sample into many DMA completions. Keep SHM
+  // for ordinary local endpoints and the Chimaera transport for routed peers.
+  auto local = std::make_shared<SharedMemTransportDescriptor>(*shared);
+  local->max_message_size(max_packet_bytes);
+  local->segment_size(std::max(local->segment_size(), 4 * max_packet_bytes));
+  transports = {std::move(local)};
+}
 void announce(const char * topic, bool publisher, bool removed = false)
 {
   const auto & configuration = config();
@@ -116,6 +149,7 @@ void configure_participant(eprosima::fastdds::dds::DomainParticipantQos & qos)
 {
   const auto & configuration = config();
   if (configuration.socket.empty()) return;
+  configure_local_transports(qos);
   qos.transport().user_transports.push_back(
     std::make_shared<Descriptor>(configuration.socket, configuration.side));
   // Host wall time can advance for minutes while the guest is paused in a

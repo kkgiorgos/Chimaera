@@ -46,6 +46,7 @@ def main():
                   timeout=args.timeout, physics_step_ns=1000000, interval_us=2000,
                   poll_us=1000, cpu_type=args.cpu_type, transport_backend='dma',
                   dma_module=str(args.dma_module.resolve()), dds_shm_bytes=16777216,
+                  dds_tuning='large_shm_only', dds_max_message_bytes=1048576,
                   delivery_policy='lossless', verify_payload=True)
     cases = []
     for workload in ('synthetic', 'ball_catching'):
@@ -61,7 +62,8 @@ def main():
                 config=dict(config, mode='chimaera', middleware_transport=middleware)))
     case_file = output / 'cases.json'
     case_file.write_text(json.dumps(cases, indent=2) + '\n')
-    command = [sys.executable, str(ROOT / 'profiling/chimaera_latency/run_cases.py'),
+    command = [sys.executable, str(ROOT / 'profiling/chimaera_rewrite/dds_large_messages.py'),
+               str(ROOT / 'profiling/chimaera_latency/run_cases.py'),
                str(case_file), str(output / 'attempts'), '--source-snapshot', str(snapshot(output))]
     for name in ('runtime', 'bundle', 'gem5_root', 'image', 'kernel'):
         command += ['--' + name.replace('_', '-'), str(getattr(args, name).resolve())]

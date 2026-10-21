@@ -116,7 +116,7 @@ int main(int argc, char ** argv)
     const auto deadline = std::chrono::steady_clock::now() + 35s;
     int host_status = -1, guest_status = -1;
     unsigned host_packets = 0, guest_packets = 0;
-    std::size_t host_bytes = 0;
+    std::size_t host_bytes = 0, largest_host_packet = 0;
     while (std::chrono::steady_clock::now() < deadline) {
       while (auto packet = host.take()) {
         if (!host_packets) {
@@ -127,6 +127,7 @@ int main(int argc, char ** argv)
           }
         }
         host_bytes += packet->size();
+        largest_host_packet = std::max(largest_host_packet, packet->size());
         guest.receive(packet->data(), packet->size());
         ++host_packets;
       }
@@ -158,8 +159,10 @@ int main(int argc, char ** argv)
       guest_packets, host_status, guest_status);
     // All three unbounded images must have crossed the controlled packet path;
     // graph traffic alone cannot make a local DDS bypass pass this test.
-    return host_status == 0 && guest_status == 0 && host_bytes >= 3 * 921600 && guest_packets ? 0
-                                                                                              : 1;
+    return host_status == 0 && guest_status == 0 && host_bytes >= 3 * 921600 &&
+               largest_host_packet > 900000 && guest_packets
+             ? 0
+             : 1;
   } catch (const std::exception & error) {
     std::fprintf(stderr, "%s\n", error.what());
     return 1;
