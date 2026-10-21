@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--duration', type=float, default=2.)
     parser.add_argument('--warmup', type=float, default=.25)
     parser.add_argument('--drain', type=float, default=.75)
-    parser.add_argument('--timeout', type=float, default=7200.)
+    parser.add_argument('--timeout', type=int, default=7200)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
