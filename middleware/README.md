@@ -113,3 +113,8 @@ TimingSimpleCPU is the default for latency qualification.
 All matrix cases use the same SHM-only, 1 MiB local DDS profile, including the
 native controls and legacy bridge, to keep packet-size tuning out of the
 middleware handoff comparison.
+Guest staging copies the selected RMW and linked runtime libraries into the
+bundle's `lib/` directory and records their hashes in `runtime-libraries.json`.
+The guest keeps its own glibc and loader. This avoids depending on source/build
+paths or on a preinstalled unpatched RMW. Old Fast DDS bundles without these
+libraries are rejected before boot.

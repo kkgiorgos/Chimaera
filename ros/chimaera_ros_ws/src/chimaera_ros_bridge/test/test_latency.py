@@ -120,11 +120,14 @@ class LatencyAnalysisTest(unittest.TestCase):
         output = self.root / 'stage'
         bundle = self.root / 'guest.tar.gz'
         with patch('chimaera_ros.latency.require_middleware_overlay',
-                   side_effect=ValueError('standard RMW')):
+                   side_effect=ValueError('standard RMW')), \
+                patch('chimaera_ros.runner.stage_libraries', return_value={}):
             stage_guest(output, package, bundle)
         guest = json.loads((output / 'opt/chimaera/latency/session.json').read_text())
         self.assertEqual(guest['routes'], '/tmp/chimaera-latency-routes.json')
         self.assertTrue(guest['bridge']['simulation_time_from_readfile'])
+        self.assertTrue(guest['guest']['env']['LD_LIBRARY_PATH'].startswith(
+            '/opt/chimaera/latency/lib:'))
         self.assertEqual(guest['guest']['processes'][0]['command'][0],
                          '/opt/chimaera/latency/app/lib/chimaera_ros_bridge/latency_endpoint')
         self.assertTrue(guest['guest']['setup'][1].endswith('/share/chimaera_ros_bridge/local_setup.bash'))

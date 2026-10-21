@@ -18,6 +18,12 @@ def validate_bundle(bundle, backend='m5', required_features=()):
         with tarfile.open(bundle) as archive:
             with archive.extractfile('opt/chimaera/latency/latency-runtime.json') as source:
                 metadata = json.load(source)
+            if 'fastdds_transport' in required_features:
+                names = set(archive.getnames())
+                for name in ('librmw_fastrtps_cpp.so', 'librmw_fastrtps_shared_cpp.so',
+                             'libchimaera_dds_transport.so'):
+                    if 'opt/chimaera/latency/lib/' + name not in names:
+                        raise ValueError('guest bundle lacks middleware library ' + name)
         if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
             raise ValueError('outdated guest bundle')
         if backend == 'dma' and ('dma' not in metadata.get('transport_backends', []) or

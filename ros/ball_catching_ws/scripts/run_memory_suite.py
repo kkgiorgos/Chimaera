@@ -355,7 +355,7 @@ def prepare_bundle(output, data, points):
     if data['fixed']['guest_dds_shm_bytes']:
         (root / 'dds.xml').write_text(guest_dds_profile(data['fixed']['guest_dds_shm_bytes']))
     libraries = root / 'lib'
-    libraries.mkdir()
+    libraries.mkdir(exist_ok=True)
     from ament_index_python.packages import get_package_prefix
     clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock_addr.so'
     shutil.copyfile(clock, libraries / clock.name)

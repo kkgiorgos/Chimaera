@@ -105,6 +105,10 @@ if(BUILD_TESTING)
   ament_target_dependencies(serialized_view_test PUBLIC rclcpp)
   add_test(NAME serialized_view_test COMMAND serialized_view_test)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME dds_libraries_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
+    -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_dds_libraries.py)
+  set_tests_properties(dds_libraries_test PROPERTIES ENVIRONMENT
+    "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
   add_executable(bridge_test test/bridge_test.cpp)
   target_link_libraries(bridge_test PRIVATE bridge)
   ament_target_dependencies(bridge_test PUBLIC rclcpp std_msgs)

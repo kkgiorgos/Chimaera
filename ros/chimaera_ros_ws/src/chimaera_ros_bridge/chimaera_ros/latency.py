@@ -80,6 +80,7 @@ def guest_session(cpu_type='kvm', config=None):
         host=dict(domain_id=41, setup=['/opt/ros/humble/setup.bash'], processes=[]),
         guest=dict(domain_id=42,
             setup=['/opt/ros/humble/setup.bash', GUEST_ROOT + '/app/share/chimaera_ros_bridge/local_setup.bash'],
+            env=dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu'),
             processes=[dict(name='latency_endpoint', command=[
                 GUEST_ROOT + '/app/lib/chimaera_ros_bridge/latency_endpoint', '--ros-args',
                 '--params-file', '/tmp/chimaera-latency.yaml'])]),
@@ -95,9 +96,10 @@ def guest_session(cpu_type='kvm', config=None):
                 'buffer_mb=8 receive_slots=16 transmit_slots=4'),
             dma_diagnostics=(config or {}).get('dma_diagnostics', False))
     if (config or {}).get('dds_shm_bytes', 0):
-        result['guest'].update(localhost_only=False, env=dict(
+        result['guest']['localhost_only'] = False
+        result['guest']['env'].update(
             FASTRTPS_DEFAULT_PROFILES_FILE='/tmp/chimaera-latency-dds.xml',
-            RMW_IMPLEMENTATION='rmw_fastrtps_cpp', RMW_FASTRTPS_USE_QOS_FROM_XML='0'))
+            RMW_IMPLEMENTATION='rmw_fastrtps_cpp', RMW_FASTRTPS_USE_QOS_FROM_XML='0')
     if (config or {}).get('middleware_transport') == 'fastdds':
         result['guest']['domain_id'] = result['host']['domain_id']
         result['bridge']['middleware_transport'] = 'fastdds'

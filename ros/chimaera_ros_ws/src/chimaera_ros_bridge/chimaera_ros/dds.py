@@ -5,7 +5,41 @@ Humble's localhost mode appends its own 512 KiB SHM transport, so callers must
 set ROS_LOCALHOST_ONLY=0 and use this profile's explicit loopback whitelist.
 """
 import ctypes
+import hashlib
 from pathlib import Path
+import re
+import shutil
+import subprocess
+
+
+def stage_libraries(destination, binaries):
+    """Freeze the selected RMW and linked libraries without relying on host paths."""
+    from ament_index_python.packages import get_package_prefix
+    plugin = Path(get_package_prefix('rmw_fastrtps_cpp')) / 'lib/librmw_fastrtps_cpp.so'
+    destination.mkdir(parents=True, exist_ok=True)
+    sources = [plugin]
+    for binary in [*binaries, plugin]:
+        linked = subprocess.run(['ldd', str(binary)], check=True, capture_output=True,
+                                text=True).stdout
+        if 'not found' in linked:
+            raise ValueError('Missing runtime library for ' + str(binary) + ': ' + linked)
+        for line in linked.splitlines():
+            match = re.search(r'=> (/.+?) \(', line)
+            if match:
+                sources.append(Path(match[1]))
+    copied = {}
+    for source in sources:
+        if re.fullmatch(r'lib(c|m|pthread|dl|rt)\.so.*', source.name):
+            continue  # Keep the guest's glibc and matching ELF loader together.
+        target = destination / source.name
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        if target.exists():
+            if hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                raise ValueError('Conflicting staged runtime library: ' + source.name)
+        else:
+            shutil.copy2(source, target)
+        copied[source.name] = dict(source=str(source), sha256=digest)
+    return copied
 
 
 def require_middleware_overlay():

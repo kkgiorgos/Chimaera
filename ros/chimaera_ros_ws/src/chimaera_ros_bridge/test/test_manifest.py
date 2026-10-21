@@ -186,11 +186,14 @@ class SessionTest(unittest.TestCase):
         (source / 'linked').symlink_to(source / 'original')
         data = self.load()
         data['deploy']['install_trees'] = [dict(source=str(source), destination='app')]
-        staged = stage(data, self.root / 'staged', prefix)
+        with patch('chimaera_ros.runner.stage_libraries', return_value={}):
+            staged = stage(data, self.root / 'staged', prefix)
         self.assertEqual((staged / 'app/linked').read_text(), 'application')
         self.assertFalse((staged / 'app/linked').is_symlink())
         reloaded = load(staged / 'session.json')
         self.assertEqual(reloaded['routes'], str(staged / 'routes.json'))
+        self.assertTrue(reloaded['guest']['env']['LD_LIBRARY_PATH'].startswith(
+            data['deploy']['guest_root'] + '/lib:'))
         subprocess.run(['bash', '-n', str(staged / 'guest_start')], check=True)
         with self.assertRaises(ValueError):
             stage(data, self.root / 'staged', prefix)

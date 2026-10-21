@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from .manifest import load
+from .dds import stage_libraries
 
 
 def prefix():
@@ -162,6 +163,18 @@ def stage(data, output, package_prefix=None):
     for tree in data['deploy']['install_trees']:
         # Dereference colcon symlink-install links; no host source links in the image.
         shutil.copytree(tree['source'], root / tree['destination'], symlinks=False)
+    binaries = [runtime / 'guest_bridge']
+    for tree in data['deploy']['install_trees']:
+        for candidate in (root / tree['destination'] / 'lib').glob('*/*'):
+            if candidate.is_file():
+                with candidate.open('rb') as handle:
+                    if handle.read(4) == b'\x7fELF':
+                        binaries.append(candidate)
+    libraries = stage_libraries(root / 'lib', binaries)
+    (root / 'runtime-libraries.json').write_text(json.dumps(libraries, indent=2) + '\n')
+    guest_env = guest['guest'].setdefault('env', {})
+    guest_env['LD_LIBRARY_PATH'] = data['deploy']['guest_root'] + '/lib:' + guest_env.get(
+        'LD_LIBRARY_PATH', '/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu')
     (root / 'session.json').write_text(json.dumps(guest, indent=2) + '\n')
     guest_root = data['deploy']['guest_root']
     script = '#!/usr/bin/env bash\nset -e\ncd ' + shlex.quote(guest_root) + '\n'
