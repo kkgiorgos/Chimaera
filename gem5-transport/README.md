@@ -133,8 +133,16 @@ with `ChimaeraDma` and the guest module against the exact running kernel; see
 
 The host creates bounded shared mailboxes and admits input only while gem5 is
 paused. The guest uses registered scatter/gather buffers, coherent timing DMA,
-interrupt completions and a ROS guard condition. Application callbacks stay on
-the executor thread. A received `Message` retains its registered buffer until
+interrupt completions and a ROS guard condition in legacy bridge sessions.
+Application callbacks stay on the executor thread. DDS middleware sessions use
+`DmaCompletionMode::caller`: the coordinator polls `completion_fd()` alongside
+an eventfd for router notifications and shutdown, then reads completions in
+`run_next()`. This removes the completion worker and ROS executor wakeup from
+that path. Only `run_next()` may read the borrowed driver descriptor; its lifetime
+ends with the controller. The default `worker` mode retains the notifier-based
+integration for applications with an executor.
+
+A received `Message` retains its registered buffer until
 publication returns; explicit slices keep a whole control batch loaned until its
 last record is released. Ordinary copies retain deep value semantics.
 

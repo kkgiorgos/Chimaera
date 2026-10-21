@@ -26,6 +26,7 @@ struct Router::Impl
     std::size_t offset{};
     uint32_t process{};
     bool transport{};
+    bool failed{};
   };
   std::string path;
   unsigned side;
@@ -87,7 +88,7 @@ struct Router::Impl
     const auto destination = wire::locator(packet.data() + 28);
     if (destination.address[0] && destination.address[0] != side) return;
     for (auto & [fd, client] : clients) {
-      if (fd == sender) continue;
+      if (fd == sender || client.failed) continue;
       for (const auto & channel : client.channels) {
         if (channel.port != destination.port) continue;
         if (destination.address[0] && std::memcmp(channel.address, destination.address, 16))
@@ -145,6 +146,29 @@ struct Router::Impl
       }
     }
   }
+  bool flush(int fd, Client & client, std::size_t budget)
+  {
+    while (!client.output.empty() && budget) {
+      auto & packet = client.output.front();
+      const auto size = ::send(
+        fd, packet.data() + client.offset, std::min(packet.size() - client.offset, budget),
+        MSG_NOSIGNAL);
+      if (size < 0 && errno == EINTR) continue;
+      if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+      if (size <= 0) {
+        client.failed = true;
+        return false;
+      }
+      client.offset += size;
+      budget -= size;
+      if (client.offset == packet.size()) {
+        queued -= packet.size();
+        client.output.pop_front();
+        client.offset = 0;
+      }
+    }
+    return true;
+  }
   bool service(int fd, short events)
   {
     auto & client = clients.at(fd);
@@ -175,24 +199,7 @@ struct Router::Impl
         }
       }
     }
-    if (events & POLLOUT)
-      while (!client.output.empty()) {
-        auto & packet = client.output.front();
-        const auto size =
-          ::send(fd, packet.data() + client.offset, packet.size() - client.offset, MSG_NOSIGNAL);
-        if (size < 0 && errno == EINTR) continue;
-        if (size < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
-        if (size <= 0) {
-          alive = false;
-          break;
-        }
-        client.offset += size;
-        if (client.offset == packet.size()) {
-          queued -= packet.size();
-          client.output.pop_front();
-          client.offset = 0;
-        }
-      }
+    if (events & POLLOUT) alive = flush(fd, client, limit) && alive;
     return alive && !(events & (POLLERR | POLLNVAL));
   }
   void run()
@@ -229,7 +236,9 @@ struct Router::Impl
             }
           for (std::size_t i = 2; i < descriptors.size(); ++i) {
             const auto fd = descriptors[i].fd;
-            if (descriptors[i].revents && !service(fd, descriptors[i].revents)) {
+            if (
+              clients.at(fd).failed ||
+              (descriptors[i].revents && !service(fd, descriptors[i].revents))) {
               const auto process = clients.at(fd).process;
               const bool transport = clients.at(fd).transport;
               for (auto & packet : clients.at(fd).output) queued -= packet.size();
@@ -301,7 +310,16 @@ void Router::receive(Packet packet)
   std::lock_guard lock(impl_->mutex);
   if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
   impl_->forward(packet);
-  impl_->signal();
+  bool pending = false;
+  // The packet has already crossed its simulation boundary. Try the local
+  // nonblocking sockets now rather than scheduling the worker before sending.
+  // Bound each recipient's work; partial writes keep their FIFO offset/owner.
+  for (auto & [fd, client] : impl_->clients) {
+    if (!client.failed) impl_->flush(fd, client, max_packet_bytes + wire::header_bytes);
+    pending = pending || client.failed || !client.output.empty();
+  }
+  // Only the worker closes clients, since it may have an in-flight poll snapshot.
+  if (pending) impl_->signal();
 }
 void Router::receive(const void * data, std::size_t size)
 {

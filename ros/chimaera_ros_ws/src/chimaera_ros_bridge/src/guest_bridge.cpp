@@ -6,6 +6,7 @@
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <chimaera_ros_bridge/checkpoint_barrier.hpp>
 #include <chimaera_ros_bridge/completion_waitable.hpp>
+#include <chimaera_ros_bridge/transport_wait.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -42,21 +43,30 @@ int main(int argc, char ** argv)
     if (backend != "m5" && backend != "dma")
       throw std::invalid_argument("transport_backend must be m5 or dma");
     std::shared_ptr<chimaera_ros_bridge::CompletionWaitable> completion;
+    std::shared_ptr<chimaera_ros_bridge::TransportWait> transport_wait;
     std::unique_ptr<chimaera::DmaGuestController> dma;
-    if (backend == "dma" || node->middleware_routing()) {
+    std::function<void()> notify;
+    if (backend == "dma" && node->middleware_routing()) {
+      transport_wait = std::make_shared<chimaera_ros_bridge::TransportWait>();
+      notify = [transport_wait] { transport_wait->notify(); };
+      rclcpp::on_shutdown(notify);
+      // Middleware mode has no ROS data callbacks in this coordinator.
+      node->pump = {};
+    } else if (backend == "dma" || node->middleware_routing()) {
       completion = std::make_shared<chimaera_ros_bridge::CompletionWaitable>();
       node->get_node_waitables_interface()->add_waitable(completion, nullptr);
-      node->set_transport_notify([completion] { completion->notify(); });
+      notify = [completion] { completion->notify(); };
     }
+    if (notify) node->set_transport_notify(notify);
     if (backend == "dma") {
       if (std::getenv("CHIMAERA_LATENCY_REUSE"))
         throw std::invalid_argument("DMA currently requires a fresh guest boot");
       dma = std::make_unique<chimaera::DmaGuestController>(
-        [completion] { completion->notify(); },
-        node->declare_parameter<std::string>("dma_device", "/dev/chimaera-dma"),
+        notify, node->declare_parameter<std::string>("dma_device", "/dev/chimaera-dma"),
         node->declare_parameter<std::string>("dma_module", ""),
         node->declare_parameter<std::string>("dma_module_options", ""),
-        node->controller_queue_limit());
+        node->controller_queue_limit(),
+        transport_wait ? chimaera::DmaCompletionMode::caller : chimaera::DmaCompletionMode::worker);
       node->allocate = [&](std::size_t size) { return dma->allocate(size); };
     }
     const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);
@@ -157,11 +167,14 @@ int main(int argc, char ** argv)
         diagnostic("after_exchange");
         const auto sent = dma->run_next();
         if (!sent.ok()) throw std::runtime_error(sent.message);
-        // Either DDS or a completion interrupt wakes the bridge. No periodic
-        // host-input poll is needed. Guard notifications persist across races.
+        // DDS sessions consume driver readiness on this thread. Legacy bridge
+        // sessions keep their ROS callback executor and completion worker.
         if (!dma->has_work()) {
           diagnostic("before_wait");
-          executor.spin_once(std::chrono::nanoseconds(-1));
+          if (transport_wait)
+            transport_wait->wait(dma->completion_fd());
+          else
+            executor.spin_once(std::chrono::nanoseconds(-1));
           diagnostic("after_wait");
         }
       } else {

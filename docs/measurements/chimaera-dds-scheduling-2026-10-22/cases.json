@@ -1,0 +1,194 @@
+[
+  {
+    "name": "baseline-r1",
+    "variant": "original",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  },
+  {
+    "name": "candidate-r1",
+    "variant": "off",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  },
+  {
+    "name": "candidate-r2",
+    "variant": "off",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  },
+  {
+    "name": "baseline-r2",
+    "variant": "original",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  },
+  {
+    "name": "baseline-r3",
+    "variant": "original",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  },
+  {
+    "name": "candidate-r3",
+    "variant": "off",
+    "config": {
+      "duration": 1.0,
+      "warmup": 0.25,
+      "drain": 0.75,
+      "timeout": 600,
+      "physics_step_ns": 1000000,
+      "interval_us": 2000,
+      "poll_us": 1000,
+      "cpu_type": "kvm",
+      "transport_backend": "dma",
+      "dma_module": "/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "dds_shm_bytes": 16777216,
+      "dds_tuning": "large_shm_only",
+      "dds_max_message_bytes": 1048576,
+      "delivery_policy": "lossless",
+      "verify_payload": false,
+      "workload": "ball_catching",
+      "ball_catching": {
+        "camera_width": 480,
+        "camera_height": 360,
+        "camera_hz": 30.0,
+        "joint_hz": 250.0,
+        "control_hz": 250.0,
+        "image_age_periods": 2.0
+      },
+      "mode": "chimaera",
+      "middleware_transport": "fastdds"
+    }
+  }
+]

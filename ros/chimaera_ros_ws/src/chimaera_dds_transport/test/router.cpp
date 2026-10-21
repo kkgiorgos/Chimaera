@@ -1,5 +1,7 @@
+#include <dlfcn.h>
 #include <poll.h>
 
+#include <atomic>
 #include <chimaera_dds_transport/router.hpp>
 #include <chrono>
 #include <filesystem>
@@ -12,6 +14,36 @@
 using namespace std::chrono_literals;
 using chimaera_dds::Router;
 namespace wire = chimaera_dds::wire;
+
+// Pause the router after kernel readiness, before it services its sockets.
+// This makes immediate admission delivery independent of worker scheduling.
+std::atomic<bool> pause_router{}, router_paused{};
+void pause_after_poll(nfds_t count)
+{
+  if (count >= 2 && pause_router) {
+    router_paused = true;
+    while (pause_router) std::this_thread::yield();
+    router_paused = false;
+  }
+}
+extern "C" int poll(pollfd * descriptors, nfds_t count, int timeout)
+{
+  static const auto real_poll =
+    reinterpret_cast<int (*)(pollfd *, nfds_t, int)>(::dlsym(RTLD_NEXT, "poll"));
+  const auto result = real_poll(descriptors, count, timeout);
+  pause_after_poll(count);
+  return result;
+}
+// Release SDK builds fortify poll(vector.data(), vector.size(), ...) through
+// __poll_chk; cover that entry point without weakening production hardening.
+extern "C" int __poll_chk(pollfd * descriptors, nfds_t count, int timeout, std::size_t bytes)
+{
+  static const auto real_poll =
+    reinterpret_cast<int (*)(pollfd *, nfds_t, int, std::size_t)>(::dlsym(RTLD_NEXT, "__poll_chk"));
+  const auto result = real_poll(descriptors, count, timeout, bytes);
+  pause_after_poll(count);
+  return result;
+}
 
 void require(bool value, const char * message)
 {
@@ -217,6 +249,53 @@ int main()
       guest.check();
     }
     {
+      Router guest(root + "/immediate", 2);
+      Client receiver(root + "/immediate");
+      const auto local = wire::local(2, 7);
+      receiver.send(wire::packet(wire::open, local, local));
+      const std::string topic = "/immediate";
+      std::vector<uint8_t> registration{0};
+      registration.insert(registration.end(), topic.begin(), topic.end());
+      const auto barrier =
+        wire::packet(wire::endpoint, local, local, registration.data(), registration.size());
+      receiver.send(barrier);
+      require(wait([&] { return guest.endpoint_ready(topic, false); }), "recipient not ready");
+      struct Resume
+      {
+        ~Resume() { pause_router = false; }
+      } resume;
+      pause_router = true;
+      receiver.send(barrier);
+      require(wait([] { return router_paused.load(); }), "router pause failed");
+      std::vector<uint8_t> body(64, 0xa5);
+      std::memcpy(body.data(), "RTPS", 4);
+      const auto packet = wire::packet(wire::data, wire::local(1), local, body.data(), body.size());
+      auto second = packet;
+      second.back() = 0x5a;
+      guest.receive(packet.data(), packet.size());
+      guest.receive(second.data(), second.size());
+      std::vector<uint8_t> received(2 * packet.size());
+      require(
+        ::recv(receiver.fd, received.data(), received.size(), MSG_DONTWAIT | MSG_WAITALL) ==
+          ssize_t(received.size()),
+        "admitted packets waited for router worker");
+      require(
+        !std::memcmp(received.data(), packet.data(), packet.size()) &&
+          !std::memcmp(received.data() + packet.size(), second.data(), second.size()),
+        "immediate delivery changed packet bytes or order");
+      // A failed fast-path write is retired by the worker, which still owns its
+      // poll snapshot. It must release the packet and preserve router health.
+      require(!::shutdown(receiver.fd, SHUT_RD), "receiver shutdown failed");
+      auto storage = std::make_shared<std::vector<uint8_t>>(packet);
+      std::weak_ptr<void> lifetime = storage;
+      guest.receive(chimaera_dds::Packet::adopt(storage->data(), storage->size(), storage));
+      storage.reset();
+      require(!lifetime.expired(), "failed recipient queue was not retained for retirement");
+      pause_router = false;
+      require(wait([&] { return lifetime.expired(); }), "failed fast-path write retained loan");
+      guest.check();
+    }
+    {
       int sockets[2];
       require(!::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets), "socketpair failed");
       int capacity = 1024;
@@ -247,7 +326,8 @@ int main()
     }
     std::filesystem::remove(root);
     std::cout << "Router boundary, byte integrity, malformed ingress, endpoint lifecycle and "
-                 "capacity; split frames, shared loans, fanout and scatter/gather passed\n";
+                 "capacity; split frames, shared loans, fanout, immediate delivery and "
+                 "scatter/gather passed\n";
     return 0;
   } catch (const std::exception & error) {
     std::cerr << error.what() << '\n';

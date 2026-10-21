@@ -9,6 +9,7 @@
 #include <deque>
 #include <fcntl.h>
 #include <mutex>
+#include <poll.h>
 #include <stdexcept>
 #include <sys/eventfd.h>
 #include <sys/mman.h>
@@ -28,6 +29,8 @@ struct Driver {
     std::deque<Message> packets;
     std::deque<chdma_completion> completions;
     unsigned closed{}, rx_posts{}, tx_submits{};
+    std::thread::id expected_reader;
+    bool short_read{};
     void completion(chdma_completion value) {
         if (completions.empty()) {
             std::uint64_t one = 1;
@@ -125,6 +128,9 @@ int __wrap_ioctl(int fd, unsigned long command, ...) {
 ssize_t __wrap_read(int fd, void* output, size_t size) {
     if (fd != driver.fd) return __real_read(fd, output, size);
     std::lock_guard lock(driver.mutex);
+    if (driver.expected_reader != std::thread::id{})
+        expect(std::this_thread::get_id() == driver.expected_reader);
+    if (driver.short_read) { driver.short_read = false; return 1; }
     if (driver.completions.empty()) { errno = EAGAIN; return -1; }
     expect(size >= sizeof(chdma_completion));
     *static_cast<chdma_completion*>(output) = driver.completions.front();
@@ -136,12 +142,28 @@ ssize_t __wrap_read(int fd, void* output, size_t size) {
     return sizeof(chdma_completion);
 }
 }
-int main() {
+void exercise(chimaera::DmaCompletionMode mode) {
+    driver.closed = driver.rx_posts = driver.tx_submits = 0;
+    driver.expected_reader = mode == chimaera::DmaCompletionMode::caller ?
+        std::this_thread::get_id() : std::thread::id{};
     std::atomic<unsigned> notifications{};
-    auto controller = std::make_unique<chimaera::DmaGuestController>([&] { ++notifications; }, "test-dma");
+    auto make_controller = [&] (std::size_t pending = 1024) {
+        return std::make_unique<chimaera::DmaGuestController>(
+            [&] { ++notifications; }, "test-dma", "", "", pending, mode);
+    };
+    auto controller = make_controller();
     constexpr char startup[] = "CHDMA002";
     driver.inject(Message(reinterpret_cast<const std::byte*>(startup),
                           reinterpret_cast<const std::byte*>(startup) + 8));
+    if (mode == chimaera::DmaCompletionMode::caller) {
+        pollfd ready{controller->completion_fd(), POLLIN, 0};
+        expect(::poll(&ready, 1, 0) == 1 && (ready.revents & POLLIN));
+        expect(controller->has_work());
+    } else {
+        bool rejected = false;
+        try { controller->completion_fd(); } catch (const std::logic_error&) { rejected = true; }
+        expect(rejected); // A caller must never race the worker's driver reads.
+    }
     until(*controller, [&] { return controller->initialized(); });
     expect(!controller->take());
     bool oversized = false;
@@ -184,14 +206,15 @@ int main() {
     controller->submit(std::move(newest), "latest");
     until(*controller, [&] { other = controller->take(); return other.has_value(); });
     expect(*other == Message(64, std::byte{9}));
-    expect(driver.tx_submits == 4 && notifications > 0);
+    expect(driver.tx_submits == 4);
+    expect(mode == chimaera::DmaCompletionMode::caller ? notifications == 0 : notifications > 0);
     expect(controller->statistics().find("staging_bytes=1843337") != std::string::npos);
     const auto posts = driver.rx_posts;
     controller.reset(); // External loans retain mappings and suppress reposts.
     expect(driver.closed == 0 && *held == pattern(size, 2));
     other.reset(); held.reset();
     expect(driver.closed == 1 && driver.rx_posts == posts);
-    auto bad = std::make_unique<chimaera::DmaGuestController>([] {}, "test-dma");
+    auto bad = make_controller();
     driver.inject(Message(8, std::byte{42}));
     const auto deadline = std::chrono::steady_clock::now() + 5s;
     while (!bad->has_work() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
@@ -204,12 +227,29 @@ int main() {
     expect(driver.closed == 2);
     // Middleware bootstrap may queue many small RTPS discovery records. The
     // larger configured count remains bounded before the device is started.
-    auto burst = std::make_unique<chimaera::DmaGuestController>(
-        [] {}, "test-dma", "", "", 2048);
+    auto burst = make_controller(2048);
     for (unsigned i = 0; i < 2048; ++i) burst->submit(Message(64));
     bool full = false;
     try { burst->submit(Message(64)); } catch (const std::runtime_error&) { full = true; }
     expect(full);
     burst.reset();
     expect(driver.closed == 3);
+    auto broken = make_controller();
+    {
+        std::lock_guard lock(driver.mutex);
+        driver.short_read = true;
+        driver.completion({CHDMA_IRQ_RX, 0, 8, 0});
+    }
+    const auto error_deadline = std::chrono::steady_clock::now() + 5s;
+    while (!broken->has_work() && std::chrono::steady_clock::now() < error_deadline)
+        std::this_thread::yield();
+    const auto failure = broken->run_next();
+    expect(!failure.ok() && failure.message == "incomplete DMA completion record");
+    expect(!broken->run_next().ok());
+    broken.reset();
+    expect(driver.closed == 4);
+}
+int main() {
+    exercise(chimaera::DmaCompletionMode::worker);
+    exercise(chimaera::DmaCompletionMode::caller);
 }

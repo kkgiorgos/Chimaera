@@ -1,0 +1,81 @@
+{
+  "baseline_revision": "c3393c82527d077e9bd41082a155703eefe93eca",
+  "physical_host": "ubuntu-george",
+  "sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+  "simulation_cpu": "X86KvmCPU only, two cores",
+  "asset_mount": "read-only base image and matching kernel/module; fresh disposable guests",
+  "guest_image": {
+    "image": "sha256:8f3ac1bd91a1abe85726ed6f3f3adb4b94fe19aa2a4d650c34ce064c7b1107d8",
+    "image_id": "sha256:8f3ac1bd91a1abe85726ed6f3f3adb4b94fe19aa2a4d650c34ce064c7b1107d8",
+    "recipe": "3bfa7850efbe1e33efb92a2d4064b78c0a9c83ac04949ed0388bdc3965ca7cdc",
+    "sha256": "8b3a23e802f685c0bc78b08e811c5ebb6012a34edd57d8c0ef96a403a77a6aec"
+  },
+  "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+  "runtime_files": {
+    "baseline": {
+      "lib/libchimaera_gem5_clock_addr.so": "cab037bd257640eef735d3c891c11e559346690675febfa38e5bfecec5a6e96e",
+      "lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+      "lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+      "lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+      "lib/libchimaera_dds_transport.so": "0ff4c02dc48f0d1d4e34597b2ebb9eb7f781767509c289736c92e6156ff5001e",
+      "lib/libchimaera_gem5_clock.so": "3d102e02677d7efde4a1b50a9a3374b08b5570282639827722a62135ecf1f2a5",
+      "lib/chimaera_ros_bridge/chimaera_ros": "9a20d89938dd8c655e5edf7f2f5f45b8de0a64087845c92fbc44def871458580",
+      "lib/chimaera_ros_bridge/gazebo_host_bridge": "77a6b551624c7fb643c1282c2b54d07cd0c714c583e01b5acada99627aa420a0",
+      "lib/chimaera_ros_bridge/latency_driver": "8a6e89494f45335307581e90bd7b2471b33e62514be6ab70858459135700d771",
+      "lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+      "lib/chimaera_ros_bridge/validate_routes": "1cd3b654fed93eda8bde23fb21679469c17a970f759afc6916820e84d7efe7d9",
+      "lib/chimaera_ros_bridge/guest_bridge": "f00cbcaaa4f920a6b6ed9a50fd4e22e73dbca2f3cba547e76aa9bc611130a89a",
+      "lib/chimaera_ros_bridge/host_bridge": "dd409af7c984c75e167227f7be6b4589cf345e0f6338cf151689ca7ce2cf90f4",
+      "lib/chimaera_ros_bridge/deploy_image.sh": "a51a8878d6ec2e245ff71321e5d7d50be9d7e361bf4e196a2d4496832b46cb43",
+      "lib/chimaera_ros_bridge/chimaera_latency": "3dc8805980ad2af1dbbba17cac35cd13fcf49ed0a774cfc2ed6fc7fa5bbeff91"
+    },
+    "candidate": {
+      "lib/libchimaera_gem5_clock_addr.so": "cab037bd257640eef735d3c891c11e559346690675febfa38e5bfecec5a6e96e",
+      "lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+      "lib/librmw_fastrtps_cpp.so": "d5e928e8a9201b801d07353f1e65fe3bd80875d9cb78f5c265fef46c141f4ad0",
+      "lib/librmw_fastrtps_shared_cpp.so": "ea14b4b558240b9957d8b6a288bc1b95104bc4fe8803609316ccd32fdc527f18",
+      "lib/libchimaera_dds_transport.so": "167561e3a6ad9f25338b341aa78c2bdebeb9ddf2eed25fa67fcabb8650736f15",
+      "lib/libchimaera_gem5_clock.so": "3d102e02677d7efde4a1b50a9a3374b08b5570282639827722a62135ecf1f2a5",
+      "lib/chimaera_ros_bridge/dds_router_test": "d9068c36eca25fbee66c2c198d74a150f4c2d03810244225059fd6a5e85db085",
+      "lib/chimaera_ros_bridge/chimaera_ros": "9a20d89938dd8c655e5edf7f2f5f45b8de0a64087845c92fbc44def871458580",
+      "lib/chimaera_ros_bridge/gazebo_host_bridge": "43c1395cba274b79199f32619dc6103d4a4e9692ede5ff07747ad7f8326a781a",
+      "lib/chimaera_ros_bridge/latency_driver": "abd636068670f6dbd9abc7ef21f78637ae2639536086de36aa1e804e7dbb9e88",
+      "lib/chimaera_ros_bridge/latency_endpoint": "a1af6b34ff77cb9dc2fc9f14020bbeb827d865928d9dfb0f017731ac1019040c",
+      "lib/chimaera_ros_bridge/validate_routes": "970b08448288eb60af4a64dcc4b872bd7d4aa81c3f2f4a4bee246cd6ac7ebd74",
+      "lib/chimaera_ros_bridge/guest_bridge": "c85d9241642c6c1cd8c7e225925c9fb8c4ae880abd161ee37106382c721bb758",
+      "lib/chimaera_ros_bridge/host_bridge": "9acfd51f873a609eab3ceb35cb23f11337eabf3adf14f49844e7416cff3fef0f",
+      "lib/chimaera_ros_bridge/deploy_image.sh": "a51a8878d6ec2e245ff71321e5d7d50be9d7e361bf4e196a2d4496832b46cb43",
+      "lib/chimaera_ros_bridge/chimaera_latency": "3dc8805980ad2af1dbbba17cac35cd13fcf49ed0a774cfc2ed6fc7fa5bbeff91"
+    }
+  },
+  "bundles": {
+    "guest-baseline.tar.gz": "b84e9a9f10c7cca2c4f7f05e4552d09985408230ddc4ec05ee7b2bcb77e34484",
+    "guest-candidate.tar.gz": "355ad98d60085bc5ba0ef0c2305c3c100234fa63964cdeaad05752d24029aebe"
+  },
+  "sdk_tests": {
+    "transport": 9,
+    "bridge": 7,
+    "dds": 2,
+    "all_passed": true
+  },
+  "notes": [
+    "Baseline is the committed copy-reduced transport; candidate changes direct guest readiness and admitted router egress.",
+    "Endpoints, clock plugin, RMW, simulator, module and DDS profile match; the DDS router library intentionally differs.",
+    "Candidate source was frozen before measurement. Documentation edits made later are not in that archive.",
+    "No tracing, native performance benchmark, TimingSimpleCPU or O3 simulation was run.",
+    "Per-case source_snapshot names the candidate archive for both variants; baseline source is retained separately from baseline_revision.",
+    "Raw evidence excludes repeated base64 guest readfiles and redundant ROS/Gazebo log directories."
+  ],
+  "files": {
+    "candidate-source.tar.gz": "65e0c17abf2ab5c84d90bc6c63f4fd426804cc1fda786c6231ba92d3455cdd22",
+    "direct-wait-only.json": "71d318234f76c4822624b5eb6f60035f643010e60c2eb38e1ab09d9a518acfde",
+    "verified-cases.json": "1d75a5dd242284a98f1745cf3aeea691bcf69a6ef2a423254bd14f589965b4c5",
+    "cases.json": "440733616d6645afc7a94406f3b4196dbf35cd2ae77077def94b5ea8347376da",
+    "comparison.json": "2ae282e2a2dcff7e22ac5d508545ff550dbf9b2696d311cc5669cc642c815732",
+    "experiment-tools.tar.gz": "75212b1cdf99a070dd5ac7a560ad3b967e68ca6d34932cd7d093672840fe023c",
+    "raw-evidence.tar.gz": "4d230fb5bb84db5ee4511066de7159891ce1f09112e2b9287dad84edac36aa28",
+    "comparison.csv": "8bf3c0914dfc99fbf045b21033f05429a2cf6e3384ab3fd08b3be60dc4ddd271",
+    "baseline-source.tar.gz": "6da36c5e69e20d47bcfa2c7f8ac27ba16d2af9472d7dc1814424557d71763c04",
+    "report.html": "1cbeed6a95b028849236d62d126dbcc447931b502736aff1245d7428eb429f85"
+  }
+}

@@ -86,6 +86,20 @@ mixed latency results: lower means without the image verifier, higher means
 with it, and variable tails. Reduced copying alone does not guarantee lower
 callback delay under application CPU load.
 
+DMA middleware guests now wait directly on driver readiness and a coalescing
+eventfd for router notifications, loan-release failures and ROS shutdown. The
+coordinator reads completions itself and skips its unused ROS callback pump.
+This removes a completion-thread-to-executor handoff before packet delivery.
+Legacy ROS bridge sessions retain the completion worker and executor. Host
+boundary admission, DMA framing, FIFO and DDS delivery remain unchanged.
+After boundary admission, the router attempts nonblocking socket writes on the
+calling thread, bounded to one maximum packet per recipient. Partial writes keep
+their existing FIFO offset and packet owner; the worker handles writable-socket
+readiness and retires failed clients. Fully accepted packets need no router
+worker wakeup. This applies on both sides after their respective admission.
+The [KVM scheduling comparison](../docs/chimaera-dds-scheduling-2026-10-22.md)
+records lower performance-cohort means with worse observed stereo tails.
+
 The RMW overlay also carries `ros_discovery_info`, translates graph queries
 through the configured aliases, checks endpoint message types and reports
 endpoint creation/disposal to the runtime. Unselected application endpoints

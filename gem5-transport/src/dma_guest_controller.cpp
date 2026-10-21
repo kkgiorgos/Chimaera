@@ -106,13 +106,15 @@ struct DmaGuestController::Impl {
     std::string failure;
     int stop_fd{-1};
     std::thread worker;
+    DmaCompletionMode completion_mode;
     bool started{};
     std::string application_failure;
     std::uint64_t rx_completed{}, tx_completed{}, tx_submitted{};
 
     Impl(std::function<void()> notify, const std::string& device,
-         const std::string& module, const std::string& options, std::size_t pending)
-        : outgoing(pending) {
+         const std::string& module, const std::string& options, std::size_t pending,
+         DmaCompletionMode mode)
+        : outgoing(pending), completion_mode(mode) {
         pool->notify = std::move(notify);
         if (!pool->notify) throw std::invalid_argument("DMA requires a completion notifier");
         if (!module.empty()) {
@@ -141,6 +143,7 @@ struct DmaGuestController::Impl {
             pool->buffers[slot] = static_cast<std::byte*>(memory);
         }
         for (unsigned slot = 0; slot < info.rx_slots; ++slot) pool->post(slot);
+        if (completion_mode == DmaCompletionMode::caller) return;
         stop_fd = ::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
         if (stop_fd < 0) system_error("create DMA cancellation event");
         try { worker = std::thread([this] { receive(); }); }
@@ -161,6 +164,21 @@ struct DmaGuestController::Impl {
         // Active and queued loans release after worker shutdown. External RX
         // loans may outlive this controller and keep Pool alive until released.
     }
+    std::deque<chdma_completion> read_completions() {
+        std::deque<chdma_completion> completed;
+        while (true) {
+            chdma_completion completion{};
+            const auto count = ::read(pool->fd, &completion, sizeof(completion));
+            if (count < 0 && errno == EINTR) continue;
+            if (count < 0 && errno == EAGAIN) break;
+            if (count < 0) system_error("read DMA completion");
+            if (count != sizeof(completion))
+                throw std::runtime_error("incomplete DMA completion record");
+            if (completed.size() >= 64) throw std::runtime_error("DMA completion queue overflow");
+            completed.push_back(completion);
+        }
+        return completed;
+    }
     void receive() noexcept {
         try {
             pollfd descriptors[2]{{pool->fd, POLLIN, 0}, {stop_fd, POLLIN, 0}};
@@ -171,17 +189,12 @@ struct DmaGuestController::Impl {
                 if (descriptors[1].revents) return;
                 if (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL))
                     throw std::runtime_error("DMA driver fault/disconnection");
-                while (true) {
-                    chdma_completion completion{};
-                    const auto count = ::read(pool->fd, &completion, sizeof(completion));
-                    if (count < 0 && errno == EINTR) continue;
-                    if (count < 0 && errno == EAGAIN) break;
-                    if (count != sizeof(completion)) system_error("read DMA completion");
-                    {
-                        std::lock_guard lock(events_mutex);
-                        if (events.size() >= 64) throw std::runtime_error("DMA completion queue overflow");
-                        events.push_back(completion);
-                    }
+                auto completed = read_completions();
+                {
+                    std::lock_guard lock(events_mutex);
+                    if (events.size() + completed.size() > 64)
+                        throw std::runtime_error("DMA completion queue overflow");
+                    events.insert(events.end(), completed.begin(), completed.end());
                 }
                 pool->notify();
             }
@@ -195,7 +208,9 @@ struct DmaGuestController::Impl {
     }
     void service() {
         std::deque<chdma_completion> completed;
-        {
+        if (completion_mode == DmaCompletionMode::caller) {
+            completed = read_completions();
+        } else {
             std::lock_guard lock(events_mutex);
             if (!failure.empty()) throw std::runtime_error(failure);
             completed.swap(events);
@@ -262,8 +277,8 @@ struct DmaGuestController::Impl {
 };
 
 DmaGuestController::DmaGuestController(std::function<void()> notify, std::string device,
-        std::string module, std::string options, std::size_t pending)
-    : impl_(std::make_unique<Impl>(std::move(notify), device, module, options, pending)) {}
+        std::string module, std::string options, std::size_t pending, DmaCompletionMode mode)
+    : impl_(std::make_unique<Impl>(std::move(notify), device, module, options, pending, mode)) {}
 DmaGuestController::~DmaGuestController() = default;
 Message DmaGuestController::allocate(std::size_t size) {
     if (!impl_->application_failure.empty()) throw std::runtime_error(impl_->application_failure);
@@ -289,8 +304,18 @@ bool DmaGuestController::initialized() const noexcept { return impl_->started; }
 bool DmaGuestController::has_work() const {
     if (!impl_->application_failure.empty()) return true;
     if (!impl_->incoming.empty()) return true;
+    if (impl_->completion_mode == DmaCompletionMode::caller) {
+        pollfd descriptor{impl_->pool->fd, POLLIN, 0};
+        // Report faults as work as well; run_next() retains the actual failure.
+        return ::poll(&descriptor, 1, 0) != 0;
+    }
     std::lock_guard lock(impl_->events_mutex);
     return !impl_->events.empty() || !impl_->failure.empty();
+}
+int DmaGuestController::completion_fd() const {
+    if (impl_->completion_mode != DmaCompletionMode::caller)
+        throw std::logic_error("DMA completion descriptor requires caller mode");
+    return impl_->pool->fd;
 }
 std::string DmaGuestController::statistics() const {
     const auto& p = *impl_->pool;
