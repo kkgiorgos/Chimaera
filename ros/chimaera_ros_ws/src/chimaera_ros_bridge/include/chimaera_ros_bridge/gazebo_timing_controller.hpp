@@ -32,7 +32,8 @@ public:
     world_(std::move(world))
   {
     if (transport == "dma")
-      host_ = std::make_unique<chimaera::DmaHostController>(gem5_, std::move(h2g), std::move(g2h));
+      host_ = std::make_unique<chimaera::DmaHostController>(
+        gem5_, std::move(h2g), std::move(g2h), bridge.controller_queue_limit());
     else if (transport == "m5")
       host_ = std::make_unique<chimaera::Gem5HostController>(gem5_, poll_interval);
     else

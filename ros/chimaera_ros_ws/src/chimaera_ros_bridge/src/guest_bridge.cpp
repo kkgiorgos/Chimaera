@@ -55,7 +55,8 @@ int main(int argc, char ** argv)
         [completion] { completion->notify(); },
         node->declare_parameter<std::string>("dma_device", "/dev/chimaera-dma"),
         node->declare_parameter<std::string>("dma_module", ""),
-        node->declare_parameter<std::string>("dma_module_options", ""));
+        node->declare_parameter<std::string>("dma_module_options", ""),
+        node->controller_queue_limit());
       node->allocate = [&](std::size_t size) { return dma->allocate(size); };
     }
     const auto timeout = node->declare_parameter<int64_t>("startup_timeout_s", 300);

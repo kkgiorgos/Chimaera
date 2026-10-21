@@ -1,8 +1,8 @@
 #pragma once
 
 #include <chimaera/controller.hpp>
-#include <chimaera_dds_transport/router.hpp>
 #include <chimaera/outgoing_queue.hpp>
+#include <chimaera_dds_transport/router.hpp>
 #include <chimaera_ros_bridge/config.hpp>
 #include <chimaera_ros_bridge/serialized_view.hpp>
 #include <chimaera_ros_bridge/stereo_queue.hpp>
@@ -68,7 +68,8 @@ public:
         declare_parameter<std::string>("dds_socket", "/tmp/chimaera-dds-" + side + ".sock"),
         side == "host" ? 1 : 2);
       for (const auto & route : routes)
-        local_endpoints_.emplace_back(side == "host" ? route.host_topic : route.guest_topic,
+        local_endpoints_.emplace_back(
+          side == "host" ? route.host_topic : route.guest_topic,
           (side == "host") == (route.direction == "host_to_guest"));
       RCLCPP_INFO(get_logger(), "Fast DDS middleware routing enabled (%lu routes)", routes.size());
       return;
@@ -296,8 +297,16 @@ public:
   std::size_t unmatched_images() const { return stereo_.pending(); }
   std::size_t pending() const { return router_ ? router_->pending() : outgoing_.size(); }
   bool middleware_routing() const { return bool(router_); }
+  std::size_t controller_queue_limit() const
+  {
+    // RTPS discovery/reliability adds a burst of small packets at fresh boot.
+    // Keep the controller's 32 MiB byte bound and the legacy application limit.
+    return router_ ? 8192 : chimaera::control::max_messages;
+  }
   void set_transport_notify(std::function<void()> notify)
-  { if (router_) router_->set_notify(std::move(notify)); }
+  {
+    if (router_) router_->set_notify(std::move(notify));
+  }
   std::size_t local_talkers() const
   {
     std::size_t count = 0;

@@ -52,7 +52,8 @@ int main(int argc, char ** argv)
     if (backend == "dma")
       selected = std::make_unique<chimaera::DmaHostController>(
         timing, node->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
-        node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"));
+        node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"),
+        node->controller_queue_limit());
     else if (backend == "m5")
       selected =
         std::make_unique<chimaera::Gem5HostController>(timing, std::chrono::microseconds(poll));

@@ -103,6 +103,14 @@ int main() {
         server.get();
     }
     expect(!std::filesystem::exists(base + "/h2g") && !std::filesystem::exists(base + "/g2h"));
+    {
+        Gem5TimingController timing(endpoint);
+        DmaHostController host(timing, base + "/h2g", base + "/g2h", 2048);
+        for (unsigned i = 0; i < 2048; ++i) host.submit(Message(64));
+        bool full = false;
+        try { host.submit(Message(64)); } catch (const std::runtime_error&) { full = true; }
+        expect(full);
+    }
     ::close(listener);
     std::filesystem::remove_all(base);
 }

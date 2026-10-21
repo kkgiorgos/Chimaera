@@ -35,6 +35,8 @@ def main():
     parser.add_argument("--dma-module", type=Path)
     parser.add_argument("--clock-probe", action="store_true",
                         help="Include an optional diagnostic process; exclude from final measurements")
+    parser.add_argument("--dma-diagnostics", action="store_true",
+                        help="Export coordinator progress; exclude from final measurements")
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -53,15 +55,18 @@ def main():
     if len(points) != 1 or points[0]["pressure"]:
         raise ValueError("Acceptance configuration must contain one unpressured baseline")
     write_json(output / "routes.json", routes())
-    if args.clock_probe:
+    if args.clock_probe or args.dma_diagnostics:
         original_session = run_memory_suite.session
 
         def diagnostic_session(*values, **kwargs):
             spec = original_session(*values, **kwargs)
-            spec['deploy']['install_trees'].append(dict(
-                source=str(ROOT / 'middleware'), destination='diagnostics'))
-            spec['guest']['processes'].append(dict(name='clock_probe', command=[
-                'python3', run_memory_suite.GUEST_ROOT + '/diagnostics/clock_probe.py']))
+            if args.clock_probe:
+                spec['deploy']['install_trees'].append(dict(
+                    source=str(ROOT / 'middleware'), destination='diagnostics'))
+                spec['guest']['processes'].append(dict(name='clock_probe', command=[
+                    'python3', run_memory_suite.GUEST_ROOT + '/diagnostics/clock_probe.py']))
+            if args.dma_diagnostics:
+                spec['bridge']['dma_diagnostics'] = True
             return spec
 
         run_memory_suite.session = diagnostic_session
@@ -75,6 +80,7 @@ def main():
                                                 text=True).strip(),
         cpu_type=args.cpu_type, middleware=args.middleware, backend=args.backend,
         clock_probe=args.clock_probe,
+        dma_diagnostics=args.dma_diagnostics,
         artifacts={name: dict(path=str(path.resolve()), sha256=sha256(path))
                    for name, path in artifacts.items()}))
     (output / 'source.patch').write_bytes(subprocess.check_output(

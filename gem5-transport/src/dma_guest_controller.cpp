@@ -111,7 +111,8 @@ struct DmaGuestController::Impl {
     std::uint64_t rx_completed{}, tx_completed{}, tx_submitted{};
 
     Impl(std::function<void()> notify, const std::string& device,
-         const std::string& module, const std::string& options) {
+         const std::string& module, const std::string& options, std::size_t pending)
+        : outgoing(pending) {
         pool->notify = std::move(notify);
         if (!pool->notify) throw std::invalid_argument("DMA requires a completion notifier");
         if (!module.empty()) {
@@ -261,8 +262,8 @@ struct DmaGuestController::Impl {
 };
 
 DmaGuestController::DmaGuestController(std::function<void()> notify, std::string device,
-        std::string module, std::string options)
-    : impl_(std::make_unique<Impl>(std::move(notify), device, module, options)) {}
+        std::string module, std::string options, std::size_t pending)
+    : impl_(std::make_unique<Impl>(std::move(notify), device, module, options, pending)) {}
 DmaGuestController::~DmaGuestController() = default;
 Message DmaGuestController::allocate(std::size_t size) {
     if (!impl_->application_failure.empty()) throw std::runtime_error(impl_->application_failure);
@@ -293,12 +294,16 @@ bool DmaGuestController::has_work() const {
 }
 std::string DmaGuestController::statistics() const {
     const auto& p = *impl_->pool;
+    const auto batch = dma::layout(impl_->outgoing.entries());
     return "direct_allocations=" + std::to_string(p.direct) + " heap_fallbacks=" +
         std::to_string(p.fallback) + " staging_bytes=" + std::to_string(p.staging_bytes) +
         " rx_completed=" + std::to_string(impl_->rx_completed) +
         " tx_completed=" + std::to_string(impl_->tx_completed) +
         " tx_submitted=" + std::to_string(impl_->tx_submitted) +
         " outgoing=" + std::to_string(impl_->outgoing.size()) +
+        " front_bytes=" + std::to_string(impl_->outgoing.front() ? impl_->outgoing.front()->data.size() : 0) +
+        " batch_count=" + std::to_string(batch.count) +
+        " batch_bytes=" + std::to_string(batch.payload) +
         " active=" + std::to_string(impl_->active.has_value());
 }
 } // namespace chimaera

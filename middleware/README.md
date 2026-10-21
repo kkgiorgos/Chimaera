@@ -56,6 +56,11 @@ For explicitly local profiles containing only SHM and loopback-whitelisted UDP,
 the hook retains SHM with a 1 MiB RTPS packet limit and removes loopback UDP.
 Otherwise UDP's approximately 64 KiB limit fragments each camera image even
 when its destination uses Chimaera. Networked transport profiles are preserved.
+Middleware-mode DMA controllers permit 8,192 queued packets, retaining their
+32 MiB byte bound. The legacy 1,024-message limit can reject a fresh-boot DDS
+discovery/reliability burst before normal application traffic begins. Legacy
+bridge sessions keep that count limit. Per-side IPC runtimes have a separate
+64 MiB byte bound; exceeding either bound fails the session explicitly.
 In middleware mode, the original endpoints own QoS, history and freshness.
 Legacy bridge queue coalescing and bridge-level stereo expiry are bypassed;
 the existing ball-catching consumer still rejects expired or unmatched frames.
@@ -78,6 +83,10 @@ python3 middleware/validate_ball.py --output .chimaera-middleware/ball-acceptanc
 The disk remains a read-only base for gem5's disposable COW overlay. Kernel and
 DMA module must be a matching pair. Use a simulator containing `ed9c7a6`'s nested
 interrupt acknowledgement fix; the older SDK binary can lose disk interrupts.
+For diagnosis, `--clock-probe` adds a guest process that compares Linux sleep
+and monotonic time with address-mode m5 time on each core. It exports
+`baseline/gem5/chimaera-clock-probe.json`. Leave this option off for final
+acceptance and latency measurements.
 
 Stage the benchmark runtime, then run the matched matrix:
 

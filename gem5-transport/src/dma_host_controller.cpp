@@ -12,11 +12,13 @@ struct DmaHostController::Impl {
     control::ReceivedQueue incoming;
     bool started{}, stopped{};
     std::string failure;
-    Impl(Gem5TimingController& t, std::string input, std::string output)
-        : timing(t), h2g(std::move(input), true, 16), g2h(std::move(output), true, 16) {}
+    Impl(Gem5TimingController& t, std::string input, std::string output, std::size_t pending)
+        : timing(t), h2g(std::move(input), true, 16), g2h(std::move(output), true, 16),
+          outgoing(pending) {}
 };
-DmaHostController::DmaHostController(Gem5TimingController& timing, std::string h2g, std::string g2h)
-    : impl_(std::make_unique<Impl>(timing, std::move(h2g), std::move(g2h))) {}
+DmaHostController::DmaHostController(Gem5TimingController& timing, std::string h2g,
+        std::string g2h, std::size_t pending)
+    : impl_(std::make_unique<Impl>(timing, std::move(h2g), std::move(g2h), pending)) {}
 DmaHostController::~DmaHostController() = default;
 void DmaHostController::submit(Message data, std::string_view key) {
     auto& s = *impl_;

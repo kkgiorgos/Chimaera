@@ -202,4 +202,14 @@ int main() {
     expect(rejected);
     bad.reset();
     expect(driver.closed == 2);
+    // Middleware bootstrap may queue many small RTPS discovery records. The
+    // larger configured count remains bounded before the device is started.
+    auto burst = std::make_unique<chimaera::DmaGuestController>(
+        [] {}, "test-dma", "", "", 2048);
+    for (unsigned i = 0; i < 2048; ++i) burst->submit(Message(64));
+    bool full = false;
+    try { burst->submit(Message(64)); } catch (const std::runtime_error&) { full = true; }
+    expect(full);
+    burst.reset();
+    expect(driver.closed == 3);
 }
