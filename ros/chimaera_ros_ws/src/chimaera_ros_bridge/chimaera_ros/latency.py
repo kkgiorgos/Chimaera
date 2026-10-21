@@ -691,7 +691,7 @@ def make_report(root, write_outputs=True):
         return report
     write_json(root / 'latency-report.json', report)
     configuration_fields = ['mode', 'repeat', 'payload_bytes', 'rate_hz', 'interval_us', 'poll_us',
-                            'workload',
+                            'workload', 'transport_backend', 'middleware_transport',
                             'gem5_name', 'cpu_type', 'num_cores', 'cpu_clock',
                             'l1d_size', 'l1i_size', 'l2_size', 'l1_assoc', 'l2_assoc']
     statistic_fields = ['mean_ms', 'p50_ms', 'p95_ms', 'p99_ms', 'max_ms']
@@ -717,7 +717,10 @@ def make_report(root, write_outputs=True):
                 f"{config['interval_us'] / 1000:g} / —" if config['mode'] == 'native_stepped' else
                 f"{config['interval_us'] / 1000:g} / {config['poll_us'] / 1000:g}")
             profile = config.get('gem5_name', config.get('cpu_type', config.get('cpu', 'kvm')))
-            label = config['mode'] + (f' / {profile}' if config['mode'] == 'chimaera' else '')
+            label = config['mode']
+            if config['mode'] == 'chimaera':
+                label += (f' / {profile} / {config.get("transport_backend", "m5")} / '
+                          + config.get('middleware_transport', 'bridge'))
             cells = [f"{label} · {config['repeat']}", direction.replace('_to_', ' → '), stream or 'Synthetic', str(metrics.get('serialized_bytes') or config['payload_bytes']), str(metrics.get('rate_hz', config['rate_hz'])),
                      timing,
                      f"{metrics['received']} / {metrics['published']}",
