@@ -1,6 +1,7 @@
 """Ball catching: detailed execution, readiness checkpoints and KVM smoke validation."""
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 
@@ -44,7 +45,7 @@ if restore and capture:
     parser.error('Cannot prepare and restore a checkpoint together')
 if cpu_type == 'kvm' and (restore or capture):
     parser.error('KVM functional validation requires a fresh boot')
-if args.transport_backend == 'dma' and (restore or capture):
+if args.transport_backend in ('dma', 'm5ops') and (restore or capture):
     parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
 if capture and (experiment['aggressor']['pattern'] != 'none' or experiment['aggressor']['gbps']):
     parser.error('Readiness checkpoints require a disabled aggressor')
@@ -87,10 +88,13 @@ boot = guest_start_script('/tmp/chimaera-ball-start', files, preamble=preamble)
 board.set_kernel_disk_workload(kernel=KernelResource(local_path=args.kernel),
     disk_image=DiskImageResource(local_path=args.image),
     kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off']
-        + (['acpi=off'] if args.transport_backend == 'dma' else []),
+        + (['acpi=off'] if args.transport_backend in ('dma', 'm5ops') else []),
     readfile_contents=boot, checkpoint=Path(restore) / 'cpt' if restore else None)
 if args.transport_backend == 'dma':
     attach_dma(board, args.dma_h2g, args.dma_g2h)
+elif args.transport_backend == 'm5ops':
+    from chimaera_m5 import attach_m5
+    attach_m5(board, args.dma_h2g, args.dma_g2h)
 
 if args.instantiate_only:
     # Use the board's documented direct-instantiation lifecycle. No timing
@@ -218,10 +222,23 @@ class BallTimingServer(TimingServer):
         return {**super().exit_handlers(), ExitEvent.CHECKPOINT: lambda: True}
 
     def handle_command(self, line):
-        if line == 'CHIMAERA_INGRESS' and args.transport_backend == 'dma':
+        if line == 'CHIMAERA_EGRESS' and args.transport_backend == 'm5ops':
+            if not self.roi_started or self.finished:
+                raise ValueError('m5ops egress requires a live, paused ROI')
+            return 'EGRESS ' + str(board.chimaera_m5.flush_egress())
+        if line == 'CHIMAERA_INGRESS' and args.transport_backend in ('dma', 'm5ops'):
             if not self.roi_started or self.finished:
                 raise ValueError('DMA ingress requires a live, paused ROI')
-            board.chimaera_dma.ingress()
+            if args.transport_backend == 'dma':
+                board.chimaera_dma.ingress()
+            else:
+                board.chimaera_m5.ingress()
+                if os.environ.get('CHIMAERA_M5_DIAGNOSTICS'):
+                    count = getattr(self, '_m5_diagnostics_count', 0) + 1
+                    self._m5_diagnostics_count = count
+                    if count <= 4 or count % 256 == 0:
+                        with (Path(m5.options.outdir) / 'chimaera-m5-state.txt').open('a') as log:
+                            log.write(board.chimaera_m5.diagnostics() + '\n')
             return 'OK INGRESS'
         if line == 'BENCHMARK_RESTORE':
             if not restore or self.restore_boundary_tick is None or self.pressure_started:

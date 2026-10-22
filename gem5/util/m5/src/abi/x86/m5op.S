@@ -32,8 +32,14 @@
         .globl \name
         .func \name
 \name:
+        .if (\func == M5OP_CHIMAERA_CONTROL) || (\func == M5OP_CHIMAERA_DATA)
+        mfence
+        .endif
         .byte 0x0F, 0x04
         .word \func
+        .if (\func == M5OP_CHIMAERA_CONTROL) || (\func == M5OP_CHIMAERA_DATA)
+        mfence
+        .endif
         ret
         .endfunc
 .endm

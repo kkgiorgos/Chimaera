@@ -119,6 +119,10 @@ void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
 void chimaeraTest(ThreadContext *tc, uint64_t channel, uint64_t value);
 uint64_t chimaeraSend(ThreadContext *tc, GuestAddr vaddr, uint64_t len);
 uint64_t chimaeraRecv(ThreadContext *tc, GuestAddr vaddr, uint64_t len);
+uint64_t chimaeraControl(ThreadContext *tc, uint64_t command, GuestAddr request,
+    uint64_t size);
+uint64_t chimaeraData(ThreadContext *tc, uint64_t command, GuestAddr request,
+    uint64_t size);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -241,10 +245,6 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
       // case M5OP_RESERVED1:
       // case M5OP_RESERVED2:
       // case M5OP_RESERVED3:
-      case M5OP_RESERVED4:
-      case M5OP_RESERVED5:
-        warn("Unimplemented m5 op (%#x)\n", func);
-        return false;
 
       /* dist-gem5 functions */
       case M5OP_DIST_TOGGLE_SYNC:
@@ -269,6 +269,14 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
 
       case M5OP_CHIMAERA_RECV:
         result = invokeSimcall<ABI, store_ret>(tc, chimaeraRecv);
+        return true;
+
+      case M5OP_CHIMAERA_CONTROL:
+        result = invokeSimcall<ABI, store_ret>(tc, chimaeraControl);
+        return true;
+
+      case M5OP_CHIMAERA_DATA:
+        result = invokeSimcall<ABI, store_ret>(tc, chimaeraData);
         return true;
 
       default:

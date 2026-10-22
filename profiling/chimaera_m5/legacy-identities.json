@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "application_sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+  "sdk_note": "SDK for common application/ABI/bootstrap assets. Historical build-image identities are separately recorded where known; retained legacy transports are not rebuilt.",
+  "implementations": {
+    "original_m5": {
+      "transport_identity": "original_pre_streamed_m5_pair",
+      "retained_runtime": ".chimaera-m5/original/runtime",
+      "retained_bundle": ".chimaera-m5/original/guest.tar.gz",
+      "retained_bundle_sha256": "f0df26063c3fbc167e9ae258b40c1f83a0dc32a810cd036db17f8910ce0ba417",
+      "source": ".chimaera-m5/original/image-build-manifest.json",
+      "source_sha256": "e21d460eafa604d0e3ae102bde9111f0701430303fb8224def51777283c27061",
+      "source_kind": "image_build_manifest_exact_source_revision_unknown",
+      "historical_sdk_image": "sha256:642cd426444f5fe6e0ba2c586ca94937e744590b74511c6a55640b657ec35e93",
+      "source_note": "Exact source revision is absent from the recovered manifest. Pre-streamed git reconstruction is not exact binary-source provenance.",
+      "host_driver_sha256": "07e443856f533cc6c5d040c12967f262e0804d212a44c47b0d5625e70dcf48a0",
+      "app_guest_bridge_sha256": "4a89aa84e4cb480c3c72e883a5c41f9e7950b93ba0277b5fc7ccb4e4a79b329a",
+      "executed_guest_bridge_sha256": "4a89aa84e4cb480c3c72e883a5c41f9e7950b93ba0277b5fc7ccb4e4a79b329a",
+      "guest_start_sha256": "f6569749f9bb7295d6448160b4e107525bfd3735bb6633c48d5d941bb5981f66",
+      "metadata_sha256": "f24b696b1de27651084cdb5b1e547dfb0048036987c6324d93e84c0fd7ec1e2f",
+      "historical_application_endpoint_sha256": "84131e42ed8f781326947d930656655a00354e7da62ce49534469448739e32d1",
+      "historical_cohort": ".chimaera-rewrite/20261020/baseline"
+    },
+    "streamed_m5": {
+      "transport_identity": "streamed_owned_payload_m5_pair_20261020",
+      "retained_runtime": ".chimaera-rewrite/20261020/runtime",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest.tar.gz",
+      "retained_bundle_sha256": "593cc9dff71254e16d6d373bbd67783bbb91b34115f4965b2d7cc9520ab5417a",
+      "source": ".chimaera-rewrite/20261020/source.tar.gz",
+      "source_sha256": "13ecdae627cc6633d42f58cf9aaf4e9768c2a329dbf2bccee145f4e66ed2b3df",
+      "source_kind": "retained_streamed_source_archive",
+      "historical_sdk_image": null,
+      "source_note": "Source archive and build log are retained; exact historical build-container image ID is not independently recorded in the pilot case. Do not infer it from the common application SDK.",
+      "host_driver_sha256": "dbd2e60b762758b36df401629d99e77eeec75dbde72a390fe1bbaafd9a07f929",
+      "app_guest_bridge_sha256": "70c6e78286ef6681f0a560656352361b8e7e3540c67eb57100cdc56e75a0ec7a",
+      "executed_guest_bridge_sha256": "70c6e78286ef6681f0a560656352361b8e7e3540c67eb57100cdc56e75a0ec7a",
+      "guest_start_sha256": "f6569749f9bb7295d6448160b4e107525bfd3735bb6633c48d5d941bb5981f66",
+      "metadata_sha256": "f24b696b1de27651084cdb5b1e547dfb0048036987c6324d93e84c0fd7ec1e2f",
+      "historical_application_endpoint_sha256": "ff11f2415929d00c5696601b4ba0728b37c37eb967f6226316f31d8632522730",
+      "historical_cohort": ".chimaera-rewrite/20261020/candidate-v1"
+    },
+    "initialized_m5": {
+      "transport_identity": "initialized_buffers_m5_final_pair_20261020",
+      "retained_runtime": ".chimaera-rewrite/20261020/guest-v2-final/opt/chimaera/latency/app",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest-v2-final.tar.gz",
+      "retained_bundle_sha256": "cf113e539f097b33423425ebfe6517afa4a4799f19827cbf70816c90a325ea1d",
+      "source": ".chimaera-rewrite/20261020/source-v2-final.tar.gz",
+      "source_sha256": "cd2d87c6e6022b948e8cc0103ad0d1788c2da28ef4f5c593d1780eab2063d05e",
+      "source_kind": "retained_final_initialized_source_archive",
+      "historical_sdk_image": null,
+      "source_note": "Select the complete final prefix retained inside historical guest staging. Exact historical build-container image ID is not independently recorded. Mutable runtime-v2 currently contains the ready guest bridge, not final.",
+      "host_driver_sha256": "a507655c4c36535dd5bba5213f65edafb83069e6ffd962c193c706a885d84ee4",
+      "app_guest_bridge_sha256": "cb0671f5628b6b97507e074656cdfe3ef5569ba32ca3ea0b3148be25096804ae",
+      "executed_guest_bridge_sha256": "cb0671f5628b6b97507e074656cdfe3ef5569ba32ca3ea0b3148be25096804ae",
+      "guest_start_sha256": "f6569749f9bb7295d6448160b4e107525bfd3735bb6633c48d5d941bb5981f66",
+      "metadata_sha256": "f24b696b1de27651084cdb5b1e547dfb0048036987c6324d93e84c0fd7ec1e2f",
+      "historical_application_endpoint_sha256": "ff11f2415929d00c5696601b4ba0728b37c37eb967f6226316f31d8632522730",
+      "rejected_mixed_prefix": {
+        "runtime": ".chimaera-rewrite/20261020/runtime-v2",
+        "observed_guest_bridge_sha256": "fd32c7e159f54fa3eefb965cb3033e7600d6b771dfb52ab0c3f51a8c55dcf9c5",
+        "matching_ready_bundle": ".chimaera-rewrite/20261020/guest-v2-ready.tar.gz",
+        "matching_ready_bundle_sha256": "ea04966825ebacac2ac584082ccc8175517b665dcbdfa592f545e72d6991673d",
+        "note": "Driver matches final but guest bridge matches ready. Reject this prefix with final; keep historical ready pilot measurements separate."
+      },
+      "historical_cohort": "Final initialized archive; distinct from candidate-v2 pilot using guest-v2-ready.tar.gz"
+    },
+    "initialized_m5_ready": {
+      "transport_identity": "prefaulted_receive_m5_ready_pair_20261020",
+      "retained_runtime": ".chimaera-rewrite/20261020/runtime-v2",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest-v2-ready.tar.gz",
+      "retained_bundle_sha256": "ea04966825ebacac2ac584082ccc8175517b665dcbdfa592f545e72d6991673d",
+      "source": ".chimaera-m5/initialized-m5-ready/source-provenance.json",
+      "source_sha256": "dc708435492f07d53e5327ef479839d8c2954bb2742a5804db437aee2068d71f",
+      "source_kind": "retained_ready_source_snapshot_binary_correspondence_unverified",
+      "source_snapshot": ".chimaera-m5/initialized-m5-ready/retained-source-v2.tar.gz",
+      "source_snapshot_sha256": "50f1d1b91f557484a3637e4bc335f22e311b484eb15d9a0dea68b04283866944",
+      "source_confidence": "retained_snapshot_only_exact_binary_source_correspondence_unverified",
+      "historical_sdk_image": null,
+      "source_note": "Binary identity is established independently. Snapshot retained from unpacked source-v2 contains the prefault helper, but exact correspondence to the READY build tree is UNVERIFIED. Neither source-v2 nor source-v2-final historical archive includes the helper; do not label either as READY exact source.",
+      "host_driver_sha256": "a507655c4c36535dd5bba5213f65edafb83069e6ffd962c193c706a885d84ee4",
+      "app_guest_bridge_sha256": "fd32c7e159f54fa3eefb965cb3033e7600d6b771dfb52ab0c3f51a8c55dcf9c5",
+      "executed_guest_bridge_sha256": "fd32c7e159f54fa3eefb965cb3033e7600d6b771dfb52ab0c3f51a8c55dcf9c5",
+      "guest_start_sha256": "f6569749f9bb7295d6448160b4e107525bfd3735bb6633c48d5d941bb5981f66",
+      "metadata_sha256": "f24b696b1de27651084cdb5b1e547dfb0048036987c6324d93e84c0fd7ec1e2f",
+      "historical_application_endpoint_sha256": "ff11f2415929d00c5696601b4ba0728b37c37eb967f6226316f31d8632522730",
+      "historical_cohort": ".chimaera-rewrite/20261020/candidate-v2",
+      "comparison_role": "main_performance_cohort_subject_to_parent_qualification"
+    }
+  },
+  "compatible_prior_catalogs": {
+    "35a171b566f0cdacb56f00bc56ee168b5635d317a82c1703e8118c0294e117a4": [
+      "original_m5",
+      "streamed_m5",
+      "initialized_m5"
+    ]
+  }
+}

@@ -39,8 +39,8 @@ configure_ticks()
 requires(coherence_protocol_required=CoherenceProtocol.MESI_TWO_LEVEL, kvm_required=True)
 if args.num_cores < 1 or args.l1_assoc < 1 or args.l2_assoc < 1:
     parser.error('Core counts and cache associativity must be positive')
-if args.transport_backend == 'dma' and args.case_script:
-    parser.error('DMA requires a fresh boot; reused sessions are not supported')
+if args.transport_backend in ('dma', 'm5ops') and args.case_script:
+    parser.error('DMA/m5ops requires a fresh boot; reused sessions are not supported')
 CacheHierarchy = MESITwoLevelCacheHierarchy
 if args.transport_backend == 'dma':
     from chimaera_dma import DmaCacheHierarchy, DmaTimingServer, attach_dma
@@ -67,11 +67,14 @@ board.set_kernel_disk_workload(
     kernel=KernelResource(local_path=args.kernel),
     disk_image=DiskImageResource(local_path=args.image),
     kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923', 'root=/dev/sda2', 'mce=off']
-        + (['acpi=off'] if args.transport_backend == 'dma' else []),
+        + (['acpi=off'] if args.transport_backend in ('dma', 'm5ops') else []),
     readfile_contents=guest_start_script(args.guest_command, args.guest_file,
         preamble=preamble))
 if args.transport_backend == 'dma':
     attach_dma(board, args.dma_h2g, args.dma_g2h)
+elif args.transport_backend == 'm5ops':
+    from chimaera_m5 import M5TimingServer, attach_m5
+    attach_m5(board, args.dma_h2g, args.dma_g2h)
 
 
 switched = False
@@ -95,5 +98,7 @@ timing = (ReusableTimingServer(readfile=str(board.readfile), case_script=args.ca
           else TimingServer(on_ready=prepare_clock))
 if args.transport_backend == 'dma':
     timing = DmaTimingServer(board, on_ready=prepare_clock)
+elif args.transport_backend == 'm5ops':
+    timing = M5TimingServer(board, on_ready=prepare_clock)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 timing.run(simulator, args.socket_path, managed_shutdown=args.managed_shutdown)

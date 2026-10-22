@@ -26,7 +26,9 @@ public:
             throw std::invalid_argument("queue limits must be positive");
     }
     std::size_t size() const { return entries_.size(); }
+    std::size_t bytes() const { return bytes_; }
     const Entry* front() const { return entries_.empty() ? nullptr : &entries_.front(); }
+    Entry* front() { return entries_.empty() ? nullptr : &entries_.front(); }
     std::span<const Entry> entries() const { return entries_; }
     void submit(Message data, std::string_view key = {}) {
         std::string owned_key(key);

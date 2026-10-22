@@ -1,0 +1,128 @@
+{
+  "physical_host": "ubuntu-george",
+  "environment": {
+    "sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+    "ros": "Humble",
+    "gazebo": "Fortress",
+    "kernel_release": "5.15.180-chimaera",
+    "note": "Operator must pin actual container identity, CPU/memory limits, host placement and thread affinity before freezing."
+  },
+  "image": ".chimaera-orchestrator/assets/ball-catching-5e50830490bb65fe6893.img",
+  "kernel": ".chimaera-orchestrator/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/kernel",
+  "gem5_root": "gem5",
+  "gem5": "gem5/build/X86/gem5.opt",
+  "gem5_config": "ros/chimaera_ros_ws/src/chimaera_ros_bridge/benchmark/gem5_latency.py",
+  "orchestration": "ros/chimaera_ros_ws/src/chimaera_ros_bridge/chimaera_ros",
+  "benchmark_source": "profiling/chimaera_m5/endpoint.cpp",
+  "benchmark_endpoint_sha256": "c7098ff6074f75be5bcf3bf380febf39b51a3c6c71f200185f57a7fdda7400a2",
+  "variants": {
+    "original_m5": {
+      "runtime": ".chimaera-m5/matched/original_m5/runtime",
+      "bundle": ".chimaera-m5/matched/original_m5/guest.tar.gz",
+      "source": ".chimaera-m5/original/image-build-manifest.json",
+      "source_kind": "image_build_manifest_exact_source_revision_unknown",
+      "retained_runtime": ".chimaera-m5/original/runtime",
+      "retained_bundle": ".chimaera-m5/original/guest.tar.gz",
+      "backend": "m5",
+      "middleware": "bridge",
+      "legacy_original_adapter": true,
+      "legacy_implementation": "original_m5",
+      "qualification_note": "Recovered endpoint/driver/clock/bundle match original historical raw hashes. Use stage.py --legacy-original to stage declarative guest Python bootstrap and preserve original driver/bridge/wire. Original marker remains unchanged; identity-only wrapper does not claim protocol3. Parent must run fixed-ball KVM qualification after actual catch gate."
+    },
+    "streamed_m5": {
+      "runtime": ".chimaera-m5/matched/streamed_m5/runtime",
+      "bundle": ".chimaera-m5/matched/streamed_m5/guest.tar.gz",
+      "source": ".chimaera-rewrite/20261020/source.tar.gz",
+      "source_kind": "retained_streamed_source_archive",
+      "retained_runtime": ".chimaera-rewrite/20261020/runtime",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest.tar.gz",
+      "backend": "m5",
+      "middleware": "bridge",
+      "legacy_implementation": "streamed_m5",
+      "qualification_note": "Preserve the separately pinned streamed driver and both guest-bridge copies. stage.py --legacy-implementation streamed_m5 admits only this bundle/source/SDK identity without relabeling its old metadata. Parent KVM qualification remains pending."
+    },
+    "initialized_m5": {
+      "runtime": ".chimaera-m5/matched/initialized_m5/runtime",
+      "bundle": ".chimaera-m5/matched/initialized_m5/guest.tar.gz",
+      "source": ".chimaera-rewrite/20261020/source-v2-final.tar.gz",
+      "source_kind": "retained_final_initialized_source_archive",
+      "retained_runtime": ".chimaera-rewrite/20261020/guest-v2-final/opt/chimaera/latency/app",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest-v2-final.tar.gz",
+      "backend": "m5",
+      "middleware": "bridge",
+      "legacy_implementation": "initialized_m5",
+      "qualification_note": "Select final installed prefix from guest-v2-final staging: driver a507655c..., guest cb0671f5... match final bundle cf113e53.... Mutable runtime-v2 currently has ready guest fd32c7e1... and is rejected. Preserve ready-pilot historical data as a separate cohort."
+    },
+    "integrated_dma": {
+      "runtime": ".chimaera-m5/matched/integrated_dma/runtime",
+      "bundle": ".chimaera-m5/matched/integrated_dma/guest.tar.gz",
+      "source": ".chimaera-rewrite/20261020/chimaera-dma-integration-source-r5.tar.gz",
+      "source_kind": "retained_source_archive",
+      "retained_runtime": ".chimaera-rewrite/20261020/runtime-dma-r5",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest-dma-r5.tar.gz",
+      "backend": "dma",
+      "middleware": "bridge",
+      "module": ".chimaera-orchestrator/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "module_options": "buffer_mb=9 receive_slots=16 transmit_slots=4"
+    },
+    "original_dds_dma": {
+      "runtime": ".chimaera-m5/matched/original_dds_dma/runtime",
+      "bundle": ".chimaera-m5/matched/original_dds_dma/guest.tar.gz",
+      "source": "docs/measurements/chimaera-dds-copy-reduction-2026-10-21/baseline-source.tar.gz",
+      "source_kind": "retained_source_archive",
+      "retained_runtime": ".chimaera-middleware/copy-reduction-20261021/runtime-baseline",
+      "retained_bundle": ".chimaera-middleware/copy-reduction-20261021/guest-baseline.tar.gz",
+      "backend": "dma",
+      "middleware": "fastdds",
+      "module": ".chimaera-orchestrator/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "module_options": "buffer_mb=9 receive_slots=16 transmit_slots=4"
+    },
+    "copy_reduced_dds_dma": {
+      "runtime": ".chimaera-m5/matched/copy_reduced_dds_dma/runtime",
+      "bundle": ".chimaera-m5/matched/copy_reduced_dds_dma/guest.tar.gz",
+      "source": "docs/measurements/chimaera-dds-scheduling-2026-10-22/baseline-source.tar.gz",
+      "source_kind": "retained_source_archive_c3393c8",
+      "retained_runtime": ".chimaera-middleware/scheduling-egress-20261022/runtime-baseline",
+      "retained_bundle": ".chimaera-middleware/scheduling-egress-20261022/guest-baseline.tar.gz",
+      "backend": "dma",
+      "middleware": "fastdds",
+      "module": ".chimaera-orchestrator/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "module_options": "buffer_mb=9 receive_slots=16 transmit_slots=4"
+    },
+    "scheduled_dds_dma": {
+      "runtime": ".chimaera-m5/matched/scheduled_dds_dma/runtime",
+      "bundle": ".chimaera-m5/matched/scheduled_dds_dma/guest.tar.gz",
+      "source": "docs/measurements/chimaera-dds-scheduling-2026-10-22/candidate-source.tar.gz",
+      "source_kind": "retained_source_archive_912ae01_runtime",
+      "retained_runtime": ".chimaera-middleware/scheduling-egress-20261022/runtime-candidate",
+      "retained_bundle": ".chimaera-middleware/scheduling-egress-20261022/guest-candidate.tar.gz",
+      "backend": "dma",
+      "middleware": "fastdds",
+      "module": ".chimaera-orchestrator/assets/kernel-7b7d34a3b688b8ae12f5e08df8b93e9e32dc73ed66db378f6e928dacc9eab9f9/chimaera_dma.ko",
+      "module_options": "buffer_mb=9 receive_slots=16 transmit_slots=4"
+    },
+    "direct_dds_m5ops": {
+      "runtime": ".chimaera-m5/matched/direct_dds_m5ops/runtime",
+      "bundle": ".chimaera-m5/matched/direct_dds_m5ops/guest.tar.gz",
+      "source": ".chimaera-m5/candidate-source.tar.gz",
+      "source_kind": "parent_frozen_uncommitted_implementation_archive",
+      "backend": "m5ops",
+      "middleware": "fastdds",
+      "module": ".chimaera-m5/kernel/chimaera_m5.ko"
+    },
+    "initialized_m5_ready": {
+      "runtime": ".chimaera-m5/matched/initialized_m5_ready/runtime",
+      "bundle": ".chimaera-m5/matched/initialized_m5_ready/guest.tar.gz",
+      "source": ".chimaera-m5/initialized-m5-ready/source-provenance.json",
+      "source_kind": "retained_ready_source_snapshot_binary_correspondence_unverified",
+      "source_snapshot": ".chimaera-m5/initialized-m5-ready/retained-source-v2.tar.gz",
+      "source_confidence": "retained_snapshot_only_exact_binary_source_correspondence_unverified",
+      "retained_runtime": ".chimaera-rewrite/20261020/runtime-v2",
+      "retained_bundle": ".chimaera-rewrite/20261020/guest-v2-ready.tar.gz",
+      "backend": "m5",
+      "middleware": "bridge",
+      "legacy_implementation": "initialized_m5_ready",
+      "qualification_note": "Distinct historical READY identity, guest fd32c7e1... / driver a507655c... / bundle ea049668.... Exact binary/source correspondence UNVERIFIED; retained unpacked source snapshot is provenance only. Parent current-contract KVM/correctness/TimingSimpleCPU qualification pending. Frozen final initialized_m5 and both raw crashes remain diagnostic."
+    }
+  }
+}

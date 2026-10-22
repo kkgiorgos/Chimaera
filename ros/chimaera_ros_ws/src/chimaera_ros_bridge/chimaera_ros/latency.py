@@ -65,6 +65,11 @@ def routes(reliability='reliable', depth=128, config=None):
              qos=dict(qos, reliability='reliable'))]
     if config and config.get('workload') == 'ball_catching':
         return dict(version=1, topics=ball_routes(config)['topics'] + topics[-1:])
+    if config and config.get('transport_backend') == 'm5ops':
+        # Synthetic arrays may exceed the 64 KiB control receive slots. Keep
+        # their RTPS data and metadata on the explicitly registered bulk lane.
+        for topic in topics[:2]:
+            topic['transport_class'] = 'bulk'
     return dict(version=1, topics=topics)
 
 
@@ -103,6 +108,8 @@ def guest_session(cpu_type='kvm', config=None):
             dma_module_options=(config or {}).get('dma_module_options',
                 'buffer_mb=8 receive_slots=16 transmit_slots=4'),
             dma_diagnostics=(config or {}).get('dma_diagnostics', False))
+    elif (config or {}).get('transport_backend') == 'm5ops':
+        result['bridge'].update(transport_backend='m5ops', m5_module='/tmp/chimaera-m5.ko')
     if (config or {}).get('dds_shm_bytes', 0):
         result['guest']['localhost_only'] = False
         result['guest']['env'].update(
@@ -125,8 +132,10 @@ def validate(config):
             max((s.get('body_bytes', 0) for s in traffic(config)), default=0)) + 4096
         if shm < max(1024 * 1024, 2 * largest):
             raise ValueError('DDS shared memory must hold at least two complete serialized payloads')
-    if config.get('transport_backend', 'm5') not in ('m5', 'dma'):
-        raise ValueError('transport_backend must be m5 or dma')
+    if config.get('transport_backend', 'm5') not in ('m5', 'dma', 'm5ops'):
+        raise ValueError('transport_backend must be m5, dma or m5ops')
+    if config.get('transport_backend') == 'm5ops' and config.get('middleware_transport') != 'fastdds':
+        raise ValueError('m5ops requires Fast DDS middleware routing')
     if config.get('delivery_policy', 'latest') not in ('latest', 'lossless'):
         raise ValueError('delivery_policy must be latest or lossless')
     if type(config.get('verify_payload', False)) is not bool:
@@ -194,7 +203,9 @@ def stage_guest(output, package, bundle=None):
     startup.write_text(startup.read_text().replace('run session.json --side guest',
         'run /tmp/chimaera-latency-session.json --side guest'))
     write_json(result / 'latency-runtime.json', dict(version=4, transport_protocol=3,
-        transport_backends=metadata.get('transport_backends', ['m5']), dma_abi=metadata.get('dma_abi'), dma_protocol=metadata.get('dma_protocol'),
+        transport_backends=metadata.get('transport_backends', ['m5']),
+        dma_abi=metadata.get('dma_abi'), dma_protocol=metadata.get('dma_protocol'),
+        m5_abi=metadata.get('m5_abi'),
         endpoint_features=metadata.get('endpoint_features', []),
         cpu_types=['kvm', 'timing', 'o3'],
         workloads=['synthetic', 'ball_catching']))
@@ -224,6 +235,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         if set(required) - set(features):
             raise ValueError('Rebuild the runtime for required endpoint features: ' + ', '.join(required))
     dma = config.get('transport_backend', 'm5') == 'dma'
+    direct_m5 = config.get('transport_backend') == 'm5ops'
     if dma and reuse is not None:
         raise ValueError('DMA requires fresh-boot cases; guest reuse is not supported')
     middleware = config.get('middleware_transport', 'bridge') == 'fastdds'
@@ -240,9 +252,11 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     base_env = environment if environment is not None else os.environ
     if config['mode'] == 'chimaera':
         if bundle:
-            validate_bundle(bundle, backend='dma' if dma else 'm5', required_features=required)
+            validate_bundle(bundle, backend=config.get('transport_backend', 'm5'), required_features=required)
         if dma and not Path(config.get('dma_module', '')).is_file():
             raise ValueError('DMA cases require dma_module built for the exact guest kernel')
+        if direct_m5 and not Path(config.get('m5_module', '')).is_file():
+            raise ValueError('m5ops cases require m5_module built for the exact guest kernel')
         if not os.access('/dev/kvm', os.R_OK | os.W_OK):
             raise ValueError('KVM mode requires a readable/writable /dev/kvm')
         for artifact in (image, kernel, gem5_root / 'build/X86/gem5.opt'):
@@ -273,6 +287,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         artifacts.append(bundle)
     if dma and config['mode'] == 'chimaera':
         artifacts.append(Path(config['dma_module']))
+    if direct_m5 and config['mode'] == 'chimaera':
+        artifacts.append(Path(config['m5_module']))
     config['artifact_sha256'] = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in artifacts}
     try:
         config['git_commit'] = subprocess.check_output(
@@ -371,6 +387,9 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         if dma:
             commands[-1][1].extend(['--transport-backend', 'dma', '--guest-file',
                 '/tmp/chimaera-dma.ko=' + str(config['dma_module'])])
+        elif direct_m5:
+            commands[-1][1].extend(['--transport-backend', 'm5ops', '--guest-file',
+                '/tmp/chimaera-m5.ko=' + str(config['m5_module'])])
         if reuse is not None:
             supervisor = output / 'guest-supervisor'
             supervisor.write_text('#!/bin/bash\nset -e\nexport PYTHONPATH='
@@ -403,6 +422,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         env.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock', CHIMAERA_DDS_SIDE='host',
                    CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
                    RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+        if direct_m5:
+            env['CHIMAERA_DDS_BACKEND'] = 'm5ops'
         commands = [(name, ['env', '-u', 'CHIMAERA_DDS_SOCKET', *command]
                      if name in ('driver', 'gem5') else command) for name, command in commands]
     write_json(output / 'commands.json', commands)
@@ -802,9 +823,10 @@ def main():
         command.add_argument('--image', type=Path)
         command.add_argument('--kernel', type=Path)
         command.add_argument('--guest-bundle', type=Path, help='Install a staged archive inside the guest at boot')
-        command.add_argument('--transport-backend', choices=('m5', 'dma'), default='m5')
+        command.add_argument('--transport-backend', choices=('m5', 'dma', 'm5ops'), default='m5')
         command.add_argument('--middleware-transport', choices=('bridge', 'fastdds'), default='bridge')
         command.add_argument('--dma-module', default='', help='Module built for the exact guest kernel')
+        command.add_argument('--m5-module', default='', help='Notification module built for the exact guest kernel')
         command.add_argument('--dma-module-options', default='buffer_mb=8 receive_slots=16 transmit_slots=4')
         command.add_argument('--delivery-policy', choices=('latest', 'lossless'), default='latest')
         command.add_argument('--verify-payload', action='store_true', help='Check every image byte (correctness runs)')
@@ -853,14 +875,14 @@ def main():
             return
         config = {key: getattr(args, key) for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout',
                   'cpu_clock', 'num_cores', 'l1d_size', 'l1i_size', 'l2_size', 'l1_assoc', 'l2_assoc',
-                  'transport_backend', 'middleware_transport', 'dma_module', 'dma_module_options',
+                  'transport_backend', 'middleware_transport', 'dma_module', 'dma_module_options', 'm5_module',
                   'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
         if args.action == 'run':
             config.update({key: getattr(args, key) for key in ('mode', 'payload_bytes', 'rate_hz', 'interval_us', 'poll_us', 'cpu_type')}, repeat=1)
             run_case(args.output, config, package, gem5_root, image, kernel, bundle)
             make_report(args.output)
         else:
-            if args.transport_backend == 'dma' and not args.fresh_boots:
+            if args.transport_backend in ('dma', 'm5ops') and not args.fresh_boots:
                 raise ValueError('DMA sweeps require --fresh-boots')
             if args.middleware_transport == 'fastdds' and not args.fresh_boots:
                 raise ValueError('Fast DDS middleware sweeps require --fresh-boots')

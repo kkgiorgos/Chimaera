@@ -20,7 +20,7 @@ target_link_libraries(gem5_host PUBLIC chimaera::transport)
 
 find_package(Threads REQUIRED)
 add_library(gem5_host_controller src/gem5_host_controller.cpp src/gem5_timing_controller.cpp
-    src/dma_host_controller.cpp)
+    src/dma_host_controller.cpp src/m5_host_controller.cpp)
 target_include_directories(gem5_host_controller PRIVATE "${GEM5_ROOT}/include")
 add_library(chimaera::host_controller ALIAS gem5_host_controller)
 target_link_libraries(gem5_host_controller PUBLIC chimaera::host PRIVATE Threads::Threads)
@@ -38,6 +38,20 @@ if(GEM5_TRANSPORT_BUILD_GUEST)
     target_include_directories(gem5_guest_controller PRIVATE "${GEM5_ROOT}/include")
     add_library(chimaera::guest_controller ALIAS gem5_guest_controller)
     target_link_libraries(gem5_guest_controller PUBLIC chimaera::guest PRIVATE Threads::Threads)
+
+    # The DDS plugin is a shared library. Compile PIC m5 wrappers directly for
+    # this endpoint instead of inheriting the executable-only libm5 -no-pie ABI.
+    enable_language(C ASM)
+    add_library(chimaera_m5_endpoint STATIC src/m5_endpoint.cpp
+        "${GEM5_ROOT}/util/m5/src/m5_mmap.c"
+        "${GEM5_ROOT}/util/m5/src/abi/x86/m5op.S"
+        "${GEM5_ROOT}/util/m5/src/abi/x86/m5op_addr.S")
+    add_library(chimaera::m5_endpoint ALIAS chimaera_m5_endpoint)
+    set_target_properties(chimaera_m5_endpoint PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_definitions(chimaera_m5_endpoint PRIVATE M5OP_PIC)
+    target_include_directories(chimaera_m5_endpoint PUBLIC ${GEM5_MMAP_INCLUDE}
+        PRIVATE ${GEM5_OP_INCLUDE})
+    target_link_libraries(chimaera_m5_endpoint PUBLIC chimaera::transport PRIVATE Threads::Threads)
 endif()
 
 option(GEM5_TRANSPORT_BUILD_TESTS "Build transport and controller tests" ${PROJECT_IS_TOP_LEVEL})
@@ -60,6 +74,11 @@ if(GEM5_TRANSPORT_BUILD_TESTS)
     target_link_libraries(dma_host_tests PRIVATE chimaera::host_controller Threads::Threads)
     add_test(NAME dma_host COMMAND dma_host_tests)
     set_tests_properties(dma_host PROPERTIES TIMEOUT 15)
+    add_executable(m5_host_tests tests/m5_host_tests.cpp)
+    target_include_directories(m5_host_tests PRIVATE ${GEM5_ROOT}/include)
+    target_link_libraries(m5_host_tests PRIVATE chimaera::host_controller Threads::Threads)
+    add_test(NAME m5_host COMMAND m5_host_tests)
+    set_tests_properties(m5_host PROPERTIES TIMEOUT 30)
     target_link_libraries(host_controller_tests PRIVATE chimaera::host_controller Threads::Threads)
     add_test(NAME host_controller COMMAND host_controller_tests)
     set_tests_properties(host_controller PROPERTIES TIMEOUT 15)
@@ -86,5 +105,14 @@ if(GEM5_TRANSPORT_BUILD_TESTS)
         target_link_options(guest_m5ops_tests PRIVATE -Wl,--wrap=nanosleep)
         add_test(NAME guest_m5ops COMMAND guest_m5ops_tests)
         set_tests_properties(guest_m5ops PROPERTIES TIMEOUT 15)
+        # Supply executable-local m5 stubs; do not pull in the endpoint's PIC
+        # assembly archive or trigger real m5 operations on the native host.
+        add_executable(m5_endpoint_tests tests/m5_endpoint_tests.cpp src/m5_endpoint.cpp)
+        target_include_directories(m5_endpoint_tests PRIVATE ${GEM5_OP_INCLUDE} ${GEM5_MMAP_INCLUDE})
+        target_link_libraries(m5_endpoint_tests PRIVATE chimaera::transport Threads::Threads)
+        target_link_options(m5_endpoint_tests PRIVATE -Wl,--wrap=open -Wl,--wrap=close
+            -Wl,--wrap=read -Wl,--wrap=mmap -Wl,--wrap=munmap -Wl,--wrap=ioctl)
+        add_test(NAME m5_endpoint COMMAND m5_endpoint_tests)
+        set_tests_properties(m5_endpoint PROPERTIES TIMEOUT 15)
     endif()
 endif()

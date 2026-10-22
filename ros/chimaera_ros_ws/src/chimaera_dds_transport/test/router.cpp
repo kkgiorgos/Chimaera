@@ -82,6 +82,143 @@ struct Client
   }
 };
 
+// Prepared for execution only after the parent's first actual KVM catch passes.
+void m5ops_backpressure(const std::string & root)
+{
+  struct Backend
+  {
+    bool existed{std::getenv("CHIMAERA_DDS_BACKEND") != nullptr};
+    std::string previous{existed ? std::getenv("CHIMAERA_DDS_BACKEND") : ""};
+    Backend() { require(!::setenv("CHIMAERA_DDS_BACKEND", "m5ops", 1), "set backend failed"); }
+    ~Backend()
+    {
+      if (existed)
+        ::setenv("CHIMAERA_DDS_BACKEND", previous.c_str(), 1);
+      else
+        ::unsetenv("CHIMAERA_DDS_BACKEND");
+    }
+  } backend;
+  constexpr auto frame_bytes = chimaera_dds::m5ops_max_frame_bytes;
+  constexpr auto bulk_port = chimaera_dds::bulk_port_bit | 31U;
+  constexpr auto control_port = 45U;
+  auto frame = [](unsigned source, wire::Locator destination, std::size_t size, uint8_t tag) {
+    std::vector<uint8_t> body(size - wire::header_bytes, tag);
+    std::memcpy(body.data(), "RTPS", 4);
+    return wire::packet(wire::data, wire::local(source), destination, body.data(), body.size());
+  };
+  {
+    Router host(root + "/m5ops-outgoing", 1, 2 * frame_bytes);
+    Client bulk(root + "/m5ops-outgoing"), control(root + "/m5ops-outgoing");
+    auto packet = frame(1, wire::local(2, bulk_port), frame_bytes, 1);
+    bulk.send(packet);
+    packet.back() = 2;
+    bulk.send(packet);
+    require(wait([&] { return host.pending() == 2; }), "bulk remote budget not filled");
+    // The third complete frame must park, rather than fail or enter the queue.
+    packet.back() = 3;
+    bulk.send(packet);
+    control.send(frame(1, wire::local(2, control_port), 116, 4));
+    require(wait([&] { return host.pending() == 3; }), "bulk pressure blocked control");
+    host.check();
+    std::vector<uint32_t> ports;
+    std::weak_ptr<void> refused;
+    const auto accepted = host.transfer_outgoing([&](chimaera_dds::Packet offered) {
+      const auto port = wire::locator(offered.data() + 28).port;
+      ports.push_back(port);
+      if (port == bulk_port) refused = offered.owner();
+      return port == control_port;
+    });
+    require(
+      accepted == 1 && ports == std::vector<uint32_t>{control_port, bulk_port} &&
+        host.pending() == 2 && !refused.expired(),
+      "outgoing refusal changed credit/ownership or control priority");
+    auto first = host.take();
+    auto second = host.take();
+    require(
+      first && second && first->data()[first->size() - 1] == 1 &&
+        second->data()[second->size() - 1] == 2,
+      "bulk FIFO changed under backpressure");
+    require(wait([&] { return host.pending() == 1; }), "parked frame did not recover credit");
+    auto third = host.take();
+    require(third && third->data()[third->size() - 1] == 3, "parked frame lost or changed");
+    control.send(frame(1, wire::local(2, control_port), 116, 5));
+    bulk.send(frame(1, wire::local(2, bulk_port), 116, 6));
+    require(wait([&] { return host.pending() == 2; }), "independent-lane retry setup failed");
+    require(
+      host.transfer_outgoing([&](chimaera_dds::Packet offered) {
+        return wire::locator(offered.data() + 28).port == bulk_port;
+      }) == 1,
+      "control refusal prevented the bulk lane from transferring");
+    auto retained_control = host.take();
+    require(
+      retained_control && retained_control->data()[retained_control->size() - 1] == 5 &&
+        host.pending() == 0,
+      "refused control packet lost ownership or changed");
+    host.check();
+  }
+  {
+    Router host(root + "/m5ops-fanout", 1, 2 * frame_bytes);
+    Client producer(root + "/m5ops-fanout"), fast(root + "/m5ops-fanout"),
+      slow(root + "/m5ops-fanout"), control(root + "/m5ops-fanout");
+    auto ready = [&](Client & client, unsigned port, const std::string & topic) {
+      const auto local = wire::local(1, port);
+      client.send(wire::packet(wire::open, local, local));
+      std::vector<uint8_t> registration{0};
+      registration.insert(registration.end(), topic.begin(), topic.end());
+      client.send(
+        wire::packet(wire::endpoint, local, local, registration.data(), registration.size()));
+      require(wait([&] { return host.endpoint_ready(topic, false); }), "fanout not registered");
+    };
+    ready(fast, bulk_port, "/m5ops/fast");
+    ready(slow, bulk_port, "/m5ops/slow");
+    ready(control, control_port, "/m5ops/control");
+    const auto outgoing = frame(1, wire::local(2, bulk_port), frame_bytes, 1);
+    producer.send(outgoing);
+    producer.send(outgoing);
+    require(wait([&] { return host.pending() == 2; }), "remote budget not full before ingress");
+    struct Resume
+    {
+      ~Resume() { pause_router = false; }
+    } resume;
+    pause_router = true;
+    const std::string barrier_topic = "/m5ops/barrier";
+    std::vector<uint8_t> barrier{0};
+    barrier.insert(barrier.end(), barrier_topic.begin(), barrier_topic.end());
+    producer.send(
+      wire::packet(wire::endpoint, wire::local(1), wire::local(1), barrier.data(), barrier.size()));
+    require(wait([] { return router_paused.load(); }), "fanout worker pause failed");
+    auto broadcast = wire::local(1, bulk_port);
+    broadcast.address[0] = 0;
+    // Two 6 MiB recipients consume 12 of the independent 18 MiB local budget.
+    // The next fanout can fit one recipient but must atomically refuse both.
+    const auto incoming = frame(2, broadcast, 2 * frame_bytes / 3, 7);
+    auto storage = std::make_shared<std::vector<uint8_t>>(incoming);
+    require(
+      host.try_receive(chimaera_dds::Packet::adopt(storage->data(), storage->size(), storage)),
+      "remote output pressure consumed the independent local budget");
+    auto refused_storage = std::make_shared<std::vector<uint8_t>>(incoming);
+    std::weak_ptr<void> refused = refused_storage;
+    auto candidate = chimaera_dds::Packet::adopt(
+      refused_storage->data(), refused_storage->size(), refused_storage);
+    require(!host.try_receive(candidate), "partial fanout accepted without full credit");
+    candidate = {};
+    refused_storage.reset();
+    require(refused.expired(), "refused fanout retained ownership or partially enqueued");
+    const auto small = frame(2, wire::local(1, control_port), 116, 8);
+    auto small_storage = std::make_shared<std::vector<uint8_t>>(small);
+    require(
+      host.try_receive(
+        chimaera_dds::Packet::adopt(small_storage->data(), small_storage->size(), small_storage)),
+      "bulk local pressure consumed control credit");
+    std::vector<uint8_t> received(small.size());
+    require(
+      wire::receive_all(control.fd, received.data(), received.size()) && received == small,
+      "control immediate delivery failed under bulk pressure");
+    require(host.pending() == 2, "local delivery changed remote output credit");
+    host.check();
+  }
+}
+
 int main()
 {
   try {
@@ -324,6 +461,7 @@ int main()
       ::close(sockets[0]);
       ::close(sockets[1]);
     }
+    m5ops_backpressure(root);
     std::filesystem::remove(root);
     std::cout << "Router boundary, byte integrity, malformed ingress, endpoint lifecycle and "
                  "capacity; split frames, shared loans, fanout, immediate delivery and "

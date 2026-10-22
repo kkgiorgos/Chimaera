@@ -1,5 +1,6 @@
 #include <chimaera/dma_controller.hpp>
 #include <chimaera/gem5_controller.hpp>
+#include <chimaera/m5_host_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <chimaera_ros_bridge/status_bar.hpp>
 #include <cmath>
@@ -54,11 +55,18 @@ int main(int argc, char ** argv)
         timing, node->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
         node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"),
         node->controller_queue_limit());
-    else if (backend == "m5")
+    else if (backend == "m5ops") {
+      if (!node->middleware_routing())
+        throw std::invalid_argument("m5ops requires Fast DDS middleware routing");
+      selected = std::make_unique<chimaera::M5HostController>(
+        timing, node->declare_parameter<std::string>("dma_h2g", "/tmp/chimaera_dma_h2g"),
+        node->declare_parameter<std::string>("dma_g2h", "/tmp/chimaera_dma_g2h"),
+        node->controller_queue_limit());
+    } else if (backend == "m5")
       selected =
         std::make_unique<chimaera::Gem5HostController>(timing, std::chrono::microseconds(poll));
     else
-      throw std::invalid_argument("transport_backend must be m5 or dma");
+      throw std::invalid_argument("transport_backend must be m5, dma or m5ops");
     auto & controller = *selected;
     try {
       RCLCPP_INFO(node->get_logger(), "Data transport ready; waiting for gem5 guest");

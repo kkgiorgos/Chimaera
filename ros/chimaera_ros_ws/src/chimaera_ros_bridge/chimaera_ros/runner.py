@@ -34,6 +34,9 @@ def plan(data, side, package_prefix=None, simulate=False):
         parameters.update(middleware_transport='fastdds', dds_socket=socket)
         env.update(CHIMAERA_DDS_SOCKET=socket, CHIMAERA_DDS_SIDE=side,
                    CHIMAERA_DDS_ROUTES=data['routes'], RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+        if data['bridge']['transport_backend'] == 'm5ops':
+            env.update(CHIMAERA_DDS_BACKEND='m5ops',
+                       CHIMAERA_M5_DEVICE=data['bridge']['m5_device'])
     if side == 'host':
         parameters.update({key: data['bridge'][key] for key in
                            ('interval_us', 'poll_us', 'steps', 'startup_timeout_s',
@@ -45,12 +48,13 @@ def plan(data, side, package_prefix=None, simulate=False):
         parameters.update({key: data['bridge'][key] for key in
                            ('m5ops', 'wait_for_application', 'startup_timeout_s', 'simulation_time_from_readfile',
                             'checkpoint_control', 'application_ready_file',
-                            'dma_device', 'dma_module', 'dma_module_options', 'dma_diagnostics')})
+                            'dma_device', 'dma_module', 'dma_module_options', 'dma_diagnostics',
+                            'm5_module')})
         if not parameters['application_ready_file']:
             parameters.pop('application_ready_file')
         # ROS CLI rejects an unquoted empty assignment (e.g. dma_module:=).
         # Let the C++ defaults provide optional empty values, including m5 runs.
-        for key in ('dma_module', 'dma_module_options'):
+        for key in ('dma_module', 'dma_module_options', 'm5_module'):
             if not parameters[key]:
                 parameters.pop(key)
     executable = 'gazebo_host_bridge' if side == 'host' and data['bridge']['timing_backend'] == 'gazebo' else side + '_bridge'
@@ -74,8 +78,8 @@ def plan(data, side, package_prefix=None, simulate=False):
                    '--gem5-root', str(root), '--socket-path', data['bridge']['timing_socket'],
                    '--guest-command', data['deploy']['guest_root'] + '/guest_start', '--managed-shutdown']
         command += sim.get('args', [])
-        if data['bridge']['transport_backend'] == 'dma':
-            command += ['--transport-backend', 'dma', '--dma-h2g', data['bridge']['dma_h2g'],
+        if data['bridge']['transport_backend'] in ('dma', 'm5ops'):
+            command += ['--transport-backend', data['bridge']['transport_backend'], '--dma-h2g', data['bridge']['dma_h2g'],
                         '--dma-g2h', data['bridge']['dma_g2h']]
         processes.append({'name': 'gem5', 'command': command})
     return dict(side=side, setup=config['setup'], env=env, processes=processes)

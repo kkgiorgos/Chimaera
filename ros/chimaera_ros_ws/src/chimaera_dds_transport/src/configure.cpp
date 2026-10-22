@@ -23,11 +23,25 @@ struct Route
   std::string wire;
   std::string type;
   bool publisher;
+  uint32_t port{1};
 };
+// Hash the canonical wire topic rather than its side-specific ROS alias. Both
+// peers compute the same locator, independent of JSON ordering or process ID.
+uint32_t route_port(const std::string & topic, bool bulk)
+{
+  uint32_t hash = 2166136261U;
+  for (const auto value : topic) {
+    hash ^= static_cast<uint8_t>(value);
+    hash *= 16777619U;
+  }
+  // Keep application ports above discovery/graph ports, and reserve the bulk bit.
+  return application_port_bit | (hash & 0x1fffffffU) | (bulk ? bulk_port_bit : 0U);
+}
 struct Configuration
 {
   std::string socket;
   unsigned side{};
+  bool m5ops{m5ops_backend()};
   std::map<std::string, Route> routes;
   Configuration()
   {
@@ -47,6 +61,8 @@ struct Configuration
       !root || !json_object_object_get_ex(root.get(), "topics", &topics) ||
       !json_object_is_type(topics, json_type_array))
       throw std::invalid_argument("invalid DDS route configuration");
+    std::map<uint32_t, std::pair<std::string, std::string>> ports;
+    std::map<std::string, std::pair<std::string, uint32_t>> wire_topics;
     for (std::size_t i = 0; i < json_object_array_length(topics); ++i) {
       auto item = json_object_array_get_idx(topics, i);
       auto string = [item](const char * key) {
@@ -71,9 +87,34 @@ struct Configuration
         throw std::invalid_argument("invalid DDS route direction");
       const auto name = side == 1 ? host : guest;
       const bool publisher = (side == 1) == (direction == "host_to_guest");
+      bool bulk = type == "sensor_msgs/msg/Image" || type == "sensor_msgs/msg/CompressedImage";
+      if (m5ops) {
+        json_object * transport_class = nullptr;
+        if (json_object_object_get_ex(item, "transport_class", &transport_class)) {
+          if (!json_object_is_type(transport_class, json_type_string))
+            throw std::invalid_argument("DDS route transport_class must be control or bulk");
+          const std::string value(
+            json_object_get_string(transport_class), json_object_get_string_len(transport_class));
+          if (value != "control" && value != "bulk")
+            throw std::invalid_argument("DDS route transport_class must be control or bulk");
+          bulk = value == "bulk";
+        }
+      }
+      const auto port = m5ops ? route_port(host, bulk) : 1U;
+      if (m5ops) {
+        // One wire topic must retain its type and lane across local aliases.
+        // In particular, a bulk override must also carry its RTPS metadata.
+        const auto [flow, new_flow] = wire_topics.emplace(host, std::make_pair(dds_type, port));
+        if (!new_flow && flow->second != std::make_pair(dds_type, port))
+          throw std::invalid_argument("DDS wire-topic type or transport_class conflict: " + host);
+        const auto identity = std::make_pair(host, dds_type);
+        const auto [entry, inserted] = ports.emplace(port, identity);
+        if (!inserted && entry->second != identity)
+          throw std::invalid_argument("DDS wire-topic locator collision: " + host);
+      }
       if (
         name.empty() || name[0] != '/' || host.empty() || host[0] != '/' ||
-        !routes.emplace(name, Route{host, dds_type, publisher}).second)
+        !routes.emplace(name, Route{host, dds_type, publisher, port}).second)
         throw std::invalid_argument("invalid or duplicate DDS route");
     }
   }
@@ -104,13 +145,18 @@ void configure_local_transports(eprosima::fastdds::dds::DomainParticipantQos & q
       local_only = false;
     }
   }
-  if (!local_only || !shared) return;
+  const bool m5ops = config().m5ops;
+  if (!m5ops && (!local_only || !shared)) return;
   // A participant's smallest transport limit determines RTPS fragmentation.
   // Local UDP would split a camera sample into many DMA completions. Keep SHM
   // for ordinary local endpoints and the Chimaera transport for routed peers.
-  auto local = std::make_shared<SharedMemTransportDescriptor>(*shared);
-  local->max_message_size(max_packet_bytes);
-  local->segment_size(std::max(local->segment_size(), 4 * max_packet_bytes));
+  auto local = shared ? std::make_shared<SharedMemTransportDescriptor>(*shared)
+                      : std::make_shared<SharedMemTransportDescriptor>();
+  const auto maximum = configured_max_packet_bytes();
+  local->max_message_size(maximum);
+  const auto segment = 4 * (m5ops ? m5ops_max_frame_bytes : max_packet_bytes);
+  local->segment_size(std::max(local->segment_size(), segment));
+  qos.transport().use_builtin_transports = false;
   transports = {std::move(local)};
 }
 void announce(const char * topic, bool publisher, bool removed = false)
@@ -142,7 +188,8 @@ void configure_endpoint(const char * topic, bool publisher, Qos & qos)
   const bool graph = std::strcmp(topic, "ros_discovery_info") == 0;
   if (!graph && (route == configuration.routes.end() || route->second.publisher != publisher))
     return;
-  qos.endpoint().unicast_locator_list.push_back(wire::local(configuration.side, 1));
+  qos.endpoint().unicast_locator_list.push_back(
+    wire::local(configuration.side, graph ? 1U : route->second.port));
 }
 }  // namespace
 void configure_participant(eprosima::fastdds::dds::DomainParticipantQos & qos)

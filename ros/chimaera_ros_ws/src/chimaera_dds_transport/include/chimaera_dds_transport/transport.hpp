@@ -2,6 +2,9 @@
 
 #include <fastdds/rtps/transport/TransportDescriptorInterface.h>
 
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <fastdds/dds/domain/qos/DomainParticipantQos.hpp>
 #include <fastdds/dds/publisher/qos/DataWriterQos.hpp>
 #include <fastdds/dds/subscriber/qos/DataReaderQos.hpp>
@@ -11,6 +14,23 @@ namespace chimaera_dds
 {
 constexpr int transport_kind = 0x434844;
 constexpr unsigned max_packet_bytes = 1024 * 1024;
+constexpr unsigned cdds_header_bytes = 52;
+constexpr unsigned m5ops_max_frame_bytes = 9 * 1024 * 1024;
+// Leave room for CDR/RTPS headers around an 8 MiB application payload while
+// keeping the complete CDDS frame inside the driver's 9 MiB bulk RX slot.
+constexpr unsigned m5ops_max_packet_bytes = m5ops_max_frame_bytes - cdds_header_bytes;
+constexpr uint32_t bulk_port_bit = 0x40000000U;
+constexpr uint32_t application_port_bit = 0x20000000U;
+
+inline bool m5ops_backend()
+{
+  const auto backend = std::getenv("CHIMAERA_DDS_BACKEND");
+  return backend && std::strcmp(backend, "m5ops") == 0;
+}
+inline unsigned configured_max_packet_bytes()
+{
+  return m5ops_backend() ? m5ops_max_packet_bytes : max_packet_bytes;
+}
 
 struct Descriptor final : eprosima::fastdds::rtps::TransportDescriptorInterface
 {
@@ -19,6 +39,7 @@ struct Descriptor final : eprosima::fastdds::rtps::TransportDescriptorInterface
   uint32_t min_send_buffer_size() const override { return maxMessageSize; }
   std::string socket;
   unsigned side;
+  bool m5ops;
 };
 
 // These hooks are called by the pinned rmw_fastrtps overlay. Without

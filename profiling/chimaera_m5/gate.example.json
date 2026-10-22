@@ -1,0 +1,8 @@
+{
+  "experiment": "actual_ball_catching",
+  "cpu_type": "kvm",
+  "status": "pending",
+  "physical_host": "ubuntu-george",
+  "announced_by_parent": null,
+  "evidence": []
+}

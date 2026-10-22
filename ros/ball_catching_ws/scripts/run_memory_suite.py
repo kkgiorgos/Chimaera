@@ -79,6 +79,7 @@ def load_config(path, cpu_type=None):
     data['fixed'].setdefault('pressure_warmup', 0.05)
     data['fixed'].setdefault('transport_backend', 'm5')
     data['fixed'].setdefault('dma_module', '')
+    data['fixed'].setdefault('m5_module', '')
     data['fixed'].setdefault('middleware_transport', 'bridge')
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
@@ -87,7 +88,7 @@ def load_config(path, cpu_type=None):
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
                   'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module',
-                  'middleware_transport'},
+                  'middleware_transport', 'm5_module'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -99,8 +100,10 @@ def load_config(path, cpu_type=None):
     fixed = data['fixed']
     if fixed['middleware_transport'] not in ('bridge', 'fastdds'):
         raise ValueError('middleware_transport must be bridge or fastdds')
-    if fixed['transport_backend'] not in ('m5', 'dma'):
-        raise ValueError('transport_backend must be m5 or dma')
+    if fixed['transport_backend'] not in ('m5', 'dma', 'm5ops'):
+        raise ValueError('transport_backend must be m5, dma or m5ops')
+    if fixed['transport_backend'] == 'm5ops' and fixed['middleware_transport'] != 'fastdds':
+        raise ValueError('m5ops requires Fast DDS middleware routing')
     if not isinstance(fixed['dma_module'], str):
         raise ValueError('dma_module must be a path string')
     if fixed['dma_module']:
@@ -108,6 +111,13 @@ def load_config(path, cpu_type=None):
         if not module.is_file():
             raise ValueError('DMA module does not exist: ' + str(module))
         fixed['dma_module'] = str(module)
+    if not isinstance(fixed['m5_module'], str):
+        raise ValueError('m5_module must be a path string')
+    if fixed['m5_module']:
+        module = (path.parent / fixed['m5_module']).resolve()
+        if not module.is_file():
+            raise ValueError('m5ops notification module does not exist: ' + str(module))
+        fixed['m5_module'] = str(module)
     if type(fixed['image_diagnostics']) is not bool:
         raise ValueError('image_diagnostics must be boolean')
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
@@ -293,15 +303,23 @@ def session(output, data, point, calibration=None):
                    setup=['/opt/ros/humble/setup.bash',
                     GUEST_ROOT + '/app/share/ball_catching_robot/local_setup.bash'],
                    localhost_only=not bool(fixed['guest_dds_shm_bytes']), env=guest_env,
-                   processes=[dict(name='robot', command=robot)]),
+                   processes=[dict(name='robot', command=robot),
+                       *([dict(name='dds_readiness', command=[
+                           'python3', GUEST_ROOT + '/runtime/wait_dds_graph.py',
+                           '--ready-file', '/tmp/chimaera-ball-dds-ready',
+                           '--timeout', str(fixed['startup_timeout_s'])])]
+                         if fixed.get('middleware_transport', 'bridge') == 'fastdds' else [])]),
         bridge=dict(transport_backend=fixed['transport_backend'],
                     middleware_transport=fixed.get('middleware_transport', 'bridge'),
                     dma_module=GUEST_ROOT + '/runtime/chimaera_dma.ko' if fixed['dma_module'] else '',
+                    m5_module=GUEST_ROOT + '/runtime/chimaera_m5.ko' if fixed['m5_module'] else '',
                     interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
                     timing_backend='gazebo', gazebo_world='ball_catching',
                     physics_step_ns=round(fixed['physics_step'] * 1e9),
                     max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
                     max_pending_messages=16, m5ops='address', wait_for_application=True,
+                    application_ready_file='/tmp/chimaera-ball-dds-ready'
+                    if fixed.get('middleware_transport', 'bridge') == 'fastdds' else '',
                     max_image_age_ns=math.ceil(fixed['image_age_periods'] / point['rates']['camera_hz'] * 1e9),
                     image_diagnostics=fixed['image_diagnostics'],
                     simulation_time_from_readfile=True,
@@ -350,8 +368,11 @@ def prepare_bundle(output, data, points):
     if staged.exists():
         staged = output / f'staged-{len(list(output.glob("staged*"))) + 1:03d}'
     root = stage(load(output / 'staging-session.json'), staged)
+    shutil.copyfile(Path(__file__).with_name('wait_dds_graph.py'), root / 'runtime/wait_dds_graph.py')
     if data['fixed']['dma_module']:
         shutil.copyfile(data['fixed']['dma_module'], root / 'runtime/chimaera_dma.ko')
+    if data['fixed']['m5_module']:
+        shutil.copyfile(data['fixed']['m5_module'], root / 'runtime/chimaera_m5.ko')
     if data['fixed']['guest_dds_shm_bytes']:
         (root / 'dds.xml').write_text(guest_dds_profile(data['fixed']['guest_dds_shm_bytes']))
     libraries = root / 'lib'
@@ -382,7 +403,7 @@ def prepare_bundle(output, data, points):
     # Use each trial's injected session, rather than hard-coding its geometry/rates.
     (root / 'guest_start').write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(GUEST_ROOT) + '\n'
         + 'export PYTHONPATH=' + shlex.quote(GUEST_ROOT + '/runtime') + '\n'
-        + 'rm -f /tmp/chimaera-sim-time-origin.ns\n'
+        + 'rm -f /tmp/chimaera-sim-time-origin.ns /tmp/chimaera-ball-dds-ready\n'
         + 'exec python3 -m chimaera_ros.runner run /tmp/chimaera-ball-session.json --side guest --guest-binary '
         + shlex.quote(GUEST_ROOT + '/runtime/guest_bridge') + '\n')
     bundle = output / 'guest.tar.gz'
@@ -504,7 +525,7 @@ def native_trial(directory, data, point):
 
 def gem5_trial(directory, output, data, point, args, calibration, bundle,
                checkpoint_prepare=None, checkpoint_restore=None):
-    if data['fixed'].get('transport_backend', 'm5') == 'dma' and (checkpoint_prepare or checkpoint_restore):
+    if data['fixed'].get('transport_backend', 'm5') in ('dma', 'm5ops') and (checkpoint_prepare or checkpoint_restore):
         raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
     if (checkpoint_prepare or checkpoint_restore) and (
             data['hardware'].get('cpu_type', 'timing') == 'kvm' or
@@ -555,6 +576,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
         environment.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock',
             CHIMAERA_DDS_SIDE='host', CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
             RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+        if fixed['transport_backend'] == 'm5ops':
+            environment['CHIMAERA_DDS_BACKEND'] = 'm5ops'
     started = time.monotonic()
     next_guest_check = started
     reset = False
@@ -669,7 +692,7 @@ def main():
     if args.bundle_from and not args.prepare_only:
         parser.error('--bundle-from requires --prepare-only')
     data = load_config(args.config, args.cpu_type)
-    if data['fixed']['transport_backend'] == 'dma' and (args.checkpoint_create or args.checkpoint_from):
+    if data['fixed']['transport_backend'] in ('dma', 'm5ops') and (args.checkpoint_create or args.checkpoint_from):
         parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
     if (args.checkpoint_create or args.checkpoint_from) and (
             data['hardware']['cpu_type'] == 'kvm' or data['fixed']['middleware_transport'] == 'fastdds'):

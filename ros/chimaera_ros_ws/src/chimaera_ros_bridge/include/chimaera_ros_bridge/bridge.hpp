@@ -275,6 +275,29 @@ public:
   // Application-driven transfer, shared by host boundaries and guest polls.
   void exchange(chimaera::DataController & controller)
   {
+    if (router_) {
+      if (auto * credits = dynamic_cast<chimaera::BackpressureController *>(&controller)) {
+        credits->transfer_received([this](chimaera::Message bytes) {
+          auto owner = std::make_shared<chimaera::Message>(std::move(bytes));
+          if (!router_->try_receive(
+                chimaera_dds::Packet::adopt(owner->data(), owner->size(), owner)))
+            return false;
+          if (on_receive) on_receive(*owner);
+          ++received_;
+          last_receive_ = std::chrono::steady_clock::now();
+          return true;
+        });
+        if (pump) pump();
+        router_->transfer_outgoing([this, credits](chimaera_dds::Packet packet) {
+          auto bytes = chimaera::Message::adopt(
+            reinterpret_cast<std::byte *>(packet.data()), packet.size(), packet.owner());
+          if (!credits->try_submit(std::move(bytes))) return false;
+          ++transmitted_;
+          return true;
+        });
+        return;
+      }
+    }
     while (auto bytes = controller.take()) {
       submit(std::move(*bytes));
     }

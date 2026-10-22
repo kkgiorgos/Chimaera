@@ -468,7 +468,10 @@ def test_guest_bundle_contains_clock_and_clears_old_origin(tmp_path, monkeypatch
         assert archive.extractfile(root + '/lib/libchimaera_gem5_clock_addr.so').read() == clock.read_bytes()
         assert archive.extractfile(root + '/lib/librmw_fastrtps_cpp.so').read() == middleware.read_bytes()
         assert archive.extractfile(root + '/lib/libtest.so').read() == dependency.read_bytes()
+        assert archive.extractfile(root + '/runtime/wait_dds_graph.py').read() == (
+            WORKSPACE / 'scripts/wait_dds_graph.py').read_bytes()
         assert b'rm -f /tmp/chimaera-sim-time-origin.ns' in archive.extractfile(root + '/guest_start').read()
+        assert b'/tmp/chimaera-ball-dds-ready' in archive.extractfile(root + '/guest_start').read()
         from chimaera_ros.manifest import load as load_session
         guest = bridge_plan(load_session(output / 'staging-session.json'), 'guest', '/test/bridge')
         assert f'transport_backend:={backend}' in guest['processes'][0]['command']

@@ -31,8 +31,9 @@ def main():
     parser.add_argument("--gem5-root", type=Path, default=Path("/opt/chimaera/gem5"))
     parser.add_argument("--cpu-type", choices=("kvm", "timing", "o3"), default="kvm")
     parser.add_argument("--middleware", choices=("bridge", "fastdds"), default="fastdds")
-    parser.add_argument("--backend", choices=("m5", "dma"), default="m5")
+    parser.add_argument("--backend", choices=("m5", "dma", "m5ops"), default="m5")
     parser.add_argument("--dma-module", type=Path)
+    parser.add_argument("--m5-module", type=Path)
     parser.add_argument("--clock-probe", action="store_true",
                         help="Include an optional diagnostic process; exclude from final measurements")
     parser.add_argument("--dma-diagnostics", action="store_true",
@@ -47,8 +48,11 @@ def main():
     raw["fixed"].update(transport_backend=args.backend, middleware_transport=args.middleware,
                          image_diagnostics=False,
                          dma_module=str(args.dma_module.resolve()) if args.dma_module else "")
+    raw['fixed']['m5_module'] = str(args.m5_module.resolve()) if args.m5_module else ''
     if args.backend == "dma" and not args.dma_module:
         parser.error("DMA validation requires the module built for the selected kernel")
+    if args.backend == 'm5ops' and (not args.m5_module or args.middleware != 'fastdds'):
+        parser.error('m5ops validation requires Fast DDS and the notification module for the selected kernel')
     write_json(output / "experiment.json", raw)
     data = load_config(output / "experiment.json")
     points = plan(data)
@@ -75,6 +79,8 @@ def main():
                      gem5=args.gem5_root / 'build/X86/gem5.opt')
     if args.dma_module:
         artifacts['dma_module'] = args.dma_module
+    if args.m5_module:
+        artifacts['m5_module'] = args.m5_module
     write_json(output / 'provenance.json', dict(
         source_revision=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT,
                                                 text=True).strip(),
@@ -85,6 +91,17 @@ def main():
                    for name, path in artifacts.items()}))
     (output / 'source.patch').write_bytes(subprocess.check_output(
         ['git', 'diff', 'HEAD', '--binary'], cwd=ROOT))
+    changed = subprocess.check_output(
+        ['git', 'diff', '--name-only', '-z', 'HEAD'], cwd=ROOT).split(b'\0')
+    added = subprocess.check_output(
+        ['git', 'ls-files', '--others', '--exclude-standard', '-z'], cwd=ROOT).split(b'\0')
+    source_files = {}
+    for value in sorted(set(changed + added) - {b''}):
+        name = value.decode()
+        path = ROOT / name
+        if path.is_file():
+            source_files[name] = dict(bytes=path.stat().st_size, sha256=sha256(path))
+    write_json(output / 'source-files.json', source_files)
     artifacts = SimpleNamespace(image=args.image, kernel=args.kernel, gem5_root=args.gem5_root)
     gem5_trial(output / "baseline", output, data, points[0], artifacts, {}, bundle)
     result = json.loads((output / "baseline/result.json").read_text())

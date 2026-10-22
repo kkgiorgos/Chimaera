@@ -6,6 +6,7 @@
 
 #include <chimaera/dma_controller.hpp>
 #include <chimaera/gem5_controller.hpp>
+#include <chimaera/m5_host_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
 #include <condition_variable>
 #include <ignition/transport/Node.hh>
@@ -34,10 +35,15 @@ public:
     if (transport == "dma")
       host_ = std::make_unique<chimaera::DmaHostController>(
         gem5_, std::move(h2g), std::move(g2h), bridge.controller_queue_limit());
-    else if (transport == "m5")
+    else if (transport == "m5ops") {
+      if (!bridge.middleware_routing())
+        throw std::invalid_argument("m5ops requires Fast DDS middleware routing");
+      host_ = std::make_unique<chimaera::M5HostController>(
+        gem5_, std::move(h2g), std::move(g2h), bridge.controller_queue_limit());
+    } else if (transport == "m5")
       host_ = std::make_unique<chimaera::Gem5HostController>(gem5_, poll_interval);
     else
-      throw std::invalid_argument("transport_backend must be m5 or dma");
+      throw std::invalid_argument("transport_backend must be m5, dma or m5ops");
     if (physics_step_.count() <= 0 || world_.empty()) {
       throw std::invalid_argument("physics_step_ns must be positive and gazebo_world nonempty");
     }

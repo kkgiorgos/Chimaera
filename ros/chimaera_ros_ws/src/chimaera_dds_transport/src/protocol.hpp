@@ -18,7 +18,7 @@
 namespace chimaera_dds::wire
 {
 using Locator = eprosima::fastrtps::rtps::Locator_t;
-constexpr std::size_t header_bytes = 52;
+constexpr std::size_t header_bytes = cdds_header_bytes;
 enum Type : uint8_t
 {
   open = 1,
@@ -59,7 +59,8 @@ inline Locator local(unsigned side, unsigned port = 0)
 inline std::array<uint8_t, header_bytes> header(
   Type type, const Locator & source, const Locator & destination, std::size_t length = 0)
 {
-  if (length > max_packet_bytes) throw std::length_error("DDS packet exceeds transport limit");
+  if (length > configured_max_packet_bytes())
+    throw std::length_error("DDS packet exceeds transport limit");
   std::array<uint8_t, header_bytes> result{};
   std::memcpy(result.data(), "CDDS", 4);
   result[4] = 1;
@@ -84,7 +85,7 @@ inline std::size_t length(const uint8_t * p, std::size_t available)
   if (available < header_bytes) return 0;
   if (
     std::memcmp(p, "CDDS", 4) || p[4] != 1 || p[5] < open || p[5] > endpoint || p[6] || p[7] ||
-    read32(p + 48) > max_packet_bytes)
+    read32(p + 48) > configured_max_packet_bytes())
     throw std::runtime_error("invalid Chimaera DDS frame");
   return header_bytes + read32(p + 48);
 }

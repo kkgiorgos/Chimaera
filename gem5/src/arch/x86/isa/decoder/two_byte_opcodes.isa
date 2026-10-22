@@ -162,6 +162,14 @@
                 // younger loads from retaining bytes read before that write.
                 0x50: M5Op::gem5ReadFile(IsNonSpeculative, IsSerializeAfter);
                 0x57: M5Op::chimaeraRecv(IsNonSpeculative, IsSerializeAfter);
+                // Both new ops read descriptors and may publish functional RX
+                // writes. Drain older instructions and refetch younger loads.
+                0x58: M5Op::chimaeraControl(IsNonSpeculative, IsSerializeBefore,
+                                          IsSerializeAfter, IsReadBarrier,
+                                          IsWriteBarrier);
+                0x59: M5Op::chimaeraData(IsNonSpeculative, IsSerializeBefore,
+                                       IsSerializeAfter, IsReadBarrier,
+                                       IsWriteBarrier);
                 default: M5Op::gem5Op(IsNonSpeculative);
             }
             0x05: decode FullSystemInt {

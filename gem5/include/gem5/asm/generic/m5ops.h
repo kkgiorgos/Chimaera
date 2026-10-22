@@ -76,6 +76,8 @@
 #define M5OP_CHIMAERA_TEST      M5OP_RESERVED1
 #define M5OP_CHIMAERA_SEND      M5OP_RESERVED2
 #define M5OP_CHIMAERA_RECV      M5OP_RESERVED3
+#define M5OP_CHIMAERA_CONTROL   M5OP_RESERVED4
+#define M5OP_CHIMAERA_DATA      M5OP_RESERVED5
 
 #define M5OP_WORK_BEGIN         0x5a
 #define M5OP_WORK_END           0x5b
@@ -117,6 +119,8 @@
     M5OP(m5_chimaera_test, M5OP_CHIMAERA_TEST)                  \
     M5OP(m5_chimaera_send, M5OP_CHIMAERA_SEND)                  \
     M5OP(m5_chimaera_recv, M5OP_CHIMAERA_RECV)                  \
+    M5OP(m5_chimaera_control, M5OP_CHIMAERA_CONTROL)            \
+    M5OP(m5_chimaera_data, M5OP_CHIMAERA_DATA)                  \
 
 #define M5OP_MERGE_TOKENS_I(a, b) a##b
 #define M5OP_MERGE_TOKENS(a, b) M5OP_MERGE_TOKENS_I(a, b)

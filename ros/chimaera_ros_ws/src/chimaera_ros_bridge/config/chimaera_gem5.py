@@ -51,7 +51,7 @@ def configure_ticks():
 def add_chimaera_arguments(parser, *, guest_command="/opt/chimaera/session/guest_start"):
     """Add the transport/guest startup flags shared by experiment configs."""
     parser.add_argument("--socket-path", default="/tmp/chimaera_time.sock")
-    parser.add_argument("--transport-backend", choices=("m5", "dma"), default="m5")
+    parser.add_argument("--transport-backend", choices=("m5", "dma", "m5ops"), default="m5")
     parser.add_argument("--dma-h2g", default="/tmp/chimaera_dma_h2g")
     parser.add_argument("--dma-g2h", default="/tmp/chimaera_dma_g2h")
     parser.add_argument("--managed-shutdown", action="store_true",

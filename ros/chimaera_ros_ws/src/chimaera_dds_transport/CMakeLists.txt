@@ -12,6 +12,28 @@ target_include_directories(${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(${PROJECT_NAME} PUBLIC fastrtps Threads::Threads PRIVATE PkgConfig::JSON_C)
+option(CHIMAERA_DDS_BUILD_M5OPS "Build the opt-in direct guest m5ops transport" ON)
+if(CHIMAERA_DDS_BUILD_M5OPS)
+  set(GEM5_TRANSPORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../gem5-transport"
+      CACHE PATH "Chimaera gem5-transport source directory")
+  if(NOT TARGET chimaera::transport)
+    add_subdirectory("${GEM5_TRANSPORT_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/gem5-transport"
+                     EXCLUDE_FROM_ALL)
+  endif()
+  if(NOT TARGET chimaera::m5_endpoint)
+    message(FATAL_ERROR
+      "Direct DDS m5ops requires chimaera::m5_endpoint; enable GEM5_TRANSPORT_BUILD_GUEST "
+      "in the existing gem5-transport build, or disable CHIMAERA_DDS_BUILD_M5OPS")
+  endif()
+  target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE CHIMAERA_DDS_HAS_M5OPS=1)
+  target_link_libraries(${PROJECT_NAME} PRIVATE chimaera::m5_endpoint)
+  # The clock plugin and guest executable may also embed libm5. Keep this
+  # private static endpoint's wrappers/mapping local to the DDS DSO, so their
+  # map/unmap lifetime cannot interpose on each other (or map twice and exit).
+  target_link_options(${PROJECT_NAME} PRIVATE
+    "LINKER:--exclude-libs,$<TARGET_FILE_NAME:chimaera::m5_endpoint>")
+endif()
 install(TARGETS ${PROJECT_NAME} EXPORT export_${PROJECT_NAME} LIBRARY DESTINATION lib)
 install(DIRECTORY include/ DESTINATION include)
 if(BUILD_TESTING)
@@ -24,6 +46,11 @@ if(BUILD_TESTING)
   target_link_libraries(dds_router_test PRIVATE ${PROJECT_NAME} ${CMAKE_DL_LIBS})
   add_test(NAME dds_router_test COMMAND dds_router_test)
   set_tests_properties(dds_router_test PROPERTIES TIMEOUT 15)
+  add_executable(dds_host_async_test test/host_async.cpp)
+  target_include_directories(dds_host_async_test PRIVATE src)
+  target_link_libraries(dds_host_async_test PRIVATE ${PROJECT_NAME} ${CMAKE_DL_LIBS})
+  add_test(NAME dds_host_async_test COMMAND dds_host_async_test)
+  set_tests_properties(dds_host_async_test PROPERTIES TIMEOUT 30)
   add_executable(dds_transport_integration test/integration.cpp)
   target_link_libraries(dds_transport_integration PRIVATE ${PROJECT_NAME} ${CMAKE_DL_LIBS})
   ament_target_dependencies(dds_transport_integration PUBLIC rclcpp sensor_msgs std_msgs)

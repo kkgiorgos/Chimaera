@@ -93,8 +93,15 @@ inline std::vector<Route> load_config(const std::string & path)
     auto * entry = json_object_array_get_idx(topics, i);
     fields(
       entry,
-      {"host_topic", "guest_topic", "type", "direction", "qos", "coalesce", "coalesce_group"});
+      {"host_topic", "guest_topic", "type", "direction", "qos", "coalesce", "coalesce_group",
+       "transport_class"});
     Route route;
+    json_object * transport_class = nullptr;
+    if (json_object_object_get_ex(entry, "transport_class", &transport_class)) {
+      const auto value = string(entry, "transport_class");
+      if (value != "control" && value != "bulk")
+        throw std::invalid_argument("transport_class must be control or bulk");
+    }
     json_object * coalesce = nullptr;
     if (json_object_object_get_ex(entry, "coalesce", &coalesce)) {
       if (!coalesce || json_object_get_type(coalesce) != json_type_boolean) {

@@ -73,6 +73,7 @@
 #include "sim/stats.hh"
 #include "sim/system.hh"
 #include "chimaera/util.hh"
+#include "chimaera/m5_device.hh"
 
 namespace gem5
 {
@@ -737,6 +738,20 @@ chimaeraRecv(ThreadContext *tc, GuestAddr vaddr, uint64_t len)
 }
 
 
+
+uint64_t
+chimaeraControl(ThreadContext *tc, uint64_t command, GuestAddr request,
+    uint64_t size)
+{
+    return chimaera::ChimaeraM5::dispatch(tc, false, command, request.addr, size);
+}
+
+uint64_t
+chimaeraData(ThreadContext *tc, uint64_t command, GuestAddr request,
+    uint64_t size)
+{
+    return chimaera::ChimaeraM5::dispatch(tc, true, command, request.addr, size);
+}
 
 } // namespace pseudo_inst
 } // namespace gem5

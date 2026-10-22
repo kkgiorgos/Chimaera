@@ -11,6 +11,7 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 max_image_age_ns=0, simulation_time_from_readfile=False, image_diagnostics=False,
                 checkpoint_control=False, application_ready_file='', transport_backend='m5',
                 dma_device='/dev/chimaera-dma', dma_module='', dma_module_options='', dma_diagnostics=False,
+                m5_module='', m5_device='/dev/chimaera-m5',
                 dma_h2g='/tmp/chimaera_dma_h2g', dma_g2h='/tmp/chimaera_dma_g2h',
                 middleware_transport='bridge', dds_host_socket='/tmp/chimaera-dds-host.sock',
                 dds_guest_socket='/tmp/chimaera-dds-guest.sock')
@@ -98,16 +99,18 @@ def load(path):
             raise ValueError(key + ' must be absolute')
     if bridge['middleware_transport'] == 'fastdds' and bridge['checkpoint_control']:
         raise ValueError('Fast DDS middleware routing currently requires a fresh boot')
-    if bridge['transport_backend'] not in ('m5', 'dma'):
-        raise ValueError('transport_backend must be m5 or dma')
+    if bridge['transport_backend'] not in ('m5', 'dma', 'm5ops'):
+        raise ValueError('transport_backend must be m5, dma or m5ops')
+    if bridge['transport_backend'] == 'm5ops' and bridge['middleware_transport'] != 'fastdds':
+        raise ValueError('m5ops requires Fast DDS middleware routing')
     if type(bridge['dma_diagnostics']) is not bool:
         raise ValueError('dma_diagnostics must be boolean')
-    if bridge['transport_backend'] == 'dma' and bridge['checkpoint_control']:
-        raise ValueError('DMA requires a fresh boot; checkpointing is not supported')
-    for key in ('dma_device', 'dma_h2g', 'dma_g2h'):
+    if bridge['transport_backend'] in ('dma', 'm5ops') and bridge['checkpoint_control']:
+        raise ValueError('DMA/m5ops requires a fresh boot; checkpointing is not supported')
+    for key in ('dma_device', 'dma_h2g', 'dma_g2h', 'm5_device'):
         if not Path(string(bridge[key])).is_absolute():
             raise ValueError(key + ' must be absolute')
-    for key in ('dma_module', 'dma_module_options'):
+    for key in ('dma_module', 'dma_module_options', 'm5_module'):
         if not isinstance(bridge[key], str) or '\0' in bridge[key]:
             raise ValueError(key + ' must be a string without NUL')
     integer(bridge['max_serialized_bytes'], 4, 64 * 1024 * 1024 - 2056)

@@ -6,6 +6,7 @@ results/*
 containers/latency/.env
 .chimaera-rewrite/
 .chimaera-middleware/
+.chimaera-m5/
 orchestrator/.env
 /.ssh/
 orchestrator/web/node_modules/

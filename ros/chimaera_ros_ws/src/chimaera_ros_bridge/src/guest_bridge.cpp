@@ -1,6 +1,12 @@
+#include <fcntl.h>
+#include <gem5/chimaera_m5.h>
 #include <gem5/m5ops.h>
 #include <m5_mmap.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
+#include <cerrno>
 #include <chimaera/dma_controller.hpp>
 #include <chimaera/gem5_controller.hpp>
 #include <chimaera_ros_bridge/bridge.hpp>
@@ -13,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <system_error>
 #include <thread>
 
 namespace
@@ -25,6 +32,54 @@ struct Mapping
     map_m5_mem();
   }
   ~Mapping() { unmap_m5_mem(); }
+};
+
+void load_m5_module(const std::string & path)
+{
+  if (path.empty()) return;
+  const auto fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0) throw std::system_error(errno, std::generic_category(), "open m5ops module");
+  const auto result = ::syscall(SYS_finit_module, fd, "", 0);
+  const auto error = errno;
+  ::close(fd);
+  if (result < 0 && error != EEXIST)
+    throw std::system_error(error, std::generic_category(), "load m5ops module");
+}
+
+struct AdmissionBarrier
+{
+  int fd{-1};
+  AdmissionBarrier()
+  {
+    const auto device = std::getenv("CHIMAERA_M5_DEVICE");
+    fd = ::open(device && *device ? device : "/dev/chimaera-m5", O_RDWR | O_CLOEXEC);
+    if (fd < 0)
+      throw std::system_error(errno, std::generic_category(), "open m5ops admission barrier");
+    chm5_bind binding{};
+    binding.version = CHM5_ABI_VERSION;
+    binding.lane = CHM5_CONTROL;
+    if (::ioctl(fd, CHM5_IOC_BIND, &binding) < 0) {
+      const auto error = errno;
+      ::close(fd);
+      fd = -1;
+      throw std::system_error(error, std::generic_category(), "bind m5ops admission barrier");
+    }
+  }
+  ~AdmissionBarrier()
+  {
+    if (fd >= 0) ::close(fd);
+  }
+  void wait()
+  {
+    __u64 epoch = 0;
+    int result;
+    do {
+      result = ::ioctl(fd, CHM5_IOC_WAIT_ADMISSION, &epoch);
+    } while (result < 0 && errno == EINTR && rclcpp::ok());
+    if (result < 0)
+      throw std::system_error(errno, std::generic_category(), "wait for m5ops first ingress");
+    if (!epoch) throw std::runtime_error("m5ops admission barrier returned a zero epoch");
+  }
 };
 }  // namespace
 
@@ -40,8 +95,15 @@ int main(int argc, char ** argv)
     node->pump = [&] { node->drain_callbacks(executor); };
     const auto backend = node->declare_parameter<std::string>("transport_backend", "m5");
     const auto dma_diagnostics = node->declare_parameter<bool>("dma_diagnostics", false);
-    if (backend != "m5" && backend != "dma")
-      throw std::invalid_argument("transport_backend must be m5 or dma");
+    if (backend != "m5" && backend != "dma" && backend != "m5ops")
+      throw std::invalid_argument("transport_backend must be m5, dma or m5ops");
+    const bool direct_m5 = backend == "m5ops";
+    if (direct_m5) {
+      if (!node->middleware_routing())
+        throw std::invalid_argument("m5ops requires Fast DDS middleware routing");
+      load_m5_module(node->declare_parameter<std::string>("m5_module", ""));
+      node->pump = {};
+    }
     std::shared_ptr<chimaera_ros_bridge::CompletionWaitable> completion;
     std::shared_ptr<chimaera_ros_bridge::TransportWait> transport_wait;
     std::unique_ptr<chimaera::DmaGuestController> dma;
@@ -90,9 +152,11 @@ int main(int argc, char ** argv)
     mapping = std::make_unique<Mapping>();
     const auto ops = node->declare_parameter<std::string>("m5ops", "address");
     const auto read_time = node->declare_parameter<bool>("simulation_time_from_readfile", false);
+    std::unique_ptr<AdmissionBarrier> admission;
+    if (direct_m5 && read_time) admission = std::make_unique<AdmissionBarrier>();
     bool checkpoint_control = node->declare_parameter<bool>("checkpoint_control", false);
-    if (dma && checkpoint_control)
-      throw std::invalid_argument("DMA checkpointing is not supported; use a fresh boot");
+    if ((dma || direct_m5) && checkpoint_control)
+      throw std::invalid_argument("DMA/m5ops checkpointing is not supported; use a fresh boot");
     if (ops != "address" && ops != "instruction") {
       throw std::invalid_argument("m5ops must be address or instruction");
     }
@@ -104,6 +168,17 @@ int main(int argc, char ** argv)
       m5_work_begin(0, 0);
     else
       m5_work_begin_addr(0, 0);
+    // KVM can execute beyond workbegin until its deferred global exit. Wait
+    // for the first host admission before consuming the replaced boot readfile.
+    if (admission) {
+      const std::string phase = "waiting for first host admission\n";
+      m5_write_file_addr(
+        const_cast<char *>(phase.data()), phase.size(), 0, "chimaera-m5-before-admission.txt");
+      admission->wait();
+      const std::string ready = "first host admission observed\n";
+      m5_write_file_addr(
+        const_cast<char *>(ready.data()), ready.size(), 0, "chimaera-m5-after-admission.txt");
+    }
     bool time_ready = false;
     std::uint64_t iteration = 0;
     auto diagnostic = [&](const char * phase) {
@@ -117,12 +192,14 @@ int main(int argc, char ** argv)
       ++iteration;
       diagnostic("before_service");
       const auto result =
-        dma ? dma->run_next() : controller.run_next([&](chimaera::Duration idle_wait) {
-          // Wait on DDS readiness so outgoing work wakes the bridge immediately.
-          // The timeout remains the maximum interval between host-input polls.
-          executor.spin_once(idle_wait);
-          node->exchange(controller);
-        });
+        direct_m5 ? chimaera::ControllerResult{}
+        : dma     ? dma->run_next()
+                  : controller.run_next([&](chimaera::Duration idle_wait) {
+                  // Wait on DDS readiness so outgoing work wakes the bridge immediately.
+                  // The timeout remains the maximum interval between host-input polls.
+                  executor.spin_once(idle_wait);
+                  node->exchange(controller);
+                });
       if (result.state == chimaera::ControllerState::stopped) {
         break;
       }
@@ -157,11 +234,23 @@ int main(int argc, char ** argv)
           return static_cast<int64_t>(current - origin);
         };
         time_ready = true;
+        admission.reset();
+        if (direct_m5) {
+          const auto ready = "clock origin ready " + std::to_string(origin) + "\n";
+          m5_write_file_addr(
+            const_cast<char *>(ready.data()), ready.size(), 0, "chimaera-m5-clock-ready.txt");
+        }
         RCLCPP_INFO(node->get_logger(), "Authoritative simulation clock ready at %lu ns", origin);
       }
       // Deliver incoming data and collect responses. Queued responses make the
       // next exchange immediate rather than sleeping for another poll interval.
-      if (dma) {
+      if (direct_m5) {
+        // Application participants own payload buffers and their notification
+        // fds. This process retains endpoint metadata and the workbegin barrier.
+        if (node->pending())
+          throw std::runtime_error("m5ops payload unexpectedly entered the metadata coordinator");
+        executor.spin_once(std::chrono::nanoseconds(-1));
+      } else if (dma) {
         diagnostic("before_exchange");
         node->exchange(*dma);
         diagnostic("after_exchange");

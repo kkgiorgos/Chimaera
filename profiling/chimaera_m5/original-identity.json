@@ -1,0 +1,22 @@
+{
+  "verification_kind": "read_only_asset_sha256_comparison_no_runtime_execution",
+  "image": "chimaera:latency",
+  "image_id_prefix": "642cd426444f",
+  "historical_run": ".chimaera-rewrite/20261020/baseline/ball_catching_chimaera/run.json",
+  "recovered_runtime": ".chimaera-m5/original/runtime",
+  "recovered_bundle": ".chimaera-m5/original/guest.tar.gz",
+  "artifacts": {
+    "lib/chimaera_ros_bridge/latency_endpoint": "84131e42ed8f781326947d930656655a00354e7da62ce49534469448739e32d1",
+    "lib/chimaera_ros_bridge/latency_driver": "07e443856f533cc6c5d040c12967f262e0804d212a44c47b0d5625e70dcf48a0",
+    "lib/libchimaera_latency_clock.so": "76713ccc421768fb6a39660894db507529590ca62ff9d8a7d4f0af57d0a90c6b",
+    "guest.tar.gz": "f0df26063c3fbc167e9ae258b40c1f83a0dc32a810cd036db17f8910ce0ba417"
+  },
+  "all_four_match_historical_run": true,
+  "exact_source_revision": null,
+  "limitations": [
+    "Image-build-manifest gives SDK/profile but no source revision.",
+    "Original guest metadata lacks transport_protocol. Current runner compatibility is unqualified.",
+    "Original bytes must be retained. Only benchmark application endpoint and qualified common ABI assets may be replaced in a separate matched copy.",
+    "Per-variant latency_driver and guest_bridge must never be replaced by current implementations."
+  ]
+}

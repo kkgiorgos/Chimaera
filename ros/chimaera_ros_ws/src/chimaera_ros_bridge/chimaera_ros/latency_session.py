@@ -29,11 +29,15 @@ def validate_bundle(bundle, backend='m5', required_features=()):
         if backend == 'dma' and ('dma' not in metadata.get('transport_backends', []) or
                                  metadata.get('dma_abi') != 1 or metadata.get('dma_protocol') != 2):
             raise ValueError('guest bundle lacks DMA ABI 1 support')
+        if backend == 'm5ops' and ('m5ops' not in metadata.get('transport_backends', []) or
+                                  metadata.get('m5_abi') != 1):
+            raise ValueError('guest bundle lacks direct m5ops ABI 1 support')
         if set(required_features) - set(metadata.get('endpoint_features', [])):
             raise ValueError('guest bundle lacks required endpoint features')
     except (OSError, KeyError, AttributeError, TypeError, ValueError, tarfile.TarError) as error:
         raise ValueError('Require a staged v4 guest bundle with transport protocol 3'
             + (' and DMA ABI 1 / protocol 2' if backend == 'dma' else '')
+            + (' and direct m5ops ABI 1' if backend == 'm5ops' else '')
             + (' and endpoint features ' + ', '.join(required_features) if required_features else '')
             + '; rebuild and stage the runtime') from error
 

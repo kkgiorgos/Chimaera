@@ -2,6 +2,7 @@
 
 #include <chimaera/transport.hpp>
 #include <chrono>
+#include <functional>
 #include <optional>
 #include <string_view>
 
@@ -22,6 +23,20 @@ public:
     virtual void submit(Message data, std::string_view coalescing_key = {}) = 0;
     // Remove the next received message, or return nullopt when none is ready.
     virtual std::optional<Message> take() = 0;
+};
+
+// Optional credit-based handoff. The coordinator calls the receiver before
+// removing an accepted incoming record. A rejected lane retains its FIFO while
+// independent lanes can continue. Implementations bound all retained storage.
+class BackpressureController {
+public:
+    virtual ~BackpressureController() = default;
+    // False retains the caller's ownership and changes no outgoing queue.
+    virtual bool try_submit(Message data) = 0;
+    // The receiver gets an explicit shared view and must treat its bytes as
+    // immutable. Refusal retains the original storage in this controller.
+    virtual std::size_t transfer_received(
+        const std::function<bool(Message)>& receiver) = 0;
 };
 
 class TimingController {

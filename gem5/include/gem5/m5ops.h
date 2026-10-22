@@ -80,6 +80,8 @@ void m5_workload();
 void m5_chimaera_test(uint64_t channel, uint64_t value);
 uint64_t m5_chimaera_send(void *buffer, uint64_t len);
 uint64_t m5_chimaera_recv(void *buffer, uint64_t len);
+uint64_t m5_chimaera_control(uint64_t command, void *request, uint64_t size);
+uint64_t m5_chimaera_data(uint64_t command, void *request, uint64_t size);
 
 /*
  * Create _addr and _semi versions all declarations, e.g. m5_exit_addr and

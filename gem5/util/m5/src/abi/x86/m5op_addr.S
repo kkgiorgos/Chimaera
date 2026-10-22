@@ -38,6 +38,9 @@
         .globl \name
         .func \name
 \name:
+        .if (\func == M5OP_CHIMAERA_CONTROL) || (\func == M5OP_CHIMAERA_DATA)
+        mfence
+        .endif
 #if defined(M5OP_PIC)
         mov m5_mem@gotpcrel(%rip), %r11
         mov (%r11), %r11
@@ -47,6 +50,9 @@
         mov $\func, %rax
         shl $8, %rax
         mov 0(%r11, %rax, 1), %rax
+        .if (\func == M5OP_CHIMAERA_CONTROL) || (\func == M5OP_CHIMAERA_DATA)
+        mfence
+        .endif
         ret
         .endfunc
 .endm

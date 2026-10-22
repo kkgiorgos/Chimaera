@@ -137,7 +137,8 @@ class LatencyAnalysisTest(unittest.TestCase):
             self.assertIn('opt/chimaera/latency/guest_start', archive.getnames())
             marker = json.load(archive.extractfile('opt/chimaera/latency/latency-runtime.json'))
             self.assertEqual(marker, dict(version=4, transport_protocol=3,
-                transport_backends=['m5'], dma_abi=None, dma_protocol=None, endpoint_features=[],
+                transport_backends=['m5'], dma_abi=None, dma_protocol=None, m5_abi=None,
+                endpoint_features=[],
                 cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))
             self.assertTrue(all(not name.startswith('/') and '..' not in Path(name).parts
                                 for name in archive.getnames()))

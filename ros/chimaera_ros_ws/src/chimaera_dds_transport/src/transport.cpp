@@ -1,14 +1,26 @@
 #include <fastdds/rtps/transport/TransportInterface.h>
 #include <fastdds/rtps/transport/TransportReceiverInterface.h>
+#include <poll.h>
+#include <sys/eventfd.h>
+
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+#include <m5_mmap.h>
+#include <sys/mman.h>
+
+#include <chimaera/m5_endpoint.hpp>
+#endif
 
 #include <atomic>
 #include <chimaera_dds_transport/packet.hpp>
 #include <chimaera_dds_transport/transport.hpp>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
+#include <deque>
 #include <fastdds/rtps/common/LocatorSelectorEntry.hpp>
 #include <map>
 #include <mutex>
+#include <system_error>
 #include <thread>
 
 #include "protocol.hpp"
@@ -42,59 +54,332 @@ class Transport final : public TransportInterface
   int fd_{-1};
   std::atomic<bool> stopped_{false};
   std::atomic<bool> output_open_{false};
-  std::mutex send_mutex_, channels_mutex_;
+  std::mutex send_mutex_, channels_mutex_, stop_mutex_;
   std::map<unsigned, std::shared_ptr<Channel>> channels_;
   std::thread reader_;
+  struct Lane
+  {
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+    std::unique_ptr<chimaera::M5Endpoint> endpoint;
+#endif
+    int fd{-1};
+    std::mutex send_mutex;
+    std::mutex channels_mutex;
+    int cancel{-1};
+    std::thread reader;
+    // Host-only FIFO. Account for the worker's current frame as well as the
+    // queue; removing a frame for a blocking write does not return its credit.
+    static constexpr std::size_t tx_byte_limit = 64 * 1024 * 1024;
+    static constexpr std::size_t tx_record_limit = 128;
+    std::deque<Packet> tx;
+    std::size_t tx_bytes{}, tx_records{};
+    std::condition_variable tx_ready;
+    std::thread writer;
+    ~Lane()
+    {
+      if (cancel >= 0) ::close(cancel);
+    }
+  };
+  std::array<Lane, 2> lanes_;
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+  static_assert(bulk_port_bit == chimaera::m5_bulk_port_bit);
+  static_assert(application_port_bit == chimaera::m5_application_port_bit);
+#endif
+  static unsigned lane_index(uint32_t port) { return (port & bulk_port_bit) ? 1U : 0U; }
+  Lane & lane(uint32_t port) { return lanes_[lane_index(port)]; }
 
+  bool direct() const { return descriptor_.m5ops && descriptor_.side == 2; }
+  bool split_sockets() const { return descriptor_.m5ops && descriptor_.side == 1; }
+  std::unique_lock<std::mutex> channel_registration_lock(uint32_t port)
+  {
+    if (descriptor_.m5ops) return std::unique_lock(lane(port).channels_mutex);
+    return {};
+  }
+  void stop()
+  {
+    std::lock_guard lock(stop_mutex_);
+    if (stopped_.exchange(true)) return;
+    if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
+    for (auto & service : lanes_) {
+      if (service.fd >= 0) ::shutdown(service.fd, SHUT_RDWR);
+      if (split_sockets()) {
+        // Synchronize with the wait predicate even when the FIFO is empty.
+        // No host socket write or call to stop() holds this mutex.
+        std::lock_guard send_lock(service.send_mutex);
+        service.tx_ready.notify_all();
+      }
+      if (service.cancel < 0) continue;
+      const uint64_t value = 1;
+      ssize_t result;
+      do {
+        result = ::write(service.cancel, &value, sizeof(value));
+      } while (result < 0 && errno == EINTR);
+      // EAGAIN retains an already-pending, persistent cancellation notification.
+    }
+  }
+  void deliver(const uint8_t * bytes, std::size_t size)
+  {
+    const auto destination = wire::locator(bytes + 28);
+    std::shared_ptr<Channel> channel;
+    {
+      std::lock_guard lock(channels_mutex_);
+      const auto found = channels_.find(destination.port);
+      if (found != channels_.end()) channel = found->second;
+    }
+    if (!channel) return;
+    if (std::getenv("CHIMAERA_DDS_DIAGNOSTICS"))
+      std::fprintf(
+        stderr, "Chimaera DDS receive: side=%u port=%u bytes=%zu\n", descriptor_.side,
+        destination.port, size - wire::header_bytes);
+    // Distinct topic ports keep image processing off a control channel's lock.
+    std::lock_guard lock(channel->mutex);
+    if (channel->receiver)
+      channel->receiver->OnDataReceived(
+        bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
+        wire::locator(bytes + 8));
+  }
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+  void read_lane(unsigned index)
+  {
+    auto & service = lanes_[index];
+    try {
+      while (!stopped_) {
+        // Batches contain only packets already ready. The driver retains any
+        // arrival between the empty check and poll; no periodic wakeup is needed.
+        while (!stopped_) {
+          auto messages = service.endpoint->take_batch();
+          if (messages.empty()) break;
+          for (const auto & message : messages) {
+            const auto * bytes = reinterpret_cast<const uint8_t *>(message.data());
+            const auto size = message.size();
+            if (
+              size < wire::header_bytes + 20 || wire::length(bytes, size) != size ||
+              bytes[5] != wire::data || std::memcmp(bytes + wire::header_bytes, "RTPS", 4))
+              throw std::runtime_error("invalid direct DDS frame");
+            const auto source = wire::locator(bytes + 8), destination = wire::locator(bytes + 28);
+            if (
+              (source.address[0] != 1 && source.address[0] != 2) ||
+              (destination.address[0] && destination.address[0] != 2) ||
+              lane_index(destination.port) != index)
+              throw std::runtime_error("invalid direct DDS locator or lane");
+            deliver(bytes, size);
+          }
+          // Batch owns every registered RX slot through all OnDataReceived
+          // calls, then returns the complete group in one m5 operation.
+        }
+        if (stopped_) break;
+        pollfd descriptors[2]{
+          {service.endpoint->completion_fd(), POLLIN, 0},
+          { service.cancel,
+            POLLIN,
+            0 }};
+        const auto result = ::poll(descriptors, 2, -1);
+        if (result < 0 && errno == EINTR) continue;
+        if (result < 0) throw std::system_error(errno, std::generic_category(), "DDS lane poll");
+        if (descriptors[1].revents || stopped_) break;
+        if (descriptors[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+          throw std::runtime_error("DDS m5 endpoint closed or failed");
+      }
+    } catch (const std::exception & error) {
+      std::fprintf(stderr, "Chimaera DDS lane %u receive: %s\n", index, error.what());
+      stop();
+    }
+  }
+  void init_direct()
+  {
+    // Participant discovery starts under KVM before the ROI, including runs
+    // which later switch to detailed CPUs. Always use address operations.
+    static std::once_flag mapping;
+    std::call_once(mapping, [] {
+      if (!m5_mem) {
+        m5op_addr = 0xFFFF0000;
+        map_m5_mem();
+      }
+      if (!m5_mem || m5_mem == MAP_FAILED)
+        throw std::runtime_error("cannot map DDS m5 address operations");
+      // The private libm5 mapping is process-lived: no participant teardown or
+      // clock-plugin destructor can unmap it underneath another participant.
+    });
+    const auto device = std::getenv("CHIMAERA_M5_DEVICE");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    for (unsigned index = 0; index < lanes_.size(); ++index) {
+      auto & service = lanes_[index];
+      service.cancel = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+      if (service.cancel < 0)
+        throw std::system_error(errno, std::generic_category(), "DDS lane cancellation");
+      while (true) {
+        try {
+          service.endpoint = std::make_unique<chimaera::M5Endpoint>(
+            index ? chimaera::M5Lane::bulk : chimaera::M5Lane::control,
+            device && *device ? device : "/dev/chimaera-m5", chimaera::GuestM5Ops::address);
+          break;
+        } catch (const std::system_error & error) {
+          const auto code = error.code().value();
+          // The bridge may still be loading the notification module while ROS
+          // creates its first participant. Retry only setup readiness, never
+          // ABI errors, exhausted pools or payload/completion work.
+          if (
+            (code != ENOENT && code != ENODEV && code != ENXIO && code != EINTR) ||
+            std::chrono::steady_clock::now() >= deadline)
+            throw;
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+      }
+    }
+    for (unsigned index = 0; index < lanes_.size(); ++index)
+      lanes_[index].reader = std::thread([this, index] { read_lane(index); });
+  }
+#endif
+
+  bool enqueue_host(
+    wire::Type type, const std::array<uint8_t, wire::header_bytes> & prefix,
+    const wire::Locator & destination, const void * body, std::size_t size)
+  {
+    auto & service = lane(destination.port);
+    const auto frame_size = prefix.size() + size;
+    try {
+      {
+        std::lock_guard lock(service.send_mutex);
+        if (stopped_) return false;
+        if (
+          service.tx_records < Lane::tx_record_limit &&
+          frame_size <= Lane::tx_byte_limit - service.tx_bytes) {
+          auto packet = Packet::for_overwrite(frame_size);
+          std::memcpy(packet.data(), prefix.data(), prefix.size());
+          if (size) std::memcpy(packet.data() + prefix.size(), body, size);
+          service.tx.push_back(std::move(packet));
+          service.tx_bytes += frame_size;
+          ++service.tx_records;
+          service.tx_ready.notify_one();
+          return true;
+        }
+      }
+    } catch (const std::exception & error) {
+      std::fprintf(stderr, "Chimaera DDS enqueue: %s\n", error.what());
+    }
+    // Refused DATA is an unaccepted datagram. Fast DDS 2.6 ignores this false
+    // result; reliable RTPS recovery is separate, and best effort may lose it.
+    // Metadata cannot be dropped: disconnect instead of leaving a stale port
+    // after a refused Close. OpenInputChannel rolls its local state back.
+    if (type != wire::data) stop();
+    return false;
+  }
+  void write_lane(unsigned index)
+  {
+    auto & service = lanes_[index];
+    while (true) {
+      Packet packet;
+      {
+        std::unique_lock lock(service.send_mutex);
+        service.tx_ready.wait(lock, [&] { return stopped_ || !service.tx.empty(); });
+        if (stopped_) return;
+        packet = std::move(service.tx.front());
+        service.tx.pop_front();
+      }
+      // Only this worker writes the host lane fd. The owned frame outlives
+      // every partial write; no Fast DDS buffer survives its send callback.
+      if (!wire::send_all(service.fd, packet.data(), packet.size())) {
+        stop();
+        return;
+      }
+      const auto size = packet.size();
+      packet = {};
+      {
+        std::lock_guard lock(service.send_mutex);
+        service.tx_bytes -= size;
+        --service.tx_records;
+      }
+    }
+  }
   bool send_packet(
     wire::Type type, const wire::Locator & source, const wire::Locator & destination,
     const void * body = nullptr, std::size_t size = 0)
   {
+    if (size > descriptor_.maxMessageSize) return false;
     const auto prefix = wire::header(type, source, destination, size);
+    if (stopped_) return false;
+    // Fast DDS holds its participant-wide send mutex during this callback.
+    // Copy complete frames, including Open/Close, into the host lane FIFO;
+    // waiting for router credit is exclusively the lane worker's job.
+    if (split_sockets()) return enqueue_host(type, prefix, destination, body, size);
+    if (direct() && type == wire::data) {
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+      auto & service = lane(destination.port);
+      std::lock_guard lock(service.send_mutex);
+      if (stopped_) return false;
+      try {
+        // The endpoint consumes both borrowed spans before returning. Refusal
+        // is an unaccepted datagram, not an SDK retry request (see host FIFO).
+        return service.endpoint->send(
+          std::as_bytes(std::span(prefix)), {static_cast<const std::byte *>(body), size});
+      } catch (const std::exception & error) {
+        std::fprintf(stderr, "Chimaera DDS send: %s\n", error.what());
+        stop();
+        return false;
+      }
+#else
+      return false;
+#endif
+    }
+    // Legacy traffic and direct guest registration metadata remain synchronous.
     std::lock_guard lock(send_mutex_);
     if (stopped_) return false;
     if (wire::send_frame(fd_, prefix, body, size)) return true;
     // A timed-out stream write may contain only part of a frame. Retire the
     // connection so another packet cannot be mistaken for its remaining bytes.
-    stopped_ = true;
-    ::shutdown(fd_, SHUT_RDWR);
+    stop();
     return false;
   }
-  void read()
+  void read_socket(int socket, int service_index = -1)
   {
     try {
       std::array<uint8_t, wire::header_bytes> prefix;
       Packet packet;
-      while (!stopped_ && wire::receive_all(fd_, prefix.data(), prefix.size())) {
+      while (!stopped_ && wire::receive_all(socket, prefix.data(), prefix.size())) {
         const auto size = wire::length(prefix.data(), prefix.size());
+        if (direct()) throw std::runtime_error("payload on metadata-only DDS connection");
         if (packet.size() < size) packet = Packet::for_overwrite(size);
         std::memcpy(packet.data(), prefix.data(), prefix.size());
-        if (!wire::receive_all(fd_, packet.data() + wire::header_bytes, size - wire::header_bytes))
+        if (!wire::receive_all(
+              socket, packet.data() + wire::header_bytes, size - wire::header_bytes))
           break;
-        const auto destination = wire::locator(packet.data() + 28);
-        std::shared_ptr<Channel> channel;
-        {
-          std::lock_guard lock(channels_mutex_);
-          auto found = channels_.find(destination.port);
-          if (found != channels_.end()) channel = found->second;
-        }
-        if (channel) {
-          if (std::getenv("CHIMAERA_DDS_DIAGNOSTICS"))
-            std::fprintf(
-              stderr, "Chimaera DDS receive: side=%u port=%u bytes=%zu\n", descriptor_.side,
-              destination.port, size - wire::header_bytes);
-          std::lock_guard lock(channel->mutex);
-          if (channel->receiver)
-            channel->receiver->OnDataReceived(
-              packet.data() + wire::header_bytes, uint32_t(size - wire::header_bytes),
-              channel->locator, wire::locator(packet.data() + 8));
-        }
+        if (
+          service_index >= 0 &&
+          lane_index(wire::locator(packet.data() + 28).port) != unsigned(service_index))
+          throw std::runtime_error("DDS socket received a packet on the wrong lane");
+        deliver(packet.data(), size);
       }
     } catch (const std::exception & error) {
       std::fprintf(stderr, "Chimaera DDS receive: %s\n", error.what());
     }
-    stopped_ = true;
-    if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
+    stop();
+  }
+  int connect_socket()
+  {
+    const auto address = wire::address(descriptor_.socket);
+    const auto socket = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    if (socket < 0)
+      throw std::system_error(errno, std::generic_category(), "create DDS runtime socket");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (::connect(socket, reinterpret_cast<const sockaddr *>(&address), sizeof(address))) {
+      const auto error = errno;
+      if (
+        (error != ENOENT && error != ECONNREFUSED && error != EINTR) ||
+        std::chrono::steady_clock::now() >= deadline) {
+        ::close(socket);
+        throw std::system_error(error, std::generic_category(), "connect DDS runtime socket");
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    // A host bulk producer may wait for bounded router/controller credits.
+    // Timing simulation can keep those credits occupied for more than five
+    // wall seconds. Its lane worker retains the owned frame until credit
+    // returns; shutdown() interrupts the blocking send.
+    if (!split_sockets()) {
+      timeval timeout{5, 0};
+      ::setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+    }
+    return socket;
   }
   bool fill(Locator & value, unsigned port) const
   {
@@ -106,6 +391,40 @@ class Transport final : public TransportInterface
     }
     return true;
   }
+  // Serialize port removal with a reopen on the same lane. Release that lock
+  // before waiting for callbacks: discovery may open another channel itself.
+  bool close_input_channel(const Locator & locator, std::unique_lock<std::mutex> & registration)
+  {
+    std::shared_ptr<Channel> channel;
+    {
+      std::lock_guard lock(channels_mutex_);
+      const auto found = channels_.find(locator.port);
+      if (found == channels_.end()) return false;
+      channel = found->second;
+      channels_.erase(found);
+    }
+    bool success = true;
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+    if (direct()) {
+      try {
+        auto & service = lane(locator.port);
+        std::lock_guard lock(service.send_mutex);
+        if (service.endpoint) service.endpoint->close_channel(locator.port);
+      } catch (const std::exception & error) {
+        std::fprintf(stderr, "Chimaera DDS close channel: %s\n", error.what());
+        stop();
+        success = false;
+      }
+    }
+#endif
+    success = send_packet(wire::close, wire::local(descriptor_.side), locator) && success;
+    if (registration.owns_lock()) registration.unlock();
+    {
+      std::lock_guard lock(channel->mutex);
+      channel->receiver = nullptr;
+    }
+    return success;
+  }
 
 public:
   explicit Transport(const Descriptor & descriptor)
@@ -115,32 +434,59 @@ public:
   ~Transport() override { shutdown(); }
   bool init(const PropertyPolicy *) override
   {
-    fd_ = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (fd_ < 0) return false;
-    const auto address = wire::address(descriptor_.socket);
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-    while (::connect(fd_, reinterpret_cast<const sockaddr *>(&address), sizeof(address))) {
-      if (
-        (errno != ENOENT && errno != ECONNREFUSED) ||
-        std::chrono::steady_clock::now() >= deadline) {
-        ::close(fd_);
-        fd_ = -1;
-        return false;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+#ifndef CHIMAERA_DDS_HAS_M5OPS
+    if (direct()) {
+      std::fprintf(stderr, "Chimaera DDS built without direct m5ops support\n");
+      return false;
     }
-    timeval timeout{5, 0};
-    ::setsockopt(fd_, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-    reader_ = std::thread([this] { read(); });
+#endif
+    try {
+      if (split_sockets()) {
+        // Publish all fds before starting any thread that can call stop().
+        for (auto & service : lanes_) service.fd = connect_socket();
+        for (unsigned index = 0; index < lanes_.size(); ++index)
+          lanes_[index].writer = std::thread([this, index] { write_lane(index); });
+        for (unsigned index = 0; index < lanes_.size(); ++index)
+          lanes_[index].reader =
+            std::thread([this, index] { read_socket(lanes_[index].fd, int(index)); });
+      } else {
+        fd_ = connect_socket();
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+        if (direct()) init_direct();
+#endif
+        reader_ = std::thread([this] { read_socket(fd_); });
+      }
+      if (stopped_) throw std::runtime_error("DDS transport stopped during initialization");
+    } catch (const std::exception & error) {
+      std::fprintf(stderr, "Chimaera DDS initialization: %s\n", error.what());
+      shutdown();
+      return false;
+    }
     if (std::getenv("CHIMAERA_DDS_DIAGNOSTICS"))
       std::fprintf(stderr, "Chimaera DDS connected: side=%u\n", descriptor_.side);
     return true;
   }
   void shutdown() override
   {
-    stopped_ = true;
-    if (fd_ >= 0) ::shutdown(fd_, SHUT_RDWR);
+    stop();
     if (reader_.joinable()) reader_.join();
+    for (auto & service : lanes_)
+      if (service.reader.joinable()) service.reader.join();
+    for (auto & service : lanes_)
+      if (service.writer.joinable()) service.writer.join();
+    for (auto & service : lanes_) {
+      std::lock_guard lock(service.send_mutex);
+      service.tx.clear();
+      service.tx_bytes = service.tx_records = 0;
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+      service.endpoint.reset();
+#endif
+      if (service.fd >= 0) {
+        ::close(service.fd);
+        service.fd = -1;
+      }
+    }
+    std::lock_guard lock(send_mutex_);
     if (fd_ >= 0) {
       ::close(fd_);
       fd_ = -1;
@@ -171,7 +517,8 @@ public:
   }
   Locator RemoteToMainLocal(const Locator & remote) const override
   {
-    if (IsLocatorSupported(remote)) return wire::local(descriptor_.side);
+    if (IsLocatorSupported(remote))
+      return wire::local(descriptor_.side, descriptor_.m5ops ? remote.port : 0);
     return Locator(LOCATOR_KIND_INVALID, 0);
   }
   bool OpenOutputChannel(SendResourceList & resources, const Locator & locator) override
@@ -210,6 +557,7 @@ public:
         stderr, "Chimaera DDS input: kind=%d port=%u side=%u\n", locator.kind, locator.port,
         locator.address[0]);
     if (!IsLocatorSupported(locator)) return false;
+    auto registration = channel_registration_lock(locator.port);
     auto channel = std::make_shared<Channel>();
     channel->receiver = receiver;
     channel->locator = locator;
@@ -218,23 +566,28 @@ public:
       if (channels_.count(locator.port)) return false;
       channels_[locator.port] = channel;
     }
-    return send_packet(wire::open, wire::local(descriptor_.side), locator);
+    try {
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+      if (direct()) {
+        auto & service = lane(locator.port);
+        std::lock_guard lock(service.send_mutex);
+        if (stopped_ || !service.endpoint) throw std::runtime_error("DDS m5 endpoint is stopped");
+        service.endpoint->open_channel(locator.port);
+      }
+#endif
+      if (send_packet(wire::open, wire::local(descriptor_.side), locator)) return true;
+    } catch (const std::exception & error) {
+      std::fprintf(stderr, "Chimaera DDS open channel: %s\n", error.what());
+    }
+    // Roll back both registrations if either the device or metadata IPC fails.
+    close_input_channel(locator, registration);
+    return false;
   }
   bool CloseInputChannel(const Locator & locator) override
   {
-    std::shared_ptr<Channel> channel;
-    {
-      std::lock_guard lock(channels_mutex_);
-      const auto found = channels_.find(locator.port);
-      if (found == channels_.end()) return false;
-      channel = found->second;
-      channels_.erase(found);
-    }
-    {
-      std::lock_guard lock(channel->mutex);
-      channel->receiver = nullptr;
-    }
-    return send_packet(wire::close, wire::local(descriptor_.side), locator);
+    if (!IsLocatorSupported(locator)) return false;
+    auto registration = channel_registration_lock(locator.port);
+    return close_input_channel(locator, registration);
   }
   bool DoInputLocatorsMatch(const Locator & a, const Locator & b) const override
   {
@@ -323,7 +676,10 @@ public:
 }  // namespace
 
 Descriptor::Descriptor(std::string path, unsigned role)
-: TransportDescriptorInterface(max_packet_bytes, 1), socket(std::move(path)), side(role)
+: TransportDescriptorInterface(configured_max_packet_bytes(), 1),
+  socket(std::move(path)),
+  side(role),
+  m5ops(m5ops_backend())
 {
   if (side != 1 && side != 2) throw std::invalid_argument("DDS side must be host or guest");
 }
