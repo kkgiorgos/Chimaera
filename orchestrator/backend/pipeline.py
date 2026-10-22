@@ -16,16 +16,25 @@ def prepare(directory):
     calibration = request.get('calibration')
     checkpoint_mode = request.get('readiness_checkpoint', False)
     config = request['config']
-    if config.get('fixed', {}).get('transport_backend', 'm5') == 'dma' and checkpoint_mode:
-        raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
-    dma = config.get('fixed', {}).get('transport_backend', 'm5') == 'dma'
+    fixed = config.get('fixed', {})
+    backend = fixed.get('transport_backend', 'm5')
+    driver_backend = backend in ('dma', 'm5ops')
+    label = 'DMA' if backend == 'dma' else 'm5ops'
+    module_field = 'm5_module' if backend == 'm5ops' else 'dma_module'
+    if driver_backend and checkpoint_mode:
+        raise ValueError(label + ' requires a fresh boot; readiness checkpoints are not supported')
+    if backend == 'm5ops' and fixed.get('middleware_transport', 'bridge') != 'fastdds':
+        raise ValueError('m5ops requires Fast DDS middleware routing')
     shared_kernel = (calibration or {}).get('provenance', {}).get('kernel_bundle_sha256')
-    managed_kernel = dma and not config.get('fixed', {}).get('dma_module') and not shared_kernel
+    if shared_kernel and not driver_backend:
+        raise ValueError('Shared kernel/module assets require a driver transport backend')
+    managed_kernel = driver_backend and not fixed.get(module_field) and not shared_kernel
     if managed_kernel and request.get('kernel'):
-        raise ValueError('A custom DMA kernel requires fixed.dma_module built for that kernel; '
+        raise ValueError(f'A custom {label} kernel requires fixed.{module_field} built for that kernel; '
                          'leave both fields empty for an automatically built pair')
-    if config.get('fixed', {}).get('dma_module'):
-        config['fixed']['dma_module'] = str(root / config['fixed']['dma_module'])
+    for field in ('dma_module', 'm5_module'):
+        if fixed.get(field):
+            fixed[field] = str(root / fixed[field])
     # The stored JSON remains portable; resolve its repository-relative memory config here.
     config['ramulator_config'] = str(root / config['ramulator_config'])
     atomic_json(directory / 'experiment.json', config)
@@ -72,18 +81,18 @@ def prepare(directory):
     kernel_bundle = None
     if shared_kernel:
         from kernel_assets import verify
-        guest_kernel, module = verify(directory / 'shared-assets', shared_kernel)
-        config.setdefault('fixed', {})['dma_module'] = str(module)
+        guest_kernel, module = verify(directory / 'shared-assets', shared_kernel, backend=backend)
+        config.setdefault('fixed', {})[module_field] = str(module)
         kernel_bundle = shared_kernel
     elif managed_kernel:
         from kernel_assets import ensure, expose
-        guest_kernel, module = ensure(root, directory, request['build_jobs'])
-        config.setdefault('fixed', {})['dma_module'] = str(module)
+        guest_kernel, module = ensure(root, directory, request['build_jobs'], backend=backend)
+        config.setdefault('fixed', {})[module_field] = str(module)
         kernel_bundle = expose(directory, guest_kernel, module)
     else:
         guest_kernel = request.get('kernel')
     if kernel_bundle:
-        pair_directory = Path(config['fixed']['dma_module']).parent
+        pair_directory = Path(config['fixed'][module_field]).parent
         for source, target in [('kernel-assets.json', 'kernel-assets.json'),
                                ('build.json', 'kernel-build.json'), ('kernel.config', 'kernel.config')]:
             shutil.copyfile(pair_directory / source, directory / target)
@@ -100,11 +109,11 @@ def prepare(directory):
         disk, kernel = readiness / 'guest.img', readiness / 'kernel'
     else:
         disk, kernel = ensure_assets(root, directory, base_id, request.get('disk'), guest_kernel)
-    dma_boot = None
-    if dma and not calibration:
+    driver_boot = None
+    if driver_backend and not calibration:
         from kernel_assets import smoke
-        dma_boot = smoke(root, directory, application_id, disk, kernel,
-                         Path(config['fixed']['dma_module']),
+        driver_boot = smoke(root, directory, application_id, disk, kernel,
+                         Path(config['fixed'][module_field]), backend=backend,
                          timeout=config['fixed'].get('startup_timeout_s', 900))
     args = []
     if calibration:
@@ -136,8 +145,8 @@ def prepare(directory):
                       input_hashes=hashes)
     if kernel_bundle:
         provenance['kernel_bundle_sha256'] = kernel_bundle
-    if dma_boot:
-        provenance['dma_boot'] = dma_boot
+    if driver_boot:
+        provenance['m5_boot' if backend == 'm5ops' else 'dma_boot'] = driver_boot
     if checkpoint_mode:
         from checkpoints import package
         if not calibration:

@@ -9,7 +9,7 @@ from agent import Agent, memory_bytes
 
 
 @pytest.mark.parametrize('consumer', [False, True])
-@pytest.mark.parametrize('backend', ['m5', 'dma'])
+@pytest.mark.parametrize('backend', ['m5', 'dma', 'm5ops'])
 def test_preparation_selects_checkpoints_and_producer_kvm(tmp_path, consumer, backend):
     agent = Agent(tmp_path, tmp_path / 'data')
     original_stat = Path.stat

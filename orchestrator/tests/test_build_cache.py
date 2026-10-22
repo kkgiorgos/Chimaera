@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from common import atomic_json, build_identities, digest
+from common import atomic_json, build_identities, digest, source_identity
 from pipeline import prepare
 
 SDK_ID = 'sha256:' + 'a' * 64
@@ -40,15 +40,52 @@ def test_sdk_cache_depends_on_build_content_not_repo_commit_or_dashboard(tmp_pat
     assert build_identities(tmp_path)['sdk'] != initial['sdk']
 
 
-def test_dma_custom_kernel_requires_driver_before_building(tmp_path, monkeypatch):
+@pytest.mark.parametrize('backend,field', [('dma', 'dma_module'), ('m5ops', 'm5_module')])
+def test_custom_kernel_requires_driver_before_building(tmp_path, monkeypatch, backend, field):
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
     (tmp_path / 'request.json').write_text(json.dumps(dict(
-        config=dict(fixed=dict(transport_backend='dma')), kernel='/custom/kernel')))
+        config=dict(fixed=dict(transport_backend=backend, middleware_transport='fastdds')), kernel='/custom/kernel')))
     with patch('pipeline.source_identity') as identity, patch('images.build') as build:
-        with pytest.raises(ValueError, match='requires fixed.dma_module'):
+        with pytest.raises(ValueError, match='requires fixed.' + field):
             prepare(tmp_path)
     identity.assert_not_called()
     build.assert_not_called()
+
+
+@pytest.mark.parametrize('backend', ['dma', 'm5ops'])
+def test_driver_backends_reject_readiness_before_building(tmp_path, monkeypatch, backend):
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    atomic_json(tmp_path / 'request.json', dict(readiness_checkpoint=True,
+        config=dict(fixed=dict(transport_backend=backend, middleware_transport='fastdds'))))
+    with patch('pipeline.source_identity') as identity, patch('images.build') as build:
+        with pytest.raises(ValueError, match='requires a fresh boot'):
+            prepare(tmp_path)
+    identity.assert_not_called()
+    build.assert_not_called()
+
+
+def test_m5ops_rejects_bridge_middleware_before_building(tmp_path, monkeypatch):
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    atomic_json(tmp_path / 'request.json', dict(config=dict(fixed=dict(transport_backend='m5ops'))))
+    with patch('pipeline.source_identity') as identity, patch('images.build') as build:
+        with pytest.raises(ValueError, match='requires Fast DDS'):
+            prepare(tmp_path)
+    identity.assert_not_called()
+    build.assert_not_called()
+
+
+def test_rmw_preparation_changes_sdk_cache_and_source_identity(tmp_path):
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
+    script = tmp_path / 'middleware/prepare_rmw.py'
+    script.parent.mkdir()
+    script.write_text('pinned RMW build one')
+    subprocess.run(['git', '-C', str(tmp_path), 'add', '.'], check=True)
+    subprocess.run(['git', '-C', str(tmp_path), '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                    'commit', '-qm', 'fixture'], check=True)
+    builds, identity = build_identities(tmp_path), source_identity(tmp_path)
+    script.write_text('pinned RMW build two')
+    assert build_identities(tmp_path)['sdk'] != builds['sdk']
+    assert source_identity(tmp_path) != identity
 
 
 def pipeline_fixture(tmp_path):
@@ -79,14 +116,18 @@ def pipeline_fixture(tmp_path):
 
 
 @pytest.mark.parametrize('consumer', [False, True])
-def test_dma_preparation_builds_only_on_producer_and_freezes_shared_pair(tmp_path, monkeypatch, consumer):
+@pytest.mark.parametrize('backend,field,module_name', [('dma', 'dma_module', 'chimaera_dma.ko'),
+                                                      ('m5ops', 'm5_module', 'chimaera_m5.ko')])
+def test_driver_preparation_builds_only_on_producer_and_freezes_shared_pair(
+        tmp_path, monkeypatch, consumer, backend, field, module_name):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
-    module = kernel.parent / 'chimaera_dma.ko'
+    module = kernel.parent / module_name
     module.write_bytes(b'matching driver')
     for name in ('kernel-assets.json', 'build.json', 'kernel.config'):
         (kernel.parent / name).write_text('{}')
     request = json.loads((directory / 'request.json').read_text())
-    request['config']['fixed'] = dict(transport_backend='dma')
+    fixed = dict(transport_backend=backend, middleware_transport='fastdds')
+    request['config']['fixed'] = fixed
     if consumer:
         request['calibration']['provenance']['kernel_bundle_sha256'] = 'pair-manifest'
     else:
@@ -98,7 +139,7 @@ def test_dma_preparation_builds_only_on_producer_and_freezes_shared_pair(tmp_pat
          patch('assets.clean_unused'), \
          patch('pipeline.source_identity', return_value=identity), \
          patch('pipeline.build_identities', return_value=dict(sdk='sdk-key', application='app-key')), \
-         patch('pipeline.subprocess.run', side_effect=execute), \
+         patch('pipeline.subprocess.run', side_effect=execute) as commands, \
          patch('guest.ensure_assets', return_value=(disk, kernel)) as guest, \
          patch('kernel_assets.ensure', return_value=(kernel, module)) as build, \
          patch('kernel_assets.expose', return_value='pair-manifest'), \
@@ -107,21 +148,30 @@ def test_dma_preparation_builds_only_on_producer_and_freezes_shared_pair(tmp_pat
         prepare(directory)
     ready = json.loads((directory / 'ready.json').read_text())
     assert ready['provenance']['kernel_bundle_sha256'] == 'pair-manifest'
-    assert json.loads((directory / 'experiment.json').read_text())['fixed']['dma_module'] == str(module)
-    assert json.loads((directory / 'request.json').read_text())['config']['fixed'] == dict(transport_backend='dma')
+    assert json.loads((directory / 'experiment.json').read_text())['fixed'][field] == str(module)
+    assert json.loads((directory / 'request.json').read_text())['config']['fixed'] == fixed
     assert guest.call_args.args[-1] == kernel
     assert build.call_count == int(not consumer)
     assert smoke.call_count == int(not consumer)
     assert verify.call_count == int(consumer)
+    if consumer:
+        verify.assert_called_once_with(directory / 'shared-assets', 'pair-manifest', backend=backend)
+    else:
+        build.assert_called_once_with(tmp_path, directory, 4, backend=backend)
+        assert smoke.call_args.kwargs['backend'] == backend
+        assert ready['provenance']['m5_boot' if backend == 'm5ops' else 'dma_boot']['status'] == 'passed'
+    setup = next(c.args[0] for c in commands.call_args_list if '--skip-build' in c.args[0])
+    assert '--checkpoint-create' not in setup and '--readiness-from' not in setup
 
 
-def test_dma_boot_failure_prevents_ready_manifest(tmp_path, monkeypatch):
+@pytest.mark.parametrize('backend,field', [('dma', 'dma_module'), ('m5ops', 'm5_module')])
+def test_driver_boot_failure_prevents_ready_manifest(tmp_path, monkeypatch, backend, field):
     directory, identity, disk, kernel, execute = pipeline_fixture(tmp_path)
     module = kernel.parent / 'driver.ko'
     module.write_bytes(b'driver')
     request = json.loads((directory / 'request.json').read_text())
     request['calibration'] = None
-    request['config']['fixed'] = dict(transport_backend='dma', dma_module=str(module))
+    request['config']['fixed'] = dict(transport_backend=backend, middleware_transport='fastdds', **{field: str(module)})
     atomic_json(directory / 'request.json', request)
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
     with patch('images.build', return_value=(SDK_ID, SDK_ID, APP_ID)), \

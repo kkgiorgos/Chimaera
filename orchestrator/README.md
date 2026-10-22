@@ -7,49 +7,50 @@ Only one unfinished experiment can exist, including stopped runs. Finalized runs
 retain collected results; their working files are released automatically before
 another experiment can start.
 
-Select DMA inside the experiment's `fixed` object:
+New experiments default to direct **DDS + m5ops**, using
+[`experiments/dds_m5ops_two_lofts.json`](experiments/dds_m5ops_two_lofts.json).
+It runs the saved 3 and 5 m/s lofts once each without memory pressure. Existing
+frozen experiments keep their selected implementation.
 
 ```json
-"transport_backend": "dma"
+"transport_backend": "m5ops",
+"middleware_transport": "fastdds",
+"m5_module": ""
 ```
 
-Leave `fixed.dma_module` and the preparation machine's **kernel** field empty.
-The producer automatically builds Linux 5.15.180 and `chimaera_dma.ko` from the
-same configured kernel tree, with module version checks enabled. The Linux source
-archive is pinned by SHA-256 in `kernel/policy.json`; `kernel/config.fragment`
-sets the built-in root disk/filesystem, serial console and DMA module support.
-The build runs in an x86-64 Ubuntu toolchain container and uses the machine's
-**build parallelism**, independently of case worker limits. Initial preparation
-requires Internet access, several GiB of temporary disk space, and a full kernel
-build. The resolved configuration, compiler, kernel release, module vermagic and
-file hashes are retained. Changes to the recipe, toolchain image, driver or ABI
-header invalidate the pair cache.
+Leave `fixed.m5_module` and the preparation machine's **kernel** field empty.
+The producer builds Linux 5.15.180 and `chimaera_m5.ko` from the same configured
+kernel tree, with module version checks enabled. The shared SDK includes the
+pinned custom Fast DDS RMW and direct transport plugin. Each case boots with KVM
+and switches to the CPU selected in `hardware`; readiness checkpoints are
+unavailable with m5ops. Guest receive notification uses the driver and interrupts.
+Payload copying is functional rather than timed DMA; CPU/application and memory
+work still run on the selected simulated hardware.
 
-Before marking preparation ready, the producer boots a disposable COW guest with
-the actual disk/kernel/module, loads the driver, opens `/dev/chimaera-dma`, and
-checks the driver ABI. Boot failure, driver rejection, timeout or disk I/O errors
-fail preparation before benchmark dispatch. Its kernel build log and boot serial
-are included in preparation diagnostics. This boot check does not replace a real
-single-case robot validation.
+The Linux source archive is pinned by SHA-256 in `kernel/policy.json`;
+`kernel/config.fragment` sets the built-in disk/filesystem, serial console and
+module support. Initial preparation needs Internet access, several GiB of
+temporary disk space, and a full kernel/simulator build. Matching cached build
+inputs are reused. Backend, driver, ABI and recipe changes invalidate the matching
+kernel/module cache. Compiler, configuration, release, vermagic and file hashes
+are retained.
 
-Other machines receive the producer's exact kernel/module pair over the existing
-direct asset stream, verify all hashes, and freeze that driver into the guest
-bundle. They do not independently compile another kernel. The current reusable
-pair and pairs referenced by unfinished experiments are protected from cleanup;
-obsolete pairs appear under **Storage** and can be reclaimed.
+Before preparation is marked ready, a disposable COW guest boots the actual
+kernel/disk/module, opens `/dev/chimaera-m5`, and checks ABI 1. Failure prevents
+case dispatch. This preparation probe does not replace an actual robot trial.
+Other machines receive the producer's exact verified kernel/module pair, rather
+than compiling independently. The current pair and those used by unfinished
+experiments remain protected from cleanup.
 
-For a custom kernel, supply both the preparation machine's kernel path and
-`fixed.dma_module`, built for that exact kernel. The module path is relative to
-the repository root and must exist on preparation machines. These explicit
-artifacts also pass the producer boot check. Supplying a module without a kernel
-retains the existing prebuilt-kernel selection. Standalone suite configurations
-still require an explicit module and resolve its path relative to their JSON file.
-The default `m5` backend continues to use its pinned prebuilt kernel.
+For a custom kernel, supply both the preparation machine's kernel path and a
+repository-relative `fixed.m5_module` built for that exact kernel. Explicit pairs
+also pass the boot probe. Standalone container configs resolve module paths
+relative to their JSON file; the orchestrator's editor uses repository-relative
+paths. Keep the kernel field empty to use automatic pair preparation.
 
-DMA uses fresh KVM boots for every case and skips readiness checkpoint creation,
-transfer, and restoration. Memory calibration and application images are still
-shared. The default `m5` backend retains the checkpoint workflow. DMA cannot be
-combined with the suite's checkpoint options.
+The older `dma` backend remains available with `fixed.dma_module`, its matching
+kernel pair and `/dev/chimaera-dma` ABI probe. It also uses fresh boots. The legacy
+`m5` backend retains its pinned prebuilt kernel and readiness checkpoint workflow.
 
 ## Deploy on the webserver
 
@@ -59,7 +60,7 @@ Requirements:
 - Linux x86-64 workers with Docker Engine/Compose, writable repositories,
   and permission for the SSH user to use Docker and the guest assets.
 - With the default m5 backend, KVM on the selected preparation machine for its
-  initial guest boot. Case workers restore detailed checkpoints. With DMA, every
+  initial guest boot. Case workers restore detailed checkpoints. With DMA or m5ops, every
   case worker needs `/dev/kvm` for a fresh guest boot.
 - Bash and gzip on workers for compressed image streams. The producer also needs
   Python 3 and an OpenSSH client on its host.
@@ -212,14 +213,23 @@ does not remove running sibling workers.
 
 ## Configure and run
 
-For the planner timing correction, import
+For the two saved lofts, use the default New experiment configuration or import
+[`experiments/dds_m5ops_two_lofts.json`](experiments/dds_m5ops_two_lofts.json).
+**Validate** must show exactly two cases: `loft-3` and `loft-5`, both `camera_30`
+and zero pressure. See [the run settings](experiments/dds_m5ops_two_lofts.md).
+Select one worker slot with 4 host CPUs and a 12 GiB RAM budget on the preparation
+machine for a serial first run. Leave disk/kernel overrides empty for automatic
+assets, and queue a new experiment after updating the controller and supervisors.
+No simulation starts merely by importing or validating this config.
+
+For the older planner timing correction, import
 [`experiments/planner_timing_baseline.json`](experiments/planner_timing_baseline.json)
 to run a single unloaded 3 m/s case. Follow the
 [build and checkpoint instructions](../docs/ball-catching-planner-timing.md#test-through-the-orchestrator)
 before queueing it.
 
 Choose **New experiment**. Monaco opens the current
-`memory_contention_patterns.json` template with the matching Catppuccin theme.
+two-loft DDS + m5ops template with the matching Catppuccin theme.
 Import/export JSON, edit it, select workers and an image preparation/calibration
 machine, then **Validate** to preview the expanded cases. The server uses the benchmark's real validator; the editor also
 provides JSON schema diagnostics. `ramulator_config` is relative to the repository
@@ -232,9 +242,10 @@ arrives, preparation runs automatically:
    dependency base and application. A dedicated Buildx builder named
    `chimaera-orchestrator` uses a 2 GB retention target for reclaimable cache;
    no other builder or daemon-wide cache is pruned.
-2. Reuse or construct the producer's base guest and pinned kernel. Calibrate,
-   freeze the application bundle and create readiness checkpoints once per
-   compatible configuration, with KVM only on this machine.
+2. Reuse or construct the producer's base guest and kernel. Calibrate and freeze
+   the application bundle. With DMA/m5ops, build and boot-check the exact matching
+   driver pair; every case subsequently boots with KVM. With legacy `m5`, create
+   readiness checkpoints once per compatible configuration on the producer.
 3. Stream the application image and separate sparse readiness assets directly to
    each consumer over SSH. Consumers do not build a second SDK, disk or checkpoint.
 4. Verify image content and all asset hashes, validate shared calibration, and
@@ -248,7 +259,8 @@ arrives, preparation runs automatically:
    results/configuration/provenance. Cleanup retries after disconnects/restarts;
    a new experiment waits for acknowledgement from every involved machine.
 
-Every case restores the same compatible, aggressor-free detailed guest state.
+The legacy `m5` checkpoint workflow restores the same compatible, aggressor-free
+detailed guest state for every case.
 While gem5 stays paused, its host replays the recorded readiness commands at native
 speed to reconstruct Gazebo time, robot motion and readiness. A mismatch in saved
 time or joint positions/velocities fails the case. This is a host input replay,
@@ -271,7 +283,7 @@ controller rates require compatible checkpoints; preparation groups those separa
 Missing or incompatible checkpoints fail preparation/execution; there is no KVM
 fallback. Use a new experiment after updating the simulator/bridge for this protocol.
 
-Fresh-boot workers (including DMA) also receive the dependency base image used
+Fresh-boot workers (including DMA and m5ops) also receive the dependency base image used
 to construct their guest disk. Workers using transferred readiness checkpoints
 or an explicitly configured disk do not need that extra image. Destination image
 identities are recorded separately from the producer's calibration provenance.

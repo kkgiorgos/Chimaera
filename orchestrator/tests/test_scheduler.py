@@ -973,17 +973,20 @@ def test_selected_asset_cleanup_passes_selection_and_blocks_duplicate(controller
     assert calls[0][2]['asset_ids'] == ['ball-catching-unused.img']
 
 
-def test_dma_configuration_keeps_repository_module_path_portable():
+@pytest.mark.parametrize('backend,field,source', [('dma', 'dma_module', 'chimaera_dma.c'),
+                                               ('m5ops', 'm5_module', 'chimaera_m5.c')])
+def test_driver_configuration_keeps_repository_module_path_portable(backend, field, source):
     config = json.loads((ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json').read_text())
     config['ramulator_config'] = 'gem5/ext/ramulator2/configs/lpddr5-6400-orin.json'
     # Validation only checks file availability; kernel compatibility is checked at guest load.
-    config['fixed'].update(transport_backend='dma', dma_module='gem5-transport/kernel/chimaera_dma.c')
+    config['fixed'].update(transport_backend=backend, middleware_transport='fastdds',
+                           **{field: 'gem5-transport/kernel/' + source})
     portable, points = validate_config(ROOT, config)
-    assert portable['fixed']['dma_module'] == 'gem5-transport/kernel/chimaera_dma.c'
+    assert portable['fixed'][field] == 'gem5-transport/kernel/' + source
     assert len(points) == 10
-    config['fixed']['dma_module'] = '/etc/passwd'
+    config['fixed'][field] = '/etc/passwd'
     with pytest.raises(ValueError, match='inside the repository'):
         validate_config(ROOT, config)
-    config['fixed']['dma_module'] = 1
+    config['fixed'][field] = 1
     with pytest.raises(ValueError, match='path string'):
         validate_config(ROOT, config)

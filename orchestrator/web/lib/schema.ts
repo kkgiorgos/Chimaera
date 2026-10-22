@@ -4,10 +4,14 @@ const vector = { type: 'array', items: { type: 'number' }, minItems: 3, maxItems
 const object = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, properties, required: Object.keys(properties) });
 export const experimentSchema = object({
   version: { const: 1 },
-  fixed: { ...object({ transport_backend: { enum: ['m5', 'dma'], default: 'm5',
-      description: 'DMA uses a fresh KVM boot for every case; readiness checkpoints are unavailable.' },
+  fixed: { ...object({ transport_backend: { enum: ['m5', 'dma', 'm5ops'], default: 'm5ops',
+      description: 'Direct DDS m5ops requires Fast DDS. DMA and m5ops boot with KVM for every case, then switch to the selected CPU; readiness checkpoints are unavailable.' },
+    middleware_transport: { enum: ['bridge', 'fastdds'], default: 'fastdds',
+      description: 'Use fastdds with m5ops for direct DDS routing.' },
     dma_module: { type: 'string', default: '',
       description: 'Optional repository-relative chimaera_dma.ko for a custom guest kernel. Leave this and the machine kernel empty to build and verify a matching kernel/driver pair automatically.' },
+    m5_module: { type: 'string', default: '',
+      description: 'Optional repository-relative chimaera_m5.ko for a custom guest kernel. Leave this and the machine kernel empty to build and verify a matching kernel/driver pair automatically.' },
     duration: positive, warmup: { type: 'number', minimum: 0 }, physics_step: positive,
     joint_hz: positive, camera_position: vector, camera_width: { type: 'integer', minimum: 64 },
     camera_height: { type: 'integer', minimum: 64 }, image_age_periods: positive,

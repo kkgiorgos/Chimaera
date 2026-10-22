@@ -5,6 +5,8 @@
 !containers/profiles/**
 !containers/scripts/
 !containers/scripts/**
+!middleware/
+!middleware/prepare_rmw.py
 !gem5/
 !gem5/**
 !gem5-transport/

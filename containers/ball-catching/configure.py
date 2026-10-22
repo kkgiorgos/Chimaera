@@ -44,17 +44,21 @@ def configure(config, output, image, disk, kernel, cpus=4, memory='12g'):
     (output / 'source-experiment.json').write_bytes(config.read_bytes())
     (output / 'memory.json').write_bytes(Path(data['ramulator_config']).read_bytes())
     exported = {key: value for key, value in data.items() if key not in ('ramulator_sha256', 'peak_gbps')}
-    if data['fixed']['dma_module']:
-        shutil.copyfile(data['fixed']['dma_module'], output / 'chimaera_dma.ko')
-        exported['fixed'] = dict(data['fixed'], dma_module='/assets/inputs/chimaera_dma.ko')
+    exported['fixed'] = dict(data['fixed'])
+    modules = []
+    for key, name in (('dma_module', 'chimaera_dma.ko'), ('m5_module', 'chimaera_m5.ko')):
+        if data['fixed'][key]:
+            target = output / name
+            shutil.copyfile(data['fixed'][key], target)
+            exported['fixed'][key] = '/assets/inputs/' + name
+            modules.append(target)
     exported['ramulator_config'] = '/assets/inputs/memory.json'
     write_json(output / 'experiment.json', exported)
     write_json(output / 'plan.json', dict(points=points, peak_gbps=data['peak_gbps']))
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     files = [p for p in app.rglob('*') if p.is_file()] + [output / n for n in
              ('source-experiment.json', 'experiment.json', 'memory.json', 'plan.json')]
-    if data['fixed']['dma_module']:
-        files.append(output / 'chimaera_dma.ko')
+    files += modules
     write_json(output / 'inputs.json', dict(source_revision=revision,
         source_dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT, text=True)),
         sha256={str(p.relative_to(output)): digest(p) for p in files},

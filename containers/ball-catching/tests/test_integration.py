@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tarfile
+import types
 
 import pytest
 
@@ -302,3 +304,106 @@ def test_dma_export_freezes_driver_and_keeps_kvm_for_cases(tmp_path):
     record = json.loads((inputs / 'inputs.json').read_text())
     assert record['sha256']['chimaera_dma.ko'] == worker.digest(driver)
     assert json.loads((inputs / 'runner.json').read_text())['devices'] == ['/dev/kvm']
+
+
+@pytest.mark.parametrize('include_dma', [False, True])
+def test_m5ops_export_survives_relocation_and_removal_of_original_modules(tmp_path, include_dma):
+    disk, kernel, driver = [tmp_path / name for name in ('disk.img', 'kernel', 'notification.ko')]
+    for path in (disk, kernel, driver):
+        path.write_bytes(path.name.encode())
+    source = ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+    data = json.loads(source.read_text())
+    data['ramulator_config'] = str((source.parent / data['ramulator_config']).resolve())
+    data['fixed'].update(transport_backend='m5ops', middleware_transport='fastdds', m5_module=driver.name)
+    modules = {'m5_module': (driver, 'chimaera_m5.ko')}
+    if include_dma:
+        dma = tmp_path / 'dma.ko'
+        dma.write_bytes(b'optional DMA driver')
+        data['fixed']['dma_module'] = dma.name
+        modules['dma_module'] = (dma, 'chimaera_dma.ko')
+    config = tmp_path / 'm5ops.json'
+    config.write_text(json.dumps(data))
+    inputs = tmp_path / 'inputs'
+    configure.configure(config, inputs, 'sha256:application', disk, kernel)
+    relocated = inputs.rename(tmp_path / 'relocated-inputs')
+    exported = json.loads((relocated / 'experiment.json').read_text())
+    record = json.loads((relocated / 'inputs.json').read_text())
+    assert exported['fixed']['transport_backend'] == 'm5ops'
+    assert exported['fixed']['middleware_transport'] == 'fastdds'
+    for key, (original, frozen) in modules.items():
+        assert exported['fixed'][key] == '/assets/inputs/' + frozen
+        assert (relocated / frozen).read_bytes() == original.read_bytes()
+        assert record['sha256'][frozen] == worker.digest(original)
+        original.unlink()
+    helper = 'app/ros/ball_catching_ws/scripts/wait_dds_graph.py'
+    assert record['sha256'][helper] == worker.digest(configure.SCRIPTS / 'wait_dds_graph.py')
+    command = worker.common(relocated, tmp_path / 'output')
+    assert command[command.index('--config') + 1] == str(relocated / 'experiment.json')
+    assert json.loads((relocated / 'runner.json').read_text())['devices'] == ['/dev/kvm']
+    (relocated / 'chimaera_m5.ko').write_bytes(b'replaced notification ABI')
+    with pytest.raises(ValueError, match='Frozen input changed: chimaera_m5.ko'):
+        worker.common(relocated, tmp_path / 'output')
+
+
+def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / 'ros/chimaera_ros_ws/src/chimaera_ros_bridge'))
+    from chimaera_ros import dds
+    from chimaera_ros.manifest import load
+    from chimaera_ros.runner import plan
+    import run_memory_suite as suite
+
+    sdk, app = tmp_path / 'sdk', tmp_path / 'application'
+    libraries = ('libchimaera_gem5_clock_addr.so', 'librmw_fastrtps_cpp.so',
+                 'librmw_fastrtps_shared_cpp.so', 'libchimaera_dds_transport.so')
+    for name in [*('lib/' + name for name in libraries), 'lib/chimaera_ros_bridge/guest_bridge']:
+        path = sdk / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(name.encode())
+    binary = app / 'lib/ball_catching_robot/perception'
+    binary.parent.mkdir(parents=True)
+    binary.write_bytes(b'\x7fELFmock robot')
+    packages = types.ModuleType('ament_index_python.packages')
+    packages.get_package_prefix = lambda name: str(app if name == 'ball_catching_robot' else sdk)
+    monkeypatch.setitem(sys.modules, 'ament_index_python', types.ModuleType('ament_index_python'))
+    monkeypatch.setitem(sys.modules, 'ament_index_python.packages', packages)
+    selected_plugins = []
+    def middleware(path):
+        selected_plugins.append(path)
+        return types.SimpleNamespace(chimaera_rmw_transport_abi=lambda: 1)
+    monkeypatch.setattr(dds.ctypes, 'CDLL', middleware)
+    dependencies = ''.join(f'{name} => {sdk / "lib" / name} (0x1)\n' for name in libraries[2:])
+    dependencies += 'libc.so.6 => /lib/libc.so.6 (0x2)\n'
+    def ldd(command, **kwargs):
+        assert command[0] == 'ldd'
+        return subprocess.CompletedProcess(command, 0, stdout=dependencies)
+    monkeypatch.setattr(suite.subprocess, 'run', ldd)
+    source = ROOT / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+    data = suite.load_config(source)
+    driver = tmp_path / 'chimaera_m5.ko'
+    driver.write_bytes(b'kernel-matched notification module')
+    data['fixed'].update(transport_backend='m5ops', middleware_transport='fastdds', m5_module=str(driver))
+    output = tmp_path / 'prepared'
+    output.mkdir()
+    bundle = suite.prepare_bundle(output, data, suite.plan(data))
+    with tarfile.open(bundle) as archive:
+        root = suite.GUEST_ROOT.lstrip('/')
+        for name in libraries:
+            assert archive.extractfile(root + '/lib/' + name).read() == (sdk / 'lib' / name).read_bytes()
+        assert archive.extractfile(root + '/runtime/chimaera_m5.ko').read() == driver.read_bytes()
+        assert archive.extractfile(root + '/runtime/wait_dds_graph.py').read() == (
+            configure.SCRIPTS / 'wait_dds_graph.py').read_bytes()
+        runtime = json.load(archive.extractfile(root + '/runtime-libraries.json'))
+        for name in libraries[1:]:
+            assert runtime[name]['sha256'] == worker.digest(sdk / 'lib' / name)
+        assert root + '/lib/libc.so.6' not in archive.getnames()
+    assert selected_plugins == [str(sdk / 'lib/librmw_fastrtps_cpp.so')]
+    guest = plan(load(output / 'staging-session.json'), 'guest', '/bridge')
+    assert guest['env']['CHIMAERA_DDS_BACKEND'] == 'm5ops'
+    assert guest['env']['CHIMAERA_M5_DEVICE'] == '/dev/chimaera-m5'
+    coordinator = guest['processes'][0]['command']
+    assert coordinator[:3] == ['env', '-u', 'CHIMAERA_DDS_SOCKET']
+    assert 'm5_module:=' + suite.GUEST_ROOT + '/runtime/chimaera_m5.ko' in coordinator
+    assert 'application_ready_file:=/tmp/chimaera-ball-dds-ready' in coordinator
+    assert next(p for p in guest['processes'] if p['name'] == 'dds_readiness')['command'] == [
+        'python3', suite.GUEST_ROOT + '/runtime/wait_dds_graph.py',
+        '--ready-file', '/tmp/chimaera-ball-dds-ready', '--timeout', str(data['fixed']['startup_timeout_s'])]

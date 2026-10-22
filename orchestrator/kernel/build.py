@@ -17,7 +17,10 @@ def sha256(path):
     return result.hexdigest()
 
 
-def build(jobs):
+def build(jobs, backend='dma'):
+    if backend not in ('dma', 'm5ops'):
+        raise ValueError('Unsupported kernel/module backend: ' + backend)
+    driver_name = 'chimaera_m5' if backend == 'm5ops' else 'chimaera_dma'
     recipe, output = Path('/recipe'), Path('/output')
     policy = json.loads((recipe / 'policy.json').read_text())
     archive = Path('/source/linux.tar.xz')
@@ -33,7 +36,7 @@ def build(jobs):
         tree = work / ('linux-' + policy['version'])
         module = work / 'driver'
         module.mkdir()
-        for name in ('Makefile', 'chimaera_dma.c'):
+        for name in ('Makefile', driver_name + '.c'):
             shutil.copyfile(Path('/driver') / name, module / name)
         make = ['make', '-C', str(tree), 'ARCH=x86_64']
         subprocess.run([*make, 'x86_64_defconfig'], check=True)
@@ -48,19 +51,24 @@ def build(jobs):
         # A full build supplies Module.symvers; modules_prepare alone does not.
         subprocess.run([*make, '-j' + str(jobs), 'vmlinux', 'modules'], check=True)
         subprocess.run([*make, '-j' + str(jobs), 'M=' + str(module),
-                        'GEM5_INCLUDE=/gem5/include', 'modules'], check=True)
+                        'GEM5_INCLUDE=/gem5/include', 'obj-m=' + driver_name + '.o', 'modules'], check=True)
         release = subprocess.check_output([*make, '-s', 'kernelrelease'], text=True).strip()
-        driver = module / 'chimaera_dma.ko'
+        driver = module / (driver_name + '.ko')
         vermagic = subprocess.check_output(['modinfo', '-F', 'vermagic', str(driver)], text=True).strip()
         if vermagic.split()[0] != release:
-            raise ValueError('Built DMA module does not match the guest kernel release')
-        for name, source in [('kernel', tree / 'vmlinux'), ('chimaera_dma.ko', driver),
+            raise ValueError('Built transport module does not match the guest kernel release')
+        if backend == 'm5ops':
+            header = Path('/gem5/include/gem5/chimaera_m5.h').read_text()
+            if '#define CHM5_ABI_VERSION 1\n' not in header:
+                raise ValueError('m5ops preparation requires module ABI 1')
+        for name, source in [('kernel', tree / 'vmlinux'), (driver_name + '.ko', driver),
                              ('kernel.config', tree / '.config'), ('Module.symvers', tree / 'Module.symvers')]:
             shutil.copyfile(source, output / name)
         (output / 'build.json').write_text(json.dumps(dict(kernel_release=release, vermagic=vermagic,
+            backend=backend, module=driver_name + '.ko', abi_version=1,
             source=policy, compiler=subprocess.check_output(['gcc', '--version'], text=True).splitlines()[0]),
             indent=2) + '\n')
 
 
 if __name__ == '__main__':
-    build(int(sys.argv[1]))
+    build(int(sys.argv[1]), sys.argv[2] if len(sys.argv) > 2 else 'dma')

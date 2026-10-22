@@ -54,6 +54,8 @@
     "ros-humble-rcl-interfaces",
     "ros-humble-rclcpp",
     "ros-humble-rclpy",
+    "ros-humble-rmw-fastrtps-cpp",
+    "ros-humble-fastrtps",
     "ros-humble-ros-gz-bridge",
     "ros-humble-ros-gz-sim",
     "ros-humble-ros2launch",

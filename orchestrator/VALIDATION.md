@@ -396,3 +396,40 @@ have not been deployed to the controller, supervisor or production SDK images.
 Deployment must include the simulator and both bridges, followed by newly
 generated readiness checkpoints. Earlier readiness checkpoints must be regenerated
 with the coherent writeback fix.
+
+
+## Direct DDS + m5ops preparation and two-loft default — 2026-10-23
+
+Branch: `feat/chimaera-dds-m5ops`. New experiments use
+`experiments/dds_m5ops_two_lofts.json`: the retained 3 and 5 m/s launch
+geometries, zero pressure, four 3 GHz Timing cores after fresh KVM boot,
+480×360 stereo at 30 Hz and 1.5 seconds of scoring after launch.
+The editor accepts `m5ops`, `fastdds` and `m5_module`.
+
+Preparation now builds and transfers a backend-specific kernel/module pair,
+validates ABI 1 and both m5ops lane mappings, freezes the notification module
+with the guest bundle, and skips readiness checkpoints. The shared SDK recipe
+builds the pinned custom RMW with the DDS transport; its source hash participates
+in source/build identities. The smoke config runs under gem5's `__m5_main__`
+namespace as well as Python's `__main__`. Legacy DMA/m5 tests remain covered.
+
+Validation performed without starting robot trials:
+
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q orchestrator/tests`: **251 passed**.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest -q containers/tests containers/ball-catching/tests`: **35 passed**.
+- `npm run typecheck` in `orchestrator/web`: passed.
+- Supervisor image build: passed. A disposable controller using the new image
+  served `/defaults` and accepted `/validate`, yielding exactly the two intended
+  zero-pressure cases. Its private temporary database contained no experiments.
+- Rebuilt and redeployed the idle local `chimaera-supervisor`, preserving its
+  worker settings and persistent database; post-update RPC reported no tasks.
+- `git diff --check`: passed.
+
+Logs and local deployment/API records are retained under
+`.chimaera-m5/orchestrator-integration/`. These checks do not include a complete
+SDK/application image rebuild, a new kernel build/guest boot, IRQ admission
+validation, or the two actual Timing robot trials. The next new experiment's
+preparation performs the full builds and driver boot gate. The controller and
+dashboard run on a separate deployment; rebuild them and redeploy other selected
+workers before queueing a new experiment. Existing frozen experiments retain
+their old implementation.

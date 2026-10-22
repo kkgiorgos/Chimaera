@@ -38,7 +38,8 @@ def digest(path):
 def source_identity(root):
     git = ['git', '-c', 'safe.directory=' + str(root), '-C', root]
     revision = run([*git, 'rev-parse', 'HEAD'], text=True).strip()
-    paths = ['gem5', 'gem5-transport', 'ros', 'containers', 'orchestrator/backend', 'orchestrator/kernel']
+    paths = ['gem5', 'gem5-transport', 'ros', 'containers', 'middleware/prepare_rmw.py',
+             'orchestrator/backend', 'orchestrator/kernel']
     diff = run([*git, 'diff', '--binary', 'HEAD', '--', *paths])
     extra = run([*git, 'ls-files', '--others', '--exclude-standard', '-z', '--', *paths])
     result = hashlib.sha256(revision.encode() + diff)
@@ -83,7 +84,7 @@ def content_identity(root, paths):
 def build_identities(root):
     sdk = content_identity(root, ['containers/Dockerfile', 'containers/Dockerfile.dockerignore',
         'containers/build.py', 'containers/profiles', 'containers/scripts', 'gem5',
-        'gem5-transport', 'ros/chimaera_ros_ws/src'])
+        'gem5-transport', 'ros/chimaera_ros_ws/src', 'middleware/prepare_rmw.py'])
     app = content_identity(root, ['containers/ball-catching/Dockerfile',
         'orchestrator/backend/images.py',
         'containers/ball-catching/Dockerfile.dockerignore', 'ros/ball_catching_ws/src',

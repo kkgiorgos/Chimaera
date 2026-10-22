@@ -82,9 +82,8 @@ def serve(controller, port=8080):
                     machine = controller.machine(parts[1])
                     self.respond(controller.remote.call(machine, 'storage', keep_paths=[machine.get('disk'), machine.get('kernel')]))
                 elif parts == ['defaults']:
-                    source = controller.root / 'ros/ball_catching_ws/experiments/memory_contention_patterns.json'
+                    source = controller.root / 'orchestrator/experiments/dds_m5ops_two_lofts.json'
                     config = json.loads(source.read_text())
-                    config['ramulator_config'] = str((source.parent / config['ramulator_config']).resolve().relative_to(controller.root))
                     self.respond(dict(config=config))
                 elif parts[0] == 'logs' and len(parts) in (3, 4):
                     machine = controller.machine(parts[1])

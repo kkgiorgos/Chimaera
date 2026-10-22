@@ -36,17 +36,18 @@ def validate_config(root, config):
     fixed = config.get('fixed', {})
     if not isinstance(fixed, dict):
         raise ValueError('fixed must be an object')
-    module = fixed.get('dma_module', '')
-    if not isinstance(module, str):
-        raise ValueError('dma_module must be a path string')
-    if module:
-        module_path = (root / module).resolve()
-        if not module_path.is_relative_to(root.resolve()) or not module_path.is_file():
-            raise ValueError('dma_module must name a file inside the repository')
-        config['fixed']['dma_module'] = str(module_path.relative_to(root.resolve()))
     resolved = dict(config, ramulator_config=str(path))
-    if module:
-        resolved['fixed'] = dict(config['fixed'], dma_module=str(module_path))
+    resolved['fixed'] = dict(fixed)
+    for field in ('dma_module', 'm5_module'):
+        module = fixed.get(field, '')
+        if not isinstance(module, str):
+            raise ValueError(field + ' must be a path string')
+        if module:
+            module_path = (root / module).resolve()
+            if not module_path.is_relative_to(root.resolve()) or not module_path.is_file():
+                raise ValueError(field + ' must name a file inside the repository')
+            config['fixed'][field] = str(module_path.relative_to(root.resolve()))
+            resolved['fixed'][field] = str(module_path)
     sys.path.insert(0, str(root / 'ros/ball_catching_ws/scripts'))
     from run_memory_suite import load_config, plan
     with tempfile.TemporaryDirectory() as directory:
@@ -824,7 +825,7 @@ class Controller:
             self.remote.copy_readiness(source, destination, experiment['id'],
                                       provenance['checkpoint_index_sha256'], cancel=cancelled)
         elif provenance.get('kernel_bundle_sha256'):
-            progress('Guest kernel and DMA module', count, count)(dict(phase='Streaming verified kernel and DMA module',
+            progress('Guest kernel and transport module', count, count)(dict(phase='Streaming verified kernel and transport module',
                 bytes_sent=0, bytes_per_second=0, elapsed_seconds=0, eta_seconds=None, updated=time.time()))
             self.remote.copy_readiness(source, destination, experiment['id'],
                                       provenance['kernel_bundle_sha256'], cancel=cancelled)

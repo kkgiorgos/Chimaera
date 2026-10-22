@@ -35,10 +35,15 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     && /opt/chimaera/gem5/build/X86/gem5.opt --build-info
 
 FROM ${GEM5_STAGE} AS bridge-build
+ARG BUILD_JOBS=3
+COPY middleware/prepare_rmw.py /opt/chimaera/scripts/prepare-rmw.py
+RUN python3 /opt/chimaera/scripts/prepare-rmw.py --output /src/chimaera-rmw
 COPY gem5-transport/ /src/gem5-transport/
 COPY ros/chimaera_ros_ws/src/ /src/ros/chimaera_ros_ws/src/
 RUN source "/opt/ros/${ROS_DISTRO}/setup.bash" \
-    && colcon --log-base /tmp/bridge-log build --base-paths /src/ros/chimaera_ros_ws/src \
+    && CMAKE_BUILD_PARALLEL_LEVEL=${BUILD_JOBS} colcon --log-base /tmp/bridge-log build \
+       --base-paths /src/ros/chimaera_ros_ws/src /src/chimaera-rmw \
+       --packages-select chimaera_dds_transport rmw_fastrtps_shared_cpp rmw_fastrtps_cpp chimaera_ros_bridge \
        --build-base /tmp/bridge-build --merge-install --install-base /opt/chimaera/ros \
        --executor sequential --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
        -DBUILD_GAZEBO_BRIDGE=ON -DGEM5_ROOT=/src/gem5 \
