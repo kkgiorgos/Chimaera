@@ -81,10 +81,12 @@ result = dict(schema_version=1, scope='User-approved short TimingSimpleCPU trans
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT/'timing-short-results.json').write_text(json.dumps(result,indent=2)+'\n')
 shutil.copyfile(SOURCE/'comparison.csv',OUT/'timing-short-metrics.csv')
+metrics_csv=OUT/'timing-short-metrics.csv'
+metrics_csv.write_bytes(metrics_csv.read_bytes().replace(b'\r\n',b'\n'))
 with (OUT/'timing-short-comparisons.csv').open('w',newline='') as handle:
     comparisons=report['comparisons']
     fields=list(dict.fromkeys(k for row in comparisons for k in row))
-    writer=csv.DictWriter(handle,fieldnames=fields)
+    writer=csv.DictWriter(handle,fieldnames=fields,lineterminator='\n')
     writer.writeheader()
     writer.writerows(comparisons)
 
@@ -164,7 +166,7 @@ lines += ['',
     'For the new backend, the measured H→G body arrived at 319.00 ms and the G→H '
     'body at 282.00 ms, both during drain. The receipt-window body rates above '
     'therefore describe the earlier warmup payloads, not those measured-cohort '
-    'bodies. Both measured bodies were delivered. ', '',
+    'bodies. Both measured bodies were delivered.', '',
     'A receipt window can include a delayed warmup payload as well as the measured '
     'source-cohort payload. A larger receipt-window rate in this transient test can '
     'therefore reflect warmup spillover rather than a faster implementation. Read '

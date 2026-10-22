@@ -46,7 +46,7 @@ Each bulk case adds one scheduled8MiB sample per direction inside the measured s
 | New DDS/m5ops | h2g | 1/1 | 1 | 41.94 | 119.00 / 119.00 |
 | New DDS/m5ops | g2h | 1/1 | 1 | 41.94 | 81.73 / 81.73 |
 
-For the new backend, the measured H→G body arrived at 319.00 ms and the G→H body at 282.00 ms, both during drain. The receipt-window body rates above therefore describe the earlier warmup payloads, not those measured-cohort bodies. Both measured bodies were delivered. 
+For the new backend, the measured H→G body arrived at 319.00 ms and the G→H body at 282.00 ms, both during drain. The receipt-window body rates above therefore describe the earlier warmup payloads, not those measured-cohort bodies. Both measured bodies were delivered.
 
 A receipt window can include a delayed warmup payload as well as the measured source-cohort payload. A larger receipt-window rate in this transient test can therefore reflect warmup spillover rather than a faster implementation. Read the receipt count, cohort counts and latency together; do not rank sustained bulk bandwidth from this window.
 
