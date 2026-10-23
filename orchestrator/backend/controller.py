@@ -201,6 +201,10 @@ class Controller:
             if not body.get('id'):
                 body['id'] = uuid.uuid4().hex
             body = validate_machine(body)
+        elif kind == 'remove_machine':
+            from removal import validate_cleanup
+            identifier(body.get('id'))
+            body = dict(id=body['id'], cleanup=validate_cleanup(body.get('cleanup', {})))
         elif kind == 'experiment':
             body['config'], body['points'] = validate_config(self.root, body['config'])
             if not isinstance(body.get('name'), str) or not body['name'].strip():
@@ -224,6 +228,8 @@ class Controller:
         kind, body = command['kind'], command['body']
         if kind == 'machine':
             previous = self.store.get('machines', body['id'], {})
+            if previous.get('removing'):
+                raise ValueError('Wait for machine removal before editing it')
             if previous.get('cleaning') and any(previous[key] != body[key] for key in ('target', 'port', 'repo', 'disk', 'kernel')):
                 raise ValueError('Wait for asset cleanup before changing machine connection or asset paths')
             if previous and any(e['status'] in ACTIVE and body['id'] in e['machines'] for e in self.store.all('experiments')):
@@ -231,16 +237,36 @@ class Controller:
                 if any(previous[key] != body[key] for key in ('target', 'port', 'repo', 'disk', 'kernel')):
                     raise ValueError('Stop the active experiment before changing machine connection or asset paths')
             self.store.put('machines', body['id'], dict(previous, **body))
+        elif kind == 'remove_machine':
+            from removal import validate_cleanup
+            machine = self.machine(body['id'])
+            cleanup = validate_cleanup(body.get('cleanup', {}))
+            if machine.get('removing') or machine.get('deploying') or machine.get('cleaning'):
+                raise ValueError('Wait for the current machine operation to finish')
+            for experiment in self.store.all('experiments'):
+                involved = set(experiment['machines']) | set(experiment.get('preparations', {})) | {
+                    a['machine'] for c in experiment['cases'] for a in c['attempts']}
+                if machine['id'] in involved and (experiment['status'] not in FINAL or not experiment.get('remote_cleaned')):
+                    raise ValueError('Finalize experiments and finish result collection and remote cleanup before removing this machine')
+            # Drain polls before removal; all other background work must finish.
+            if any(kind != 'poll' for kind, _, _ in self.jobs.values()):
+                raise ValueError('Wait for background operations to finish before removing a machine')
+            machine.update(removing=True, removal_cleanup=cleanup, removal_error=None)
+            self.store.put('machines', machine['id'], machine)
         elif kind == 'settings':
             self.store.put('settings', 'main', dict(self.store.get('settings', 'main'), **body))
         elif kind == 'deploy':
             machine = self.machine(body['id'])
+            if machine.get('removing'):
+                raise ValueError('Machine removal is in progress')
             machine['deploying'] = True
             self.store.put('machines', machine['id'], machine)
             self.submit('deploy-' + machine['id'], 'deploy', machine['id'], lambda: self.remote.deploy(machine))
             event(self.store, f"Deploying supervisor on {machine['name']}")
         elif kind == 'clean_assets':
             machine = self.machine(body['id'])
+            if machine.get('removing'):
+                raise ValueError('Machine removal is in progress')
             if any(e['status'] in ACTIVE and machine['id'] in e['machines'] for e in self.store.all('experiments')):
                 raise ValueError('Stop the experiment before cleaning unused machine assets')
             if machine.get('cleaning'):
@@ -257,6 +283,8 @@ class Controller:
             if any(e['status'] not in FINAL or not e.get('remote_cleaned')
                    for e in self.store.all('experiments')):
                 raise ValueError('Finish or finalize the existing experiment and wait for storage cleanup before creating another')
+            if any(self.machine(m).get('removing') for m in body['machines']):
+                raise ValueError('Choose machines that are not being removed')
             experiment = dict(id=key, name=body['name'], config=body['config'], machines=body['machines'],
                 created=time.time(), status='queued', preparations={}, calibration=None, generation=0,
                 calibration_machine=body.get('calibration_machine', body['machines'][0]),
@@ -420,6 +448,11 @@ class Controller:
             except Exception as error:
                 self.failed(kind, context, str(error))
         for machine in self.store.all('machines'):
+            if machine.get('removing'):
+                if 'poll-' + machine['id'] not in self.jobs:
+                    self.submit('remove-' + machine['id'], 'remove_machine', machine['id'],
+                        lambda m=machine: self.remote.remove(m, m['removal_cleanup']) if any(m['removal_cleanup'].values()) else True)
+                continue
             if machine.get('cleaning'):
                 self.submit('clean-assets-' + machine['id'], 'clean_assets', machine['id'],
                     lambda m=machine: self.remote.call(m, 'clean_assets',
@@ -503,6 +536,11 @@ class Controller:
                 if not experiment.get('results_deleted'):
                     atomic_json(self.data / 'results' / experiment['id'] / 'run.json', experiment)
             self.save(experiment)
+        elif kind == 'remove_machine':
+            machine = self.machine(context)
+            self.store.delete('machines', context)
+            self.last_poll.pop(context, None)
+            event(self.store, f"Removed {machine['name']} from the fleet")
         elif kind == 'clean_assets':
             machine = self.machine(context)
             machine.update(cleaning=False, cleanup_result=result, cleanup_error=None)
@@ -584,6 +622,12 @@ class Controller:
         # start/prepare/stop are reconciled from the next authoritative snapshot.
 
     def failed(self, kind, context, error):
+        if kind == 'remove_machine':
+            machine = self.machine(context)
+            machine.update(removing=False, removal_error=error)
+            self.store.put('machines', context, machine)
+            event(self.store, f"{machine['name']}: removal failed: {error}. Machine remains registered; retry removal.", 'error')
+            return
         if kind == 'release':
             experiment = self.experiment(context[0])
             experiment.setdefault('cleanup_errors', {})[context[1]] = error

@@ -86,15 +86,16 @@ def serve(controller, port=8080):
                     config = json.loads(source.read_text())
                     self.respond(dict(config=config))
                 elif parts[0] == 'logs' and len(parts) in (3, 4):
-                    machine = controller.machine(parts[1])
+                    machine_id = identifier(parts[1])
                     task = identifier(parts[2])
                     stream = parts[3] if len(parts) == 4 else 'worker'
                     local = next((controller.data / 'results' / e['id'] / 'attempts' / task
                         for e in controller.store.all('experiments')
-                        if any(a['id'] == task and a['machine'] == machine['id'] and a.get('collected') for c in e['cases'] for a in c['attempts'])), None)
+                        if any(a['id'] == task and a['machine'] == machine_id and a.get('collected') for c in e['cases'] for a in c['attempts'])), None)
                     if local and local.is_dir():
                         log = tail_file(local / 'worker.log') if stream == 'worker' else case_log(local, stream)
                     else:
+                        machine = controller.machine(machine_id)
                         log = controller.remote.call(machine, 'logs', task=task, stream=stream)
                     self.respond(dict(log=log))
                 elif parts[0] in ('download', 'report') and len(parts) == 2:

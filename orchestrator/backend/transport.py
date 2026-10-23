@@ -12,6 +12,16 @@ from common import run
 
 
 class SSH:
+    def remove(self, machine, cleanup):
+        from removal import validate_cleanup
+        validate_cleanup(cleanup)
+        helper = Path(__file__).with_name('removal.py').read_text()
+        helper += '\nimport sys\nrequest = json.load(sys.stdin)\nremove(**request)\n'
+        command = shlex.join(['python3', '-c', helper])
+        run(self.base(machine) + [command],
+            input=json.dumps(dict(machine=machine, cleanup=cleanup)).encode(), timeout=1200)
+        return True
+
     def base(self, machine):
         return ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
                 '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=5',

@@ -32,3 +32,20 @@ def test_defaults_endpoint_returns_two_saved_dds_m5ops_lofts():
         dict(name='loft-3', launch_position=[1.8, .04, 3], launch_direction=[-1, 0, 2], launch_speed=3),
         dict(name='loft-5', launch_position=[4.36, .04, 3], launch_direction=[-1, 0, 1], launch_speed=5),
     ]
+
+
+def test_collected_logs_remain_accessible_after_machine_removal(tmp_path):
+    attempt = tmp_path / 'results/e1/attempts/a1'
+    attempt.mkdir(parents=True)
+    (attempt / 'worker.log').write_text('Saved worker output')
+    store = Mock()
+    store.all.return_value = [dict(id='e1', cases=[dict(attempts=[dict(id='a1', machine='removed', collected=True)])])]
+    controller = SimpleNamespace(data=tmp_path, store=store, machine=Mock(side_effect=ValueError('Unknown machine')))
+    with patch('server.ThreadingHTTPServer') as http:
+        serve(controller)
+    handler = object.__new__(http.call_args.args[1])
+    handler.path = '/logs/removed/a1/worker'
+    handler.respond = Mock()
+    handler.do_GET()
+    handler.respond.assert_called_once_with(dict(log='Saved worker output'))
+    controller.machine.assert_not_called()

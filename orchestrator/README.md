@@ -621,3 +621,26 @@ then removes its test containers and images:
 ```bash
 python3 orchestrator/tests/docker_images.py
 ```
+
+### Remove a machine
+
+Choose **Remove machine** on its machine card. With no cleanup selected, this
+only unregisters the machine and requires no SSH access. The supervisor and all
+remote resources remain in place.
+
+Optional cleanup removes the supervisor container and lets you select remote
+experiment files (including stopped experiment containers), Chimaera Docker
+images, and generated guest disks and kernel/module pairs. Selecting any resource
+cleanup also selects supervisor removal. Type the machine name to confirm.
+Collected results and experiment history stored by the controller remain available,
+including collected logs for machines that have been removed.
+
+Finalize experiments and wait for collection and remote release before removing
+an involved machine. Cleanup uses SSH and host Python 3, so it works even without
+a running supervisor. Running Chimaera workers block remote cleanup. Configured
+guest assets, mounted files, the repository, and unrelated Docker images are kept;
+Docker images are never force-removed and no host-wide Docker prune is used.
+Small supervisor release markers remain to prevent old work from restarting.
+If cleanup fails, the machine stays registered with an error. Completed cleanup
+steps cannot be undone; retry removal after resolving the error, or unregister
+without further cleanup. Removal resumes after a controller restart.
