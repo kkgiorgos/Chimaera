@@ -320,7 +320,9 @@ The case table shows simulation speed as a real-time
 multiplier (simulated seconds per wall-clock second), averaged through the latest
 timing sample. Before timing data arrives it shows **Awaiting sample**. Stale
 active samples are labeled **last sample**, and finished cases retain their last
-recorded speed.
+recorded speed. The adjacent **Simulated time** column shows simulated seconds
+reached at that sample to four decimal places, with the same pending and stale
+sample labels.
 
 Preparation also shows its current calibration, bundle, or checkpoint stage and
 total elapsed wall time. During readiness it reports the current checkpoint out of
