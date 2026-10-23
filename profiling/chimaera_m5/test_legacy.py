@@ -300,7 +300,7 @@ class LegacyIdentityTests(unittest.TestCase):
         production = Mock(return_value='production validator')
         module = SimpleNamespace(parameters=lambda *args: None, routes=lambda *args: dict(topics=[]),
                                  traffic=lambda config: [], dds_profile=lambda config: None,
-                                 validate_bundle=production)
+                                 validate_bundle=production, guest_session=lambda *args: None)
         active = install(module)
         with patch('legacy.validate', return_value='identity proof') as validate:
             for name in legacy.LEGACY_IMPLEMENTATIONS:

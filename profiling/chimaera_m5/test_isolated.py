@@ -43,6 +43,42 @@ def completed_case(args, command, marker=True):
 
 
 class IsolationTests(unittest.TestCase):
+    def test_total_budget_stops_before_another_case_and_marks_it_unstarted(self):
+        with fixture() as args:
+            args.total_timeout = 10
+            elapsed = [0.]
+            calls = []
+            def execute(command, **kwargs):
+                calls.append(command)
+                self.assertEqual(kwargs['timeout'], 1)
+                result = completed_case(args, command)
+                elapsed[0] = 11.
+                return result
+            with patch.object(run_isolated.time, 'monotonic', side_effect=lambda: elapsed[0]), \
+                    patch.object(run_isolated.subprocess, 'run', side_effect=execute):
+                self.assertEqual(run_isolated.run_cases(args), 1)
+            self.assertEqual(len(calls), 1)
+            result = read_json(next(args.output.parent.glob('suite-operator/*/result.json')))
+            self.assertTrue(result['budget_exhausted'])
+            self.assertEqual(result['unstarted_cases'], ['two'])
+
+    def test_total_budget_clamps_case_timeout_and_cleans_up_owned_container(self):
+        with fixture() as args:
+            args.total_timeout, args.operator_timeout = 2., 100.
+            elapsed = [0.]
+            def execute(command, **kwargs):
+                self.assertEqual(kwargs['timeout'], 2.)
+                elapsed[0] = 2.
+                raise subprocess.TimeoutExpired(command, 2.)
+            with patch.object(run_isolated.time, 'monotonic', side_effect=lambda: elapsed[0]), \
+                    patch.object(run_isolated.subprocess, 'run', side_effect=execute), \
+                    patch.object(run_isolated, 'stop_owned') as stop:
+                self.assertEqual(run_isolated.run_cases(args), 1)
+                stop.assert_called_once()
+            result = read_json(next(args.output.parent.glob('suite-operator/*/result.json')))
+            self.assertEqual(result['attempts'][0]['status'], 'budget_exhausted')
+            self.assertEqual(result['unstarted_cases'], ['two'])
+
     def test_resume_keeps_operator_failure_even_after_case_wrote_complete(self):
         with fixture() as args, patch.object(run_isolated.subprocess, 'run') as docker:
             args.cases = ['one']

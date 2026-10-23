@@ -26,6 +26,8 @@ BALL = dict(camera_width=480, camera_height=360, camera_hz=30., joint_hz=250.,
             control_hz=250., image_age_periods=2.)
 PARAMETERS = dict(cameras_enabled=True, bulk_bytes=0, bulk_hz=1., bulk_burst=1,
                   bulk_direction='both')
+DIAGNOSTIC_PARAMETERS = dict(isolate_bulk_execution=False, trace_publish=False,
+                             trace_creation=False)
 COMMON_FILES = ('lib/chimaera_ros_bridge/latency_endpoint',
                 'lib/libchimaera_latency_clock.so', 'lib/libchimaera_gem5_clock.so',
                 'lib/libchimaera_gem5_clock_addr.so', 'lib/librmw_fastrtps_cpp.so',
@@ -35,6 +37,7 @@ IMPLEMENTATION_FILES = ('lib/chimaera_ros_bridge/latency_driver',
 MATCH_FIELDS = ('workload', 'ball_catching', 'duration', 'warmup', 'drain',
                 'physics_step_ns', 'interval_us', 'poll_us', 'reliability', 'depth',
                 'delivery_policy', 'verify_payload', 'benchmark_parameters',
+                'middleware_copy_mode',
                 'dds_shm_bytes', 'dds_tuning', 'dds_max_message_bytes',
                 'cpu_type', *GEOMETRY)
 
@@ -96,9 +99,17 @@ def validate_config(config):
         raise ValueError('Unknown delivery policy')
     if type(config['verify_payload']) is not bool:
         raise ValueError('Explicit boolean payload verification is required')
+    if config.get('middleware_copy_mode') not in (None, 'guest', 'functional'):
+        raise ValueError('Unknown experimental middleware copy mode')
+    if config.get('middleware_copy_mode') and config['mode'] != 'chimaera':
+        raise ValueError('Experimental middleware copies require a simulated guest')
     p = config['benchmark_parameters']
-    if set(p) != set(PARAMETERS) or type(p['cameras_enabled']) is not bool:
+    if (not set(PARAMETERS) <= set(p) <= set(PARAMETERS) | set(DIAGNOSTIC_PARAMETERS)
+            or type(p['cameras_enabled']) is not bool):
         raise ValueError('Incomplete benchmark endpoint parameters')
+    for name in DIAGNOSTIC_PARAMETERS:
+        if name in p and type(p[name]) is not bool:
+            raise ValueError(name + ' must be boolean')
     number(p['bulk_bytes'], 'bulk_bytes', 0, True)
     number(p['bulk_hz'], 'bulk_hz', 1e-9)
     number(p['bulk_burst'], 'bulk_burst', 1, True)

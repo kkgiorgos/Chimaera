@@ -23,7 +23,8 @@ def read_events(path, config):
         reader = csv.DictReader(handle)
         expected = {'side', 'event', 'sequence', 'scheduled_ns', 'publish_ns', 'callback_ns',
                     'physics_ns', 'payload_bytes', 'stream'}
-        if set(reader.fieldnames or []) != expected:
+        fields = set(reader.fieldnames or [])
+        if not expected <= fields <= expected | {'publish_return_ns', 'creation_ns'}:
             raise ValueError('Unexpected event CSV schema')
         for raw in reader:
             if None in raw or any(value is None for value in raw.values()):
@@ -46,6 +47,12 @@ def read_events(path, config):
                     raise ValueError('Duplicate source record')
                 if not event['scheduled_ns'] <= event['publish_ns'] < UNSET:
                     raise ValueError('Early or unset publication')
+                returned = event.get('publish_return_ns', UNSET)
+                if returned != UNSET and returned < event['publish_ns']:
+                    raise ValueError('Publish return precedes publication')
+                creation = event.get('creation_ns', UNSET)
+                if creation != UNSET and not event['scheduled_ns'] <= creation <= event['publish_ns']:
+                    raise ValueError('Creation timestamp outside release/publication bounds')
                 sends[key] = event
             events.append(event)
     cutoff = round((config['warmup'] + config['duration'] + config['drain']) * 1e9)
@@ -58,6 +65,11 @@ def read_events(path, config):
         if event['publish_ns'] not in (UNSET, original['publish_ns']):
             raise ValueError('Receipt publication timestamp differs from source')
         event['publish_ns'] = original['publish_ns']
+        creation = original.get('creation_ns', UNSET)
+        if event.get('creation_ns', UNSET) not in (UNSET, creation):
+            raise ValueError('Receipt creation timestamp differs from source')
+        if creation != UNSET:
+            event['creation_ns'] = creation
         if not event['publish_ns'] <= event['callback_ns'] <= cutoff:
             raise ValueError('Receipt outside publication/drain time bounds')
     return events
@@ -157,10 +169,24 @@ def analyze(events, config, rules):
         burst = config['benchmark_parameters']['bulk_burst'] if name.startswith('bulk_') else 1
         expected = expected_releases(start, stop, rate, burst)
         lag = [e['publish_ns'] - e['scheduled_ns'] for e in selected.values()]
+        publish_calls = [e['publish_return_ns'] - e['publish_ns'] for e in selected.values()
+                         if e.get('publish_return_ns', UNSET) != UNSET]
         latencies = [e['callback_ns'] - e['publish_ns'] for e in delivered.values()]
+        creation_latencies = [e['callback_ns'] - selected[seq]['creation_ns']
+                              for seq, e in delivered.items()
+                              if selected[seq].get('creation_ns', UNSET) != UNSET]
+        preparation = [e['publish_ns'] - e['creation_ns'] for e in selected.values()
+                       if e.get('creation_ns', UNSET) != UNSET]
         ages = [e['callback_ns'] - e['scheduled_ns'] for e in delivered.values()]
         deadline_ms = rules['image_age_deadline_ms'] if 'image' in name else rules['control_age_deadline_ms']
         observed = observation(sends, receipts, body, begin, end, bin_ns)
+        received_in_window = [e for e in receipts.values() if begin <= e['callback_ns'] < end]
+        source_window_receipts = sum(start <= e['publish_ns'] < stop for e in received_in_window)
+        observed['receipt_publication_cohorts'] = dict(
+            before_source_window=len(received_in_window) - source_window_receipts,
+            source_window=source_window_receipts)
+        observed['same_source_window_body_MB_per_observation_second'] = (
+            source_window_receipts * body / observed['seconds'] / 1e6 if body is not None else None)
         missing = sorted(set(selected) - set(delivered))
         source_error = abs(len(scheduled) - expected) / expected if expected else None
         bounded = (len(observed['bins']) >= 4 and source_error is not None and
@@ -180,6 +206,10 @@ def analyze(events, config, rules):
             delivered_body_MB_per_source_second=(len(delivered) * body / config['duration'] / 1e6
                                                  if body is not None else None),
             latency=statistics(latencies), age=statistics(ages), release_lag=statistics(lag),
+            publish_call=statistics(publish_calls),
+            creation_to_callback=statistics(creation_latencies), preparation=statistics(preparation),
+            creation_boundary='Logical sample preparation start; preallocated payloads exclude '
+                              'initial allocation and physical sensor capture. Unrecorded in historical runs.',
             age_deadline_ms=deadline_ms,
             received_age_deadline_misses=sum(age > deadline_ms * 1e6 for age in ages),
             missing_age_deadline_misses=sum(stop + config['drain'] * 1e9 - selected[seq]['scheduled_ns']

@@ -12,6 +12,7 @@ def install(latency):
     original_traffic = latency.traffic
     original_profile = latency.dds_profile
     original_validate_bundle = latency.validate_bundle
+    original_guest_session = latency.guest_session
     from pathlib import Path
     import sys
     rewrite = Path(__file__).resolve().parents[1] / 'chimaera_rewrite'
@@ -24,6 +25,20 @@ def install(latency):
         if path.name in ('host.yaml', 'guest.yaml'):
             values = dict(values, **active.get('benchmark_parameters', PARAMETERS))
         return original_parameters(path, values)
+
+    def guest_session(cpu_type, config):
+        result = original_guest_session(cpu_type, config)
+        mode = config.get('middleware_copy_mode')
+        if mode:
+            # Identical preload in both comparison arms; no host process or
+            # guest coordinator inherits this changed memory-cost boundary.
+            for process in result['guest']['processes']:
+                if process['name'] == 'latency_endpoint':
+                    process['command'] = [
+                        'env', 'LD_PRELOAD=/opt/chimaera/latency/app/lib/libchimaera_functional_copies.so',
+                        'CHIMAERA_FUNCTIONAL_MIDDLEWARE_COPIES=' + ('1' if mode == 'functional' else '0'),
+                        *process['command']]
+        return result
 
     def traffic(config):
         p = config.get('benchmark_parameters', PARAMETERS)
@@ -79,4 +94,5 @@ def install(latency):
 
     latency.parameters, latency.routes, latency.traffic, latency.dds_profile = parameters, routes, traffic, profile
     latency.validate_bundle = validate_bundle
+    latency.guest_session = guest_session
     return active

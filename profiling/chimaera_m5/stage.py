@@ -25,6 +25,8 @@ def stage(runtime, bundle, common_runtime, endpoint, output, legacy_original=Fal
     output.mkdir(parents=True, exist_ok=False)
     target = output / 'runtime'
     shutil.copytree(runtime, target, symlinks=False)
+    for directory in (target, *(path for path in target.rglob('*') if path.is_dir())):
+        directory.chmod(directory.stat().st_mode | 0o200)
     replacements = {}
     for relative in COMMON_FILES:
         source = endpoint if relative == COMMON_FILES[0] else common_runtime / relative
@@ -32,6 +34,10 @@ def stage(runtime, bundle, common_runtime, endpoint, output, legacy_original=Fal
             raise ValueError('Missing common benchmark artifact: ' + str(source))
         destination = target / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
+        # Retained libraries may be read-only. Replace the staging copy rather
+        # than opening it for write; the retained runtime stays untouched.
+        if destination.exists():
+            destination.unlink()
         shutil.copy2(source, destination)
         replacements[relative] = destination
     extra, legacy_record = {}, None

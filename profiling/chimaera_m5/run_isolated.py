@@ -48,6 +48,9 @@ def prior_operator_failure(logroot, case):
 
 
 def run_cases(args):
+    batch_started = time.monotonic()
+    total_timeout = getattr(args, 'total_timeout', None)
+    deadline = batch_started + total_timeout if total_timeout is not None else None
     root = args.root.resolve()
     tooling = Path(__file__).resolve().parent
     lock = read_json(args.lock)
@@ -81,8 +84,11 @@ def run_cases(args):
     operator_root = args.output.parent / (args.output.name + '-operator')
     logroot = operator_root / token
     logroot.mkdir(parents=True, exist_ok=False)
-    notes, cancelled = [], False
+    notes, cancelled, budget_exhausted = [], False, False
     for index, name in enumerate(cases):
+        if deadline is not None and time.monotonic() >= deadline:
+            budget_exhausted = True
+            break
         record = args.output / name / 'benchmark-attempt.json'
         if record.exists():
             status, error = retained_status(record)
@@ -107,19 +113,25 @@ def run_cases(args):
             '--completion-record', mounted(marker), '--operator-token', token]
         print('START', name, flush=True)
         started, operator_status, code, cleanup_error = time.monotonic(), None, None, None
+        remaining = deadline - started if deadline is not None else args.operator_timeout
+        timeout = min(args.operator_timeout, remaining)
+        if timeout <= 0:
+            budget_exhausted = True
+            break
         with (logroot / (name + '.log')).open('x') as output:
             try:
                 code = subprocess.run(command, cwd=root, stdout=output, stderr=subprocess.STDOUT,
-                                      timeout=args.operator_timeout, check=False).returncode
+                                      timeout=timeout, check=False).returncode
             except subprocess.TimeoutExpired:
-                operator_status, code = 'timeout', 124
+                budget_exhausted = deadline is not None and time.monotonic() >= deadline
+                operator_status, code = 'budget_exhausted' if budget_exhausted else 'timeout', 124
             except KeyboardInterrupt:
                 operator_status, code, cancelled = 'cancelled', 130, True
             except OSError as error:
                 operator_status = 'launch_failed'
                 cleanup_error = str(error)
             finally:
-                if operator_status in ('timeout', 'cancelled'):
+                if operator_status in ('timeout', 'cancelled', 'budget_exhausted'):
                     try:
                         stop_owned(container, token, output)
                     except (OSError, subprocess.TimeoutExpired) as error:
@@ -134,7 +146,7 @@ def run_cases(args):
         normal_return = completion == dict(operator_token=token, case=name, runner_return_code=code)
         success = status == 'complete' and operator_status is None and code in (0, 1) and normal_return
         note = dict(case=name, container=container, docker_exit_code=code,
-            operator_wall_timeout_s=args.operator_timeout, wall_seconds=time.monotonic() - started,
+            operator_wall_timeout_s=timeout, wall_seconds=time.monotonic() - started,
             status=operator_status or (status if success or status != 'complete' else 'runner_failed'),
             attempt_status=status, error=error,
             cleanup_error=cleanup_error, normal_runner_return=normal_return, success=success,
@@ -142,12 +154,14 @@ def run_cases(args):
         notes.append(note)
         write_json(logroot / (name + '.json'), note)
         print('FINISH', name, note['status'], error or '', flush=True)
-        if cancelled:
+        if cancelled or budget_exhausted:
             break
     result = dict(selected_cases=cases, attempts=notes, failures=[note for note in notes if not note['success']],
-                  unstarted_cases=cases[len(notes):], cancelled=cancelled, sdk_image=sdk)
+                  unstarted_cases=cases[len(notes):], cancelled=cancelled, sdk_image=sdk,
+                  budget_exhausted=budget_exhausted, total_wall_budget_s=total_timeout,
+                  wall_seconds=time.monotonic() - batch_started)
     write_json(logroot / 'result.json', result)
-    return 130 if cancelled else int(bool(result['failures']))
+    return 130 if cancelled else int(bool(result['failures']) or budget_exhausted)
 
 
 def main():
@@ -163,8 +177,11 @@ def main():
     parser.add_argument('--runtime-setup', type=Path, default=root / '.chimaera-m5/runtime/local_setup.bash')
     parser.add_argument('--cases', nargs='+')
     parser.add_argument('--operator-timeout', type=float, default=15000)
+    parser.add_argument('--total-timeout', type=float,
+                        help='Total wall seconds for this invocation, including preparation; '
+                             'stop only its owned container at the deadline')
     args = parser.parse_args()
-    if args.operator_timeout <= 0:
+    if args.operator_timeout <= 0 or (args.total_timeout is not None and args.total_timeout <= 0):
         parser.error('Positive operator timeout required')
     return run_cases(args)
 

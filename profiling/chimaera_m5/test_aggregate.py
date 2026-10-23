@@ -51,6 +51,22 @@ def event(kind, seq, stream='left_image', publish=300000000, callback=400000000,
 
 
 class MetricsTests(unittest.TestCase):
+    def test_warmup_receipts_remain_distinct_from_the_measured_publication_cohort(self):
+        settings = dict(PARAMETERS, bulk_bytes=8 * 1024**2, bulk_hz=5., bulk_burst=1)
+        events = [event('send', 0, stream='bulk_image_h2g', publish=0, scheduled=0),
+                  event('receive', 0, stream='bulk_image_h2g', publish=0, scheduled=0,
+                        callback=100000000),
+                  event('send', 1, stream='bulk_image_h2g', publish=200000000, scheduled=200000000),
+                  event('receive', 1, stream='bulk_image_h2g', publish=200000000,
+                        scheduled=200000000, callback=300000000)]
+        metric = analyze(events, short_config(benchmark_parameters=settings), SHORT_RULES)['bulk_image_h2g']
+        self.assertEqual((metric['published'], metric['received']), (1, 1))
+        self.assertEqual(metric['observation']['receipts'], 1)
+        self.assertEqual(metric['observation']['receipt_publication_cohorts'],
+                         dict(before_source_window=1, source_window=0))
+        self.assertEqual(metric['observation']['same_source_window_body_MB_per_observation_second'], 0)
+        self.assertGreater(metric['observation']['body_MB_per_observation_second'], 0)
+
     def test_drain_receipts_do_not_become_observed_goodput(self):
         events = [event('send', 0), event('receive', 0, callback=2500000000)]
         metric = analyze(events, config(), RULES)['left_image']
@@ -206,6 +222,7 @@ class EvidenceTests(unittest.TestCase):
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.write_bytes((prefix.name + ':' + relative).encode())
                 (prefix / 'lib/libchimaera_dds_transport.so').write_bytes(prefix.name.encode())
+            (old / COMMON_FILES[1]).chmod(0o444)
             (common / 'lib/libnew_rmw_dependency.so').write_bytes(b'common dependency')
             original_bundle = root / 'guest.tar.gz'
             with tarfile.open(original_bundle, 'w:gz') as archive:
@@ -214,7 +231,11 @@ class EvidenceTests(unittest.TestCase):
                 for relative in (*COMMON_FILES[1:], 'lib/libchimaera_dds_transport.so'):
                     archive.add(old / relative, arcname='opt/chimaera/latency/' + relative)
             output = root / 'matched'
-            stage(old, original_bundle, common, common / COMMON_FILES[0], output)
+            (old / 'lib').chmod(0o555)
+            try:
+                stage(old, original_bundle, common, common / COMMON_FILES[0], output)
+            finally:
+                (old / 'lib').chmod(0o755)
             for relative in IMPLEMENTATION_FILES:
                 self.assertEqual((output / 'runtime' / relative).read_bytes(), (old / relative).read_bytes())
             before = bundle_common(original_bundle, IMPLEMENTATION_FILES)
@@ -258,6 +279,61 @@ class EvidenceTests(unittest.TestCase):
                     writer.writerows(rows)
                 with self.assertRaises(ValueError):
                     read_events(path, config())
+
+    def test_optional_publish_duration_is_validated_and_reported(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'events.csv'
+            rows = [event('send', 0), event('receive', 0)]
+            rows[0]['publish_return_ns'] = rows[0]['publish_ns'] + 750000
+            rows[1]['publish_return_ns'] = UNSET
+            with path.open('w') as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            parsed = read_events(path, config())
+            result = analyze(parsed, config(), RULES)
+            self.assertEqual(result['left_image']['publish_call']['max_ms'], .75)
+            rows[0]['publish_return_ns'] = rows[0]['publish_ns'] - 1
+            with path.open('w') as handle:
+                writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                writer.writeheader()
+                writer.writerows(rows)
+            with self.assertRaisesRegex(ValueError, 'Publish return'):
+                read_events(path, config())
+
+    def test_creation_latency_includes_preparation_and_excludes_release_lag(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'events.csv'
+            rows = [event('send', 0), event('receive', 0)]
+            rows[0]['scheduled_ns'] = rows[1]['scheduled_ns'] = 280000000
+            rows[0]['creation_ns'] = 290000000
+            rows[1]['creation_ns'] = UNSET
+            def parse():
+                with path.open('w') as handle:
+                    writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+                    writer.writeheader()
+                    writer.writerows(rows)
+                return read_events(path, config())
+            parsed = parse()
+            self.assertEqual(parsed[1]['creation_ns'], 290000000)
+            metric = analyze(parsed, config(), RULES)['left_image']
+            self.assertEqual(metric['creation_to_callback']['max_ms'], 110)
+            self.assertEqual(metric['preparation']['max_ms'], 10)
+            self.assertEqual(metric['latency']['max_ms'], 100)
+            self.assertEqual(metric['age']['max_ms'], 120)
+            rows[1]['creation_ns'] = 291000000
+            with self.assertRaisesRegex(ValueError, 'Receipt creation'):
+                parse()
+            rows[1]['creation_ns'] = UNSET
+            for invalid in (279999999, 300000001):
+                rows[0]['creation_ns'] = invalid
+                with self.assertRaisesRegex(ValueError, 'Creation timestamp'):
+                    parse()
+
+    def test_historical_rows_do_not_invent_creation_timestamps(self):
+        metric = analyze([event('send', 0), event('receive', 0)], config(), RULES)['left_image']
+        self.assertEqual(metric['creation_to_callback']['count'], 0)
+        self.assertIsNone(metric['creation_to_callback']['max_ms'])
 
     def test_configuration_tampering_rejected(self):
         validate_config(config())

@@ -61,6 +61,7 @@ def gem5_stats(path):
                 continue
             name = parts[0]
             if name in ('simSeconds', 'simInsts', 'simOps', 'hostSeconds') or (
+                    name.startswith('board.chimaera_m5.functionalCopies.')) or (
                     'board.memory.' in name and re.search(r'bytes(Read|Written)|num(Read|Write)', name)) or (
                     re.search(r'board\.processor\..*\.(numCycles|numInsts|numOps)$', name)):
                 try:

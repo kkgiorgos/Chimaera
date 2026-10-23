@@ -13,6 +13,8 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
+#include <atomic>
 #include <optional>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/serialization.hpp>
@@ -35,7 +37,7 @@ using Records = std_msgs::msg::UInt64MultiArray;
 // All integers on ROS data routes have an explicit little-endian encoding.
 constexpr size_t header_bytes = 40;
 constexpr uint64_t packet_magic = 0x3141544144424c43ULL;
-constexpr size_t event_fields = 8;
+constexpr size_t event_fields = 10;
 using Event = std::array<uint64_t, event_fields>;
 const std::array<std::string, 8> stream_names = {
   "synthetic", "left_image", "right_image", "joint_states", "effort_command", "clock",
@@ -46,6 +48,8 @@ struct Stream
   double rate{};
   uint64_t sequence{}, bytes{};
   uint64_t burst{1};
+  uint64_t publish_return{SharedClock::unset};
+  uint64_t creation{SharedClock::unset};
   std::function<uint64_t(uint64_t)> publish;
 };
 template <typename Message>
@@ -100,6 +104,13 @@ public:
       throw std::invalid_argument("Invalid delivery policy");
     lossless_ = policy == "lossless";
     verify_payload_ = declare_parameter<bool>("verify_payload", false);
+    isolate_bulk_ = declare_parameter<bool>("isolate_bulk_execution", false);
+    trace_publish_ = declare_parameter<bool>("trace_publish", false);
+    trace_creation_ = declare_parameter<bool>("trace_creation", false);
+    if (isolate_bulk_ && !ball_)
+      throw std::invalid_argument("Bulk execution isolation requires the ball workload");
+    if (isolate_bulk_)
+      bulk_group_ = create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive, false);
     const auto payload = declare_parameter<int64_t>("payload_bytes", 64);
     rate_ = declare_parameter<double>("rate_hz", 20.0);
     const auto warmup = declare_parameter<int64_t>("warmup_ns", 500000000);
@@ -121,7 +132,7 @@ public:
       output_.open(output);
       if (!output_) throw std::runtime_error("Cannot open events output");
       output_ << "side,event,sequence,scheduled_ns,publish_ns,callback_ns,physics_ns,payload_bytes,"
-                 "stream\n";
+                 "stream,publish_return_ns,creation_ns\n";
     }
     const auto reliability = declare_parameter<std::string>("reliability", "reliable");
     const auto depth = declare_parameter<int64_t>("depth", 128);
@@ -165,15 +176,17 @@ public:
   uint64_t now()
   {
     if (clock_) return clock_->now();
-    if (!origin_) {
+    if (origin_.load() == SharedClock::unset) {
+      std::lock_guard lock(clock_mutex_);
       std::ifstream input(origin_file_);
       uint64_t value;
       if (!(input >> value)) return SharedClock::unset;
       origin_ = value;
     }
     const auto value = gem5_now_();
-    if (value < *origin_) throw std::runtime_error("gem5 clock precedes experiment origin");
-    return value - *origin_;
+    const auto origin = origin_.load();
+    if (value < origin) throw std::runtime_error("gem5 clock precedes experiment origin");
+    return value - origin;
   }
   void tick()
   {
@@ -201,8 +214,9 @@ public:
     if (time == SharedClock::unset) return;
     // An independent source, never an echo. A frozen/jumping clock releases a
     // burst with actual publish times; scheduled times remain in every record.
-    if (ball_) tick_ball(time);
+    if (ball_) tick_ball(time, false);
     while (!ball_ && !frozen_ && time < stop_ && scheduled(sequence_) <= time) {
+      const auto creation = trace_creation_ ? now() : SharedClock::unset;
       encode(packet_.data, 1, sequence_);
       encode(packet_.data, 2, scheduled(sequence_));
       const auto published = now();
@@ -211,13 +225,18 @@ public:
       encode(packet_.data, 4, packet_.data.size() - header_bytes);
       const auto physics = physics_ ? physics_->now() : SharedClock::unset;
       publisher_->publish(packet_);
-      events_.push_back(
+      record(
         {0, sequence_, scheduled(sequence_), published, SharedClock::unset, physics,
-         packet_.data.size() - header_bytes});
+         packet_.data.size() - header_bytes, 0, trace_publish_ ? now() : SharedClock::unset,
+         creation});
       ++sequence_;
       time = now();
     }
     if (time >= cutoff_ && !frozen_) {
+      std::lock_guard lock(events_mutex_);
+      // A bulk publish/take may still be in progress on the other executor.
+      // Finish its source/event record before freezing and exporting the log.
+      if (bulk_active_) return;
       frozen_ = true;
       if (side_ == "host") {
         for (const auto & event : events_) write("host", event);
@@ -228,8 +247,47 @@ public:
     if (side_ == "guest" && frozen_ && !exported_) export_chunk();
     finish();
   }
+  rclcpp::CallbackGroup::SharedPtr bulk_group() const { return bulk_group_; }
+  void tick_bulk()
+  {
+    Activity activity(*this);
+    if (!activity || !ready_) return;
+    const auto time = now();
+    if (time != SharedClock::unset) tick_ball(time, true);
+  }
 
 private:
+  // The two executors share only lifecycle and recording state. Source streams
+  // are assigned to exactly one executor; map membership is fixed at startup.
+  class Activity
+  {
+  public:
+    explicit Activity(Endpoint & endpoint) : endpoint_(endpoint)
+    {
+      std::lock_guard lock(endpoint_.events_mutex_);
+      active_ = !endpoint_.frozen_;
+      if (active_) ++endpoint_.bulk_active_;
+    }
+    ~Activity()
+    {
+      if (active_) {
+        std::lock_guard lock(endpoint_.events_mutex_);
+        --endpoint_.bulk_active_;
+      }
+    }
+    explicit operator bool() const { return active_; }
+  private:
+    Endpoint & endpoint_;
+    bool active_{};
+  };
+  static bool bulk_stream(uint64_t id) { return id == 1 || id == 2 || id >= 6; }
+  void record(const Event & event)
+  {
+    std::lock_guard lock(events_mutex_);
+    if (frozen_) return;
+    if (events_.size() >= 4000000) throw std::runtime_error("Benchmark event capacity exceeded");
+    events_.push_back(event);
+  }
   static uint64_t release(uint64_t sequence, double rate)
   {
     return static_cast<uint64_t>(std::llround(sequence * 1e9 / rate));
@@ -263,6 +321,9 @@ private:
       publishers_.push_back(publisher);
       auto message = std::make_shared<Message>(std::move(example));
       stream.publish = [this, publisher, message, id](uint64_t scheduled) {
+        // Start of this logical sample's preparation. Payload storage is reused;
+        // this does not measure sensor capture or initial buffer allocation.
+        streams_.at(id).creation = trace_creation_ ? now() : SharedClock::unset;
         stamp(*message).sec = scheduled / 1000000000ULL;
         stamp(*message).nanosec = scheduled % 1000000000ULL;
         if constexpr (std::is_same_v<Message, sensor_msgs::msg::Image>) {
@@ -280,11 +341,16 @@ private:
         const auto published = now();
         if (published >= stop_) return SharedClock::unset;
         publisher->publish(*message);
+        streams_.at(id).publish_return = trace_publish_ ? now() : SharedClock::unset;
         return published;
       };
     } else {
+      rclcpp::SubscriptionOptions options;
+      if (isolate_bulk_ && bulk_stream(id)) options.callback_group = bulk_group_;
       subscriptions_.push_back(
         create_subscription<Message>(name, qos, [this, id](std::shared_ptr<const Message> message) {
+          Activity activity(*this);
+          if (!activity) return;
           const auto received = now();  // Callback entry, before inspecting the message.
           const auto physics = physics_ ? physics_->now() : SharedClock::unset;
           if (received == SharedClock::unset || frozen_ || received > cutoff_) return;
@@ -323,13 +389,12 @@ private:
               }
             }
           }
-          if (events_.size() >= 4000000)
-            throw std::runtime_error("Benchmark event capacity exceeded");
           // Actual publication time is joined from buffered source records after
           // export. Actual ROS messages carry no benchmark envelope or extra bytes.
-          events_.push_back(
-            {1, sequence, capture, SharedClock::unset, received, physics, stream.bytes, id});
-        }));
+          record(
+            {1, sequence, capture, SharedClock::unset, received, physics, stream.bytes, id,
+             SharedClock::unset, SharedClock::unset});
+        }, options));
     }
   }
   void setup_ball(bool bridged)
@@ -413,7 +478,7 @@ private:
       }
     }
   }
-  void tick_ball(uint64_t time)
+  void tick_ball(uint64_t time, bool bulk)
   {
     if (frozen_ || time >= stop_) return;
     // Merge source schedules so stereo pairs are emitted together, including
@@ -422,6 +487,7 @@ private:
       auto next = streams_.end();
       for (auto it = streams_.begin(); it != streams_.end(); ++it)
         if (
+          (!isolate_bulk_ || bulk_stream(it->first) == bulk) &&
           it->second.publish && due(it->second.sequence, it->second) <= time &&
           (next == streams_.end() || due(it->second.sequence, it->second) <
                                        due(next->second.sequence, next->second)))
@@ -432,11 +498,12 @@ private:
       const auto physics = physics_ ? physics_->now() : SharedClock::unset;
       const auto published = stream.publish(capture);
       if (published == SharedClock::unset) break;
-      events_.push_back(
+      record(
         {0, stream.sequence++, capture, published, SharedClock::unset, physics, stream.bytes,
-         next->first});
+         next->first, stream.publish_return, stream.creation});
       time = now();
     }
+    if (bulk) return;
     for (auto & stream : background_)
       while (time < stop_ && release(stream.sequence, stream.rate) <= time) {
         stream.publish(release(stream.sequence++, stream.rate));
@@ -460,10 +527,9 @@ private:
     const auto published = decode(packet.data, 3);
     if (received < published)
       throw std::runtime_error("Negative simulation latency: clock alignment failed");
-    if (events_.size() >= 4000000) throw std::runtime_error("Benchmark event capacity exceeded");
-    events_.push_back(
+    record(
       {1, decode(packet.data, 1), decode(packet.data, 2), published, received, physics,
-       decode(packet.data, 4)});
+       decode(packet.data, 4), 0, SharedClock::unset, SharedClock::unset});
   }
   void export_chunk()
   {
@@ -483,9 +549,9 @@ private:
   void write(const std::string & side, const Event & event)
   {
     output_ << side << ',' << (event[0] == 0 ? "send" : "receive");
-    for (size_t i = 1; i < event.size() - 1; ++i) output_ << ',' << event[i];
+    for (size_t i = 1; i < 7; ++i) output_ << ',' << event[i];
     if (event[7] >= stream_names.size()) throw std::runtime_error("Invalid event stream");
-    output_ << ',' << stream_names[event[7]] << '\n';
+    output_ << ',' << stream_names[event[7]] << ',' << event[8] << ',' << event[9] << '\n';
   }
   void report(const Records & chunk)
   {
@@ -522,6 +588,10 @@ private:
   bool ball_{};
   bool lossless_{};
   bool verify_payload_{};
+  bool isolate_bulk_{}, trace_publish_{}, trace_creation_{};
+  rclcpp::CallbackGroup::SharedPtr bulk_group_;
+  std::mutex events_mutex_, clock_mutex_;
+  unsigned bulk_active_{};
   std::map<uint64_t, Stream> streams_;
   std::vector<Stream> background_;
   std::vector<rclcpp::PublisherBase::SharedPtr> publishers_;
@@ -530,11 +600,13 @@ private:
   std::unique_ptr<SharedClock> clock_, physics_;
   void * library_{};
   uint64_t (*gem5_now_)(){};
-  std::optional<uint64_t> origin_, guest_total_;
+  std::optional<uint64_t> guest_total_;
+  std::atomic<uint64_t> origin_{SharedClock::unset};
   double rate_{};
   uint64_t stop_{}, cutoff_{}, sequence_{}, expected_chunk_{}, guest_count_{};
   size_t export_position_{}, export_sequence_{};
-  bool ready_{}, frozen_{}, exported_{}, guest_done_{}, done_{}, middleware_bootstrap_{};
+  std::atomic<bool> ready_{}, frozen_{};
+  bool exported_{}, guest_done_{}, done_{}, middleware_bootstrap_{};
   Packet packet_;
   std::vector<Event> events_;
   std::ofstream output_;
@@ -557,8 +629,33 @@ int main(int argc, char ** argv)
     auto source_timer =
       endpoint->create_wall_timer(std::chrono::milliseconds(1), [&] { endpoint->tick(); });
     rclcpp::executors::SingleThreadedExecutor executor;
+    rclcpp::executors::SingleThreadedExecutor bulk_executor;
+    rclcpp::TimerBase::SharedPtr bulk_timer;
+    if (endpoint->bulk_group()) {
+      bulk_timer = endpoint->create_wall_timer(
+        std::chrono::milliseconds(1), [&] { endpoint->tick_bulk(); }, endpoint->bulk_group());
+      bulk_executor.add_callback_group(endpoint->bulk_group(), endpoint->get_node_base_interface());
+    }
     executor.add_node(endpoint);
-    executor.spin();
+    std::exception_ptr failure, bulk_failure;
+    std::thread bulk_worker;
+    if (bulk_timer) bulk_worker = std::thread([&] {
+      try {
+        bulk_executor.spin();
+      } catch (...) {
+        bulk_failure = std::current_exception();
+        executor.cancel();
+      }
+    });
+    try {
+      executor.spin();
+    } catch (...) {
+      failure = std::current_exception();
+    }
+    bulk_executor.cancel();
+    if (bulk_worker.joinable()) bulk_worker.join();
+    if (failure) std::rethrow_exception(failure);
+    if (bulk_failure) std::rethrow_exception(bulk_failure);
   } catch (const std::exception & error) {
     std::cerr << "Latency endpoint: " << error.what() << '\n';
     result = 1;
