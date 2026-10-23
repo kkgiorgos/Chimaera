@@ -155,8 +155,8 @@ int main(int argc, char ** argv)
     std::unique_ptr<AdmissionBarrier> admission;
     if (direct_m5 && read_time) admission = std::make_unique<AdmissionBarrier>();
     bool checkpoint_control = node->declare_parameter<bool>("checkpoint_control", false);
-    if ((dma || direct_m5) && checkpoint_control)
-      throw std::invalid_argument("DMA/m5ops checkpointing is not supported; use a fresh boot");
+    if (dma && checkpoint_control)
+      throw std::invalid_argument("DMA checkpointing is not supported; use a fresh boot");
     if (ops != "address" && ops != "instruction") {
       throw std::invalid_argument("m5ops must be address or instruction");
     }
@@ -180,6 +180,8 @@ int main(int argc, char ** argv)
         const_cast<char *>(ready.data()), ready.size(), 0, "chimaera-m5-after-admission.txt");
     }
     bool time_ready = false;
+    bool application_frozen = false;
+    bool watermarks_exported = false;
     std::uint64_t iteration = 0;
     auto diagnostic = [&](const char * phase) {
       if (!dma || !dma_diagnostics) return;
@@ -249,7 +251,8 @@ int main(int argc, char ** argv)
         // fds. This process retains endpoint metadata and the workbegin barrier.
         if (node->pending())
           throw std::runtime_error("m5ops payload unexpectedly entered the metadata coordinator");
-        executor.spin_once(std::chrono::nanoseconds(-1));
+        executor.spin_once(checkpoint_control ? std::chrono::milliseconds(1) :
+                           std::chrono::nanoseconds(-1));
       } else if (dma) {
         diagnostic("before_exchange");
         node->exchange(*dma);
@@ -280,9 +283,27 @@ int main(int argc, char ** argv)
         // transport header/payload or leaves a stale host handshake behind.
         char control[96]{};
         const auto length = m5_read_file_addr(control, sizeof(control) - 1, 0);
+        if (direct_m5 && std::string(control, length) == "CHIMAERA_CHECKPOINT_FREEZE\n") {
+          if (!application_frozen) {
+            std::ofstream("/tmp/chimaera-app-checkpoint-freeze").put('\n');
+            application_frozen = true;
+          }
+          std::ifstream counts("/tmp/chimaera-app-checkpoint-counts.json");
+          if (counts && !watermarks_exported) {
+            const std::string text((std::istreambuf_iterator<char>(counts)), {});
+            if (text.size() > 4096) throw std::runtime_error("Checkpoint record counts exceed bounds");
+            if (m5_write_file_addr(const_cast<char *>(text.data()), text.size(), 0,
+                                  "checkpoint-record-counts.json") != text.size())
+              throw std::runtime_error("Cannot export checkpoint record counts");
+            watermarks_exported = true;
+          }
+        }
         if (std::string(control, length) == "CHIMAERA_CHECKPOINT\n") {
+          if (direct_m5 && (!application_frozen ||
+              !std::filesystem::exists("/tmp/chimaera-app-checkpoint-counts.json")))
+            throw std::runtime_error("Application must quiesce before m5ops checkpoint");
           checkpoint_control = false;
-          controller.reconnect();
+          if (!direct_m5) controller.reconnect();
           m5_checkpoint_addr(0, 0);
           // An address-mode quiesce suspends the CPU inside a local memory
           // access. Its wakeup can race TimingSimpleCPU's outstanding fetch
@@ -294,6 +315,28 @@ int main(int argc, char ** argv)
               return std::string(data, size);
             },
             [] {}, [] { return rclcpp::ok(); });
+          if (direct_m5) {
+            while (rclcpp::ok()) {
+              chm5_request query{}; query.version = CHM5_ABI_VERSION; query.size = sizeof(query);
+              if (m5_chimaera_control_addr(CHM5_CTL_QUERY, &query, sizeof(query)))
+                throw std::runtime_error("Cannot query restored m5ops peer disposal");
+              if (!query.error) break;
+              if (query.error != EAGAIN) throw std::runtime_error("Restored m5ops transport failed");
+              std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            std::filesystem::remove("/tmp/chimaera-app-checkpoint-freeze");
+            while (rclcpp::ok()) {
+              char data[96]{};
+              const auto size = m5_read_file_addr(data, sizeof(data) - 1, 0);
+              if (std::string(data, size) == "CHIMAERA_CHECKPOINT_RECORDS_READY\n") break;
+              std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            if (rclcpp::ok()) {
+              std::ofstream release("/tmp/chimaera-app-checkpoint-resume");
+              release << '\n'; release.flush();
+              if (!release) throw std::runtime_error("Cannot release restored application");
+            }
+          }
         }
       }
     }

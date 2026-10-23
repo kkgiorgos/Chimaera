@@ -28,6 +28,14 @@ def start(context):
                'checkpoint_gate': bool(execution.get('checkpoint_prepare') or execution.get('checkpoint_restore')),
                'paused': True, 'gui': False, 'partition': 'ball-memory-suite',
                'transport_ip': '127.0.0.1'}
+    if execution['fixed'].get('transport_backend') == 'm5ops':
+        if execution.get('checkpoint_prepare'):
+            options['checkpoint_commands_capture'] = str(output / 'host-commands.txt')
+        if execution.get('checkpoint_restore'):
+            saved = Path(execution['checkpoint_restore'])
+            options['checkpoint_commands_replay'] = str(saved / 'host-commands.txt')
+            record = json.loads((saved / 'checkpoint.json').read_text())
+            options['checkpoint_live_after_ns'] = record['saved_tick'] // 1000 - record['time_origin_ns']
     options.pop('name', None)
     launch_args = {key: json.dumps(value) if isinstance(value, (list, bool)) else str(value)
                    for key, value in options.items()}

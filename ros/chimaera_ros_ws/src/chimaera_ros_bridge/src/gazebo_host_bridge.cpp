@@ -89,9 +89,12 @@ int main(int argc, char ** argv)
     timing.cancelled = [] { return !rclcpp::ok(); };
     auto & controller = timing;
     std::unique_ptr<chimaera_ros_bridge::CheckpointReplay> capture;
+    bool application_freezing = false;
+    const bool command_replay = node->get_parameter("transport_backend").as_string() == "m5ops";
     if (!capture_path.empty()) {
       capture = std::make_unique<chimaera_ros_bridge::CheckpointReplay>(capture_path, true);
-      node->on_receive = [&](const chimaera::Message & frame) { capture->append(frame); };
+      if (!command_replay)
+        node->on_receive = [&](const chimaera::Message & frame) { capture->append(frame); };
     }
     try {
       const auto waiting_since = Clock::now();
@@ -111,6 +114,9 @@ int main(int argc, char ** argv)
         std::ifstream actual(checkpoint_output + "/checkpoint-host-state");
         if (!std::filesystem::exists(checkpoint_output + "/checkpoint-ready"))
           throw std::runtime_error("Checkpoint replay did not restore arm/camera readiness");
+        if (command_replay &&
+            !std::filesystem::exists(checkpoint_output + "/checkpoint-commands-replayed"))
+          throw std::runtime_error("Checkpoint physics command prefix was not completely replayed");
         for (unsigned index = 0; index < 15; ++index) {
           double before, after;
           if (
@@ -154,6 +160,31 @@ int main(int argc, char ** argv)
           if (!result.ok()) throw std::runtime_error(result.message);
         }
         RCLCPP_INFO(node->get_logger(), "Aligned restored host clock in %lu intervals", catchup);
+        if (command_replay) {
+          const auto reconnect_begin = Clock::now();
+          unsigned intervals = 0;
+          bool record_readers_ready = false;
+          while (!std::filesystem::exists(checkpoint_output + "/checkpoint-reconnected")) {
+            if (uint64_t(intervals) * interval * 1000 >= 1000000000ULL)
+              throw std::runtime_error("Restored DDS did not reconnect fresh control and stereo traffic");
+            const auto result = controller.step(std::chrono::microseconds(interval));
+            if (!result.ok()) throw std::runtime_error(result.message);
+            ++intervals;
+            if (!record_readers_ready && std::filesystem::exists(
+                checkpoint_output + "/checkpoint-record-readers-ready")) {
+              if (timing.command("BENCHMARK_RECORDS_READY") != "RECORDS READY")
+                throw std::runtime_error("Simulator rejected record reader barrier");
+              record_readers_ready = true;
+            }
+          }
+          std::ofstream evidence(checkpoint_output + "/checkpoint-reconnect.json");
+          evidence << "{\"intervals\":" << intervals << ",\"simulation_seconds\":"
+                   << intervals * interval / 1e6 << ",\"wall_seconds\":"
+                   << std::chrono::duration<double>(Clock::now() - reconnect_begin).count() << "}\n";
+          if (!evidence) throw std::runtime_error("Cannot save checkpoint reconnection evidence");
+          if (timing.command("BENCHMARK_DUMP").rfind("DUMP ", 0) != 0)
+            throw std::runtime_error("Cannot retain prelaunch checkpoint transport counters");
+        }
         if (timing.command("BENCHMARK_PRESSURE").rfind("PRESSURE ", 0) != 0)
           throw std::runtime_error("Simulator rejected pressure warmup");
         for (int64_t elapsed = 0; elapsed < pressure_warmup; elapsed += interval * 1000) {
@@ -218,7 +249,15 @@ int main(int argc, char ** argv)
         ++completed_steps;
         if (capture) {
           capture->boundary();
-          if (std::filesystem::exists(checkpoint_output + "/checkpoint-ready")) {
+          if (application_freezing || std::filesystem::exists(checkpoint_output + "/checkpoint-ready")) {
+            if (command_replay) {
+              if (!application_freezing) {
+                if (timing.command("BENCHMARK_FREEZE") != "FREEZING")
+                  throw std::runtime_error("Simulator rejected application freeze");
+                application_freezing = true;
+              }
+              if (timing.command("BENCHMARK_RECORDS_DRAINED") != "DRAINED 1") continue;
+            }
             capture->finish();
             node->on_receive = {};
             if (timing.command("BENCHMARK_CHECKPOINT").rfind("CHECKPOINT ", 0) != 0)

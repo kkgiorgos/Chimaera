@@ -27,12 +27,15 @@ def receive(connection, size):
     return bytes(result)
 
 
-def exchange(payload):
+def send_frame(payload):
     for packet in (struct.pack('>Q', len(payload)), payload):
         with socket.socket(socket.AF_UNIX) as connection:
             connection.settimeout(10)
             connection.connect('/tmp/chimaera_g2h.sock')
             connection.sendall(struct.pack('@Q', len(packet)) + packet)
+
+
+def receive_frame():
     with socket.socket(socket.AF_UNIX) as connection:
         connection.settimeout(10)
         connection.connect('/tmp/chimaera_h2g.sock')
@@ -43,6 +46,25 @@ def exchange(payload):
         connection.settimeout(10)
         connection.connect('/tmp/chimaera_h2g.sock')
         return receive(connection, size)
+
+
+def exchange(payload):
+    send_frame(payload)
+    return receive_frame()
+
+
+def exchange_batch(frames):
+    # Controller v3 sends a size manifest followed by independently owned frames.
+    send_frame(struct.pack('>Q', len(frames)) + b''.join(
+        struct.pack('>Q', len(value)) for value in frames))
+    for value in frames:
+        send_frame(value)
+    manifest = receive_frame()
+    count = struct.unpack('>Q', manifest[:8])[0]
+    assert count <= 1024 and len(manifest) == 8 + count * 8
+    for index in range(count):
+        size = struct.unpack_from('>Q', manifest, 8 + index * 8)[0]
+        assert len(receive_frame()) == size
 
 
 def frame(route, ready):
@@ -90,16 +112,14 @@ def run(root, plugin, prepared=None, tick=0):
                             reply = f'PAUSED {tick}'
                         elif command.startswith('STEP_TICKS '):
                             if not initialized:
-                                startup = exchange(struct.pack('>Q', 0x4348494d43545232))
+                                startup = exchange(struct.pack('>Q', 0x4348494d43545233))
                                 assert struct.unpack('>QQ', startup)[1] > 0
                                 initialized = True
                                 time.sleep(.2)
                             # During restored pressure warmup, readiness becomes
                             # false. This must not extend the fixed launch hold.
                             frames = [frame(route, prepared is None) for route in routes]
-                            batch = struct.pack('>Q', len(frames)) + b''.join(
-                                struct.pack('>Q', len(value)) + value for value in frames)
-                            exchange(batch)
+                            exchange_batch(frames)
                             end = tick + int(command.split()[1])
                             reply = f'OK {tick} {end}'
                             tick = end
@@ -109,6 +129,9 @@ def run(root, plugin, prepared=None, tick=0):
                         elif command == 'BENCHMARK_PRESSURE':
                             assert prepared and (root / 'checkpoint-ready').exists()
                             reply = f'PRESSURE {tick}'
+                        elif command == 'BENCHMARK_RESTORE':
+                            assert prepared
+                            reply = f'RESTORE {tick} {tick}'
                         elif command == 'BENCHMARK_BEGIN':
                             assert prepared and (root / 'checkpoint-release').exists()
                             reply = f'READY {tick}'
@@ -132,6 +155,7 @@ def run(root, plugin, prepared=None, tick=0):
             try:
                 bridge = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/chimaera_ros_bridge/gazebo_host_bridge'
                 command = [str(bridge), '--ros-args', '-p', f'config_file:={config}',
+                    '-p', 'transport_backend:=m5',
                     '-p', f'timing_socket:={endpoint}', '-p', 'gazebo_world:=ball_catching',
                     '-p', 'interval_us:=500', '-p', 'poll_us:=100', '-p', 'physics_step_ns:=500000',
                     '-p', 'startup_timeout_s:=15', '-p', 'status_bar:=false',
@@ -143,7 +167,7 @@ def run(root, plugin, prepared=None, tick=0):
                     command += ['-p', f'checkpoint_capture:={root / "host-replay.bin"}']
                 result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=35)
                 (root / 'bridge.log').write_text(result.stdout + result.stderr)
-                assert result.returncode == 0, result.stdout + result.stderr
+                assert result.returncode == 0, repr(failures) + '\n' + result.stdout + result.stderr
                 thread.join(timeout=2)
                 assert not thread.is_alive() and not failures, failures
             finally:
@@ -155,7 +179,7 @@ def run(root, plugin, prepared=None, tick=0):
                     gazebo.wait()
     Path(endpoint).unlink()
     if prepared:
-        assert commands[:2] == ['STATUS', 'BENCHMARK_PRESSURE'], commands
+        assert commands[:3] == ['STATUS', 'BENCHMARK_RESTORE', 'BENCHMARK_PRESSURE'], commands
         assert 'BENCHMARK_BEGIN' in commands
         assert 'Replayed ' in result.stdout + result.stderr
         assert (root / 'result.json').is_file()

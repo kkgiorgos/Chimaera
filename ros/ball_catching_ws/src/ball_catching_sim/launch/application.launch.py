@@ -37,7 +37,10 @@ def start(context):
                    camera_position=json.loads(get('camera_position')),
                    joint_hz=float(get('joint_hz')), warmup=float(get('warmup')),
                    detailed_timing_socket=get('detailed_timing_socket'),
-                   checkpoint_gate=get('checkpoint_gate').lower() == 'true')
+                   checkpoint_gate=get('checkpoint_gate').lower() == 'true',
+                   checkpoint_commands_capture=get('checkpoint_commands_capture'),
+                   checkpoint_commands_replay=get('checkpoint_commands_replay'),
+                   checkpoint_live_after_ns=int(get('checkpoint_live_after_ns')))
     world, robot_file, urdf, calibration = generate(scene_directory, **options)
     if output:
         record = {**options, 'start_condition': 'vertical_home',
@@ -85,6 +88,8 @@ def start(context):
 def generate_launch_description():
     defaults = dict(gui='true', robot='true', paused='false', output='', partition='ball-catching',
                     transport_ip='127.0.0.1', detailed_timing_socket='', checkpoint_gate='false',
+                    checkpoint_commands_capture='', checkpoint_commands_replay='',
+                    checkpoint_live_after_ns='-1',
                     control_hz='250', planner_hz='30', plan_interval='0.06',
                     image_age_periods='2',
                     image_diagnostics='false',
