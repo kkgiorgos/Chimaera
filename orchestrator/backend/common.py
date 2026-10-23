@@ -1,4 +1,5 @@
 """Small durable building blocks shared by the controller and SSH supervisor."""
+from fnmatch import fnmatchcase
 import hashlib
 import json
 import os
@@ -56,7 +57,12 @@ def content_identity(root, paths):
     names = set()
     excluded = {'.git', '.cache', '.vscode', '__pycache__', '.pytest_cache',
                 'build', 'install', 'log', 'm5out', 'm5_outputs', 'parser.out', 'parsetab.py'}
-    excluded_paths = {'gem5/resources', 'gem5/ext/ramulator2/ramulator2'}
+    excluded_paths = {'gem5/resources', 'gem5/ext/ramulator2/ramulator2',
+                      'gem5-transport/kernel/.tmp_versions'}
+    # Kbuild writes these beside the driver sources. They describe a host's
+    # previous build, not inputs shared by the producer and consumer.
+    kernel_outputs = ('*.o', '*.ko', '*.mod', '*.mod.c', '.*.cmd',
+                      'Module.symvers', 'modules.order')
     for relative in paths:
         source = root / relative
         if source.is_file():
@@ -68,6 +74,9 @@ def content_identity(root, paths):
                 names.update(str((Path(directory) / name).relative_to(root)) for name in children
                              if (Path(directory) / name).is_symlink())
                 for name in files:
+                    if str(Path(directory).relative_to(root)) == 'gem5-transport/kernel' and any(
+                            fnmatchcase(name, pattern) for pattern in kernel_outputs):
+                        continue
                     if name not in excluded and not name.endswith(('.pyc', '.pyo')):
                         names.add(str((Path(directory) / name).relative_to(root)))
     result = hashlib.sha256()

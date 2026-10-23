@@ -177,6 +177,15 @@ controller, redeploy supervisors, and queue a new experiment. Redeployment and
 retry do not refresh an existing experiment's frozen identity. Keep cached images;
 matching build inputs can reuse them in the new experiment.
 
+Generated transport kernel build outputs (`*.o`, `*.ko`, `*.mod`, `*.mod.c`,
+`.*.cmd`, `Module.symvers`, `modules.order`, and `.tmp_versions/`) are excluded
+from the SDK build context and build fingerprints. Building a driver on the
+preparation machine therefore does not make a consumer with the same sources
+appear different. Driver sources, headers, and the Makefile still participate in
+the fingerprint. Experiments queued before this exclusion retain their original
+hashes; update the controller and supervisors on all machines and queue a new
+experiment with fresh preparation/calibration rather than retrying the old one.
+
 CPU settings use Docker quotas, not exclusive core pinning. RAM per worker is a
 soft budget (`--memory-reservation`), with no Docker hard memory or swap limit.
 Workers can exceed it instead of being killed at the configured size. The

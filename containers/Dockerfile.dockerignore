@@ -33,3 +33,13 @@ gem5/ext/ramulator2/ramulator2
 **/m5_outputs
 **/parser.out
 **/parsetab.py
+
+# Kbuild output lives alongside the transport driver sources on preparation hosts.
+gem5-transport/kernel/*.o
+gem5-transport/kernel/*.ko
+gem5-transport/kernel/*.mod
+gem5-transport/kernel/*.mod.c
+gem5-transport/kernel/.*.cmd
+gem5-transport/kernel/Module.symvers
+gem5-transport/kernel/modules.order
+gem5-transport/kernel/.tmp_versions

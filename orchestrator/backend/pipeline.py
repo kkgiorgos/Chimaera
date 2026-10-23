@@ -51,7 +51,8 @@ def prepare(directory):
             'Restore the queued revision and source contents before retrying preparation, or stop this '
             'experiment, align the controller and worker checkouts, redeploy, and queue a new experiment. '
             'Retrying or redeploying alone does not update the frozen source identity.')
-    atomic_json(directory / 'stage.json', dict(phase='Building SDK and application'))
+    atomic_json(directory / 'stage.json', dict(phase=(
+        'Validating transferred images and build sources' if calibration else 'Building SDK and application')))
     builds = build_identities(root)
     if calibration:
         expected_builds = calibration['provenance'].get('build_inputs')

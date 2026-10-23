@@ -40,6 +40,40 @@ def test_sdk_cache_depends_on_build_content_not_repo_commit_or_dashboard(tmp_pat
     assert build_identities(tmp_path)['sdk'] != initial['sdk']
 
 
+@pytest.mark.parametrize('artifact', [
+    'chimaera_dma.o', 'chimaera_dma.ko', 'chimaera_dma.mod', 'chimaera_dma.mod.c',
+    'chimaera_dma.mod.o', '.chimaera_dma.o.cmd',
+    'chimaera_m5.o', 'chimaera_m5.ko', 'chimaera_m5.mod', 'chimaera_m5.mod.c',
+    'chimaera_m5.mod.o', '.chimaera_m5.ko.cmd',
+    '.Module.symvers.cmd', '.modules.order.cmd', 'Module.symvers', 'modules.order',
+    '.tmp_versions/chimaera_m5.mod',
+])
+def test_kernel_build_outputs_do_not_change_build_keys(tmp_path, artifact):
+    kernel = tmp_path / 'gem5-transport/kernel'
+    kernel.mkdir(parents=True)
+    (kernel / 'chimaera_m5.c').write_text('driver source')
+    initial = build_identities(tmp_path)
+    output = kernel / artifact
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text('host-specific build output')
+    output.chmod(0o755)
+    assert build_identities(tmp_path) == initial
+    output.write_text('rebuilt output')
+    assert build_identities(tmp_path) == initial
+
+
+@pytest.mark.parametrize('source', ['chimaera_dma.c', 'chimaera_m5.c', 'Makefile', 'driver.h'])
+def test_kernel_source_changes_still_invalidate_sdk_and_application(tmp_path, source):
+    path = tmp_path / 'gem5-transport/kernel' / source
+    path.parent.mkdir(parents=True)
+    path.write_text('original source')
+    initial = build_identities(tmp_path)
+    path.write_text('updated source')
+    changed = build_identities(tmp_path)
+    assert changed['sdk'] != initial['sdk']
+    assert changed['application'] != initial['application']
+
+
 @pytest.mark.parametrize('backend,field', [('dma', 'dma_module'), ('m5ops', 'm5_module')])
 def test_custom_kernel_requires_driver_before_building(tmp_path, monkeypatch, backend, field):
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
@@ -364,6 +398,8 @@ def test_preparation_rejects_different_build_sources_before_docker_or_assets(tmp
         commands.assert_not_called()
         assets.assert_not_called()
     assert not (directory / 'shared-calibration').exists()
+    assert json.loads((directory / 'stage.json').read_text())['phase'] == (
+        'Validating transferred images and build sources')
 
 
 def test_host_editor_caches_and_generated_parser_tables_do_not_change_build_keys(tmp_path):
