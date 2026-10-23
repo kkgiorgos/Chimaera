@@ -61,7 +61,9 @@ class Agent:
         atomic_json(directory / 'request.json', dict(experiment=experiment, config=config, cpus=cpus,
             memory=memory, build_jobs=build_jobs, disk=disk, kernel=kernel, calibration=calibration,
             source_identity=source_identity,
-            readiness_checkpoint=config.get('fixed', {}).get('transport_backend', 'm5') == 'm5'))
+            readiness_checkpoint=(config.get('fixed', {}).get('transport_backend', 'm5') == 'm5' or
+                (config.get('fixed', {}).get('transport_backend') == 'm5ops' and
+                 config.get('fixed', {}).get('readiness_checkpoint', False)))))
         command = ['docker', 'run', '-d', '--name', 'chimaera-' + key,
             '--label', 'chimaera.experiment=' + experiment,
             '--user', f'{os.getuid()}:{os.getgid()}', '--group-add', str(Path('/var/run/docker.sock').stat().st_gid),
@@ -87,7 +89,9 @@ class Agent:
         incoming = directory / 'shared-assets.incoming'
         destination = directory / 'shared-assets'
         # Validate in place before publishing. A failed transfer is never ready.
-        if (incoming / 'kernel-assets.json').exists():
+        if (incoming / 'checkpoints/index.json').exists():
+            unpack(incoming.parent, '', expected, destination=incoming)
+        elif (incoming / 'kernel-assets.json').exists():
             from kernel_assets import verify
             verify(incoming, expected)
         else:

@@ -8,7 +8,7 @@ import subprocess
 import tarfile
 import tempfile
 
-from common import digest
+from common import atomic_json, digest
 
 
 LOCATION = '/opt/chimaera/readiness'
@@ -77,11 +77,36 @@ def package(directory, application, disk, kernel):
     def expose(name, source):
         target = export / name
         target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            if digest(target) != digest(source):
+                raise ValueError('Conflicting readiness asset: ' + str(name))
+            return
         target.symlink_to(Path(source).resolve(strict=True))
 
     expose('guest.img', disk)
     expose('kernel', kernel)
     expose('guest.tar.gz', prepared / 'guest.tar.gz')
+    # m5ops readiness combines the exact kernel/module pair and checkpoint in
+    # one transfer. The consumer still needs the standalone module to validate
+    # and re-export its portable config, even though the guest restores it in RAM.
+    pair = Path(kernel).parent
+    if (pair / 'kernel-assets.json').is_file():
+        from kernel_assets import asset_files, verify
+        pair_kernel, _ = verify(pair)
+        if digest(pair_kernel) != digest(kernel):
+            raise ValueError('Readiness kernel differs from its module pair')
+        metadata = json.loads((pair / 'kernel-assets.json').read_text())
+        for name in (*asset_files(metadata.get('backend', 'dma')), 'kernel-assets.json'):
+            expose(name, pair / name)
+        index['kernel_bundle_sha256'] = digest(pair / 'kernel-assets.json')
+    modules = {}
+    for name in ('chimaera_m5.ko', 'chimaera_dma.ko'):
+        if (directory / 'inputs' / name).is_file():
+            expose(name, directory / 'inputs' / name)
+            modules[name] = digest(directory / 'inputs' / name)
+    if modules:
+        index['transport_modules'] = modules
+    atomic_json(index_path, index)
     expose('checkpoints/index.json', index_path)
     for identifier, files in index['groups'].items():
         if not re.fullmatch(r'[0-9a-f]{64}', identifier):
@@ -114,4 +139,10 @@ def unpack(directory, image, expected, destination=None):
                 raise ValueError('Invalid readiness checkpoint file')
             if digest(destination / 'checkpoints' / identifier / path) != expected_hash:
                 raise ValueError('Readiness checkpoint file differs: ' + name)
+    for name, expected_hash in index.get('transport_modules', {}).items():
+        if name not in ('chimaera_m5.ko', 'chimaera_dma.ko') or digest(destination / name) != expected_hash:
+            raise ValueError('Readiness transport module differs: ' + name)
+    if index.get('kernel_bundle_sha256'):
+        from kernel_assets import verify
+        verify(destination, index['kernel_bundle_sha256'])
     return destination

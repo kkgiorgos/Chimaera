@@ -9,8 +9,9 @@ from agent import Agent, memory_bytes
 
 
 @pytest.mark.parametrize('consumer', [False, True])
-@pytest.mark.parametrize('backend', ['m5', 'dma', 'm5ops'])
-def test_preparation_selects_checkpoints_and_producer_kvm(tmp_path, consumer, backend):
+@pytest.mark.parametrize('backend,checkpoint', [('m5', True), ('dma', False),
+                                              ('m5ops', False), ('m5ops', True)])
+def test_preparation_selects_checkpoints_and_producer_kvm(tmp_path, consumer, backend, checkpoint):
     agent = Agent(tmp_path, tmp_path / 'data')
     original_stat = Path.stat
     def stat(path, *args, **kwargs):
@@ -18,10 +19,11 @@ def test_preparation_selects_checkpoints_and_producer_kvm(tmp_path, consumer, ba
             return SimpleNamespace(st_gid=999)
         return original_stat(path, *args, **kwargs)
     with patch('agent.Path.stat', stat), patch.object(agent, 'launch', return_value={}) as launch:
-        agent.prepare('experiment', {'fixed': {'transport_backend': backend}}, 1, '2g', 2, {},
+        agent.prepare('experiment', {'fixed': {'transport_backend': backend,
+                                             'readiness_checkpoint': checkpoint}}, 1, '2g', 2, {},
                       calibration={'records': {}} if consumer else None)
     request = json.loads((agent.directory('experiment') / 'request.json').read_text())
-    assert request['readiness_checkpoint'] is (backend == 'm5')
+    assert request['readiness_checkpoint'] is checkpoint
     command = launch.call_args.args[3]
     assert ('--device' in command) is not consumer
 

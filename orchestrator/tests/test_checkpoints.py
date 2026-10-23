@@ -64,7 +64,8 @@ def test_sparse_import_rejects_paths_and_links_outside_destination(tmp_path, kin
     assert not outside.exists()
 
 
-def test_package_and_transfer_sparse_disk_without_a_copy_or_docker_layer(tmp_path):
+@pytest.mark.parametrize('managed_m5ops', [False, True])
+def test_package_and_transfer_sparse_disk_without_a_copy_or_docker_layer(tmp_path, managed_m5ops):
     prepared = tmp_path / 'inputs/prepared'
     identifier = 'b' * 64
     checkpoint = prepared / 'checkpoints' / identifier
@@ -80,6 +81,18 @@ def test_package_and_transfer_sparse_disk_without_a_copy_or_docker_layer(tmp_pat
         stream.write(b'end')
     disk.chmod(0o600)
     kernel.write_bytes(b'kernel')
+    if managed_m5ops:
+        from kernel_assets import asset_files
+        files = asset_files('m5ops')
+        for name in files:
+            if name != 'kernel':
+                (tmp_path / name).write_text(name)
+        (tmp_path / 'build.json').write_text(json.dumps(dict(kernel_release='5.15.180-test',
+            vermagic='5.15.180-test SMP', backend='m5ops', module='chimaera_m5.ko', abi_version=1)))
+        (tmp_path / 'kernel-assets.json').write_text(json.dumps(dict(version=1,
+            backend='m5ops', module='chimaera_m5.ko', abi_version=1,
+            sha256={name: digest(tmp_path / name) for name in files})))
+        (tmp_path / 'inputs/chimaera_m5.ko').write_bytes((tmp_path / 'chimaera_m5.ko').read_bytes())
     original = digest(disk)
     index = prepared / 'checkpoints/index.json'
     index.write_text(json.dumps(dict(version=1, groups={identifier: {'checkpoint.json': digest(state)}},
@@ -103,6 +116,10 @@ def test_package_and_transfer_sparse_disk_without_a_copy_or_docker_layer(tmp_pat
     subprocess.run(['tar', '-xzSf', str(archive), '-C', str(destination)], check=True)
     assert (destination / 'guest.img').stat().st_blocks * 512 < 1024 * 1024
     assert unpack(tmp_path, application, expected) == destination
+    if managed_m5ops:
+        from kernel_assets import verify
+        verify(destination, digest(tmp_path / 'kernel-assets.json'), backend='m5ops')
+        assert (destination / 'chimaera_m5.ko').read_bytes() == (tmp_path / 'chimaera_m5.ko').read_bytes()
     assert digest(disk) == original
     assert disk.stat().st_mode & 0o777 == 0o600
     state_import = destination / 'checkpoints' / identifier / 'checkpoint.json'

@@ -86,7 +86,7 @@ def test_custom_kernel_requires_driver_before_building(tmp_path, monkeypatch, ba
     build.assert_not_called()
 
 
-@pytest.mark.parametrize('backend', ['dma', 'm5ops'])
+@pytest.mark.parametrize('backend', ['dma'])
 def test_driver_backends_reject_readiness_before_building(tmp_path, monkeypatch, backend):
     monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
     atomic_json(tmp_path / 'request.json', dict(readiness_checkpoint=True,
@@ -95,6 +95,19 @@ def test_driver_backends_reject_readiness_before_building(tmp_path, monkeypatch,
         with pytest.raises(ValueError, match='requires a fresh boot'):
             prepare(tmp_path)
     identity.assert_not_called()
+    build.assert_not_called()
+
+
+def test_m5ops_readiness_reaches_source_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv('CHIMAERA_REPO', str(tmp_path))
+    atomic_json(tmp_path / 'request.json', dict(readiness_checkpoint=True,
+        config=dict(ramulator_config='memory.json',
+                    fixed=dict(transport_backend='m5ops', middleware_transport='fastdds'))))
+    with patch('pipeline.source_identity', side_effect=RuntimeError('source validation')) as identity, \
+            patch('images.build') as build:
+        with pytest.raises(RuntimeError, match='source validation'):
+            prepare(tmp_path)
+    identity.assert_called_once()
     build.assert_not_called()
 
 

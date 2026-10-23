@@ -21,7 +21,7 @@ def prepare(directory):
     driver_backend = backend in ('dma', 'm5ops')
     label = 'DMA' if backend == 'dma' else 'm5ops'
     module_field = 'm5_module' if backend == 'm5ops' else 'dma_module'
-    if driver_backend and checkpoint_mode:
+    if backend == 'dma' and checkpoint_mode:
         raise ValueError(label + ' requires a fresh boot; readiness checkpoints are not supported')
     if backend == 'm5ops' and fixed.get('middleware_transport', 'bridge') != 'fastdds':
         raise ValueError('m5ops requires Fast DDS middleware routing')
@@ -110,6 +110,13 @@ def prepare(directory):
         disk, kernel = readiness / 'guest.img', readiness / 'kernel'
     else:
         disk, kernel = ensure_assets(root, directory, base_id, request.get('disk'), guest_kernel)
+    if readiness:
+        for field, name in (('m5_module', 'chimaera_m5.ko'), ('dma_module', 'chimaera_dma.ko')):
+            if config.get('fixed', {}).get(field):
+                if not (readiness / name).is_file():
+                    raise ValueError('Readiness assets lack the frozen transport module: ' + name)
+                config['fixed'][field] = str(readiness / name)
+        atomic_json(directory / 'experiment.json', config)
     driver_boot = None
     if driver_backend and not calibration:
         from kernel_assets import smoke
