@@ -142,3 +142,141 @@ def test_selected_cleanup_completes_before_unregistering(controller):
     finish_jobs(controller)
     assert calls == [('m0', {'supervisor': True, 'images': True})]
     assert controller.store.get('machines', 'm0') is None
+
+
+def local_controller(root):
+    return dict(Id='controller', Name='chimaera-orchestrator-controller-1',
+                Config={'Labels': {'com.docker.compose.service': 'controller',
+                                  'com.docker.compose.project.working_dir': str(root / 'orchestrator')}},
+                Mounts=[dict(Source=str(root), Destination='/repo', RW=False)])
+
+
+def test_controller_host_cleanup_keeps_control_plane_and_collected_results(tmp_path):
+    data = tmp_path / '.chimaera-orchestrator'
+    experiment_files = data / 'experiments/e1'
+    experiment_files.mkdir(parents=True)
+    (experiment_files / 'worker.log').write_text('remote working log')
+    assets = data / 'assets'
+    assets.mkdir()
+    guest = assets / 'ball-catching-generated.img'
+    guest.write_text('generated guest')
+    results = tmp_path / 'controller-volume/results/e1'
+    results.mkdir(parents=True)
+    (results / 'worker.log').write_text('collected result')
+    control = local_controller(tmp_path)
+    control['Mounts'].append(dict(Source=str(results.parent.parent), Destination='/data', RW=True))
+    dashboard = dict(Id='dashboard', Name='chimaera-orchestrator-dashboard-1', Mounts=[])
+    supervisor = dict(Id='supervisor', Name='chimaera-supervisor',
+                      Mounts=[dict(Source=str(tmp_path), Destination=str(tmp_path))])
+    calls = []
+    def docker(argv, **kwargs):
+        calls.append(argv)
+        if argv[:3] == ['docker', 'ps', '-aq']:
+            return 'controller dashboard supervisor'
+        if argv[:2] == ['docker', 'inspect']:
+            return json.dumps([control, dashboard, supervisor])
+        return ''
+    with patch('removal.run', side_effect=docker):
+        remove(dict(repo=str(tmp_path)), {'supervisor': True, 'experiment_data': True,
+                                         'guest_assets': True, 'images': True})
+    assert not experiment_files.exists()
+    assert not guest.exists()
+    assert (results / 'worker.log').read_text() == 'collected result'
+    assert [argv for argv in calls if argv[:2] == ['docker', 'rm']] == [['docker', 'rm', '-f', 'supervisor']]
+
+
+@pytest.mark.parametrize('change', ['other_service', 'other_checkout', 'writable', 'direct_experiments'])
+def test_controller_mount_exception_does_not_exempt_other_consumers(tmp_path, change):
+    directory = tmp_path / '.chimaera-orchestrator/experiments/e1'
+    directory.mkdir(parents=True)
+    (directory / 'worker.log').write_text('keep')
+    control = local_controller(tmp_path)
+    labels = control['Config']['Labels']
+    mount = control['Mounts'][0]
+    if change == 'other_service':
+        labels['com.docker.compose.service'] = 'analysis'
+    elif change == 'other_checkout':
+        labels['com.docker.compose.project.working_dir'] = '/different/orchestrator'
+    elif change == 'writable':
+        mount['RW'] = True
+    else:
+        mount['Source'] = str(directory)
+    calls = []
+    def docker(argv, **kwargs):
+        calls.append(argv)
+        return 'controller' if argv[:3] == ['docker', 'ps', '-aq'] else json.dumps([control])
+    with patch('removal.run', side_effect=docker), pytest.raises(ValueError, match='mounted by another'):
+        remove(dict(repo=str(tmp_path)), {'supervisor': True, 'experiment_data': True})
+    assert (directory / 'worker.log').read_text() == 'keep'
+    assert not any(argv[:2] == ['docker', 'rm'] for argv in calls)
+
+
+def test_controller_direct_asset_mount_stays_protected(tmp_path):
+    assets = tmp_path / '.chimaera-orchestrator/assets'
+    assets.mkdir(parents=True)
+    mounted = assets / 'ball-catching-mounted.img'
+    mounted.write_text('keep')
+    unused = assets / 'ball-catching-unused.img'
+    unused.write_text('delete')
+    control = local_controller(tmp_path)
+    control['Mounts'].append(dict(Source=str(mounted), Destination='/guest.img', RW=False))
+    def docker(argv, **kwargs):
+        return 'controller' if argv[:3] == ['docker', 'ps', '-aq'] else json.dumps([control])
+    with patch('removal.run', side_effect=docker):
+        remove(dict(repo=str(tmp_path)), {'supervisor': True, 'guest_assets': True})
+    assert mounted.exists()
+    assert not unused.exists()
+
+
+@pytest.mark.parametrize('read_only', [True, False])
+def test_host_filesystem_browser_only_pins_files_when_writable(tmp_path, read_only):
+    directory = tmp_path / '.chimaera-orchestrator/experiments/e1'
+    directory.mkdir(parents=True)
+    guest = tmp_path / '.chimaera-orchestrator/assets/ball-catching-generated.img'
+    guest.parent.mkdir()
+    guest.write_text('guest')
+    viewer = dict(Id='viewer', Mounts=[dict(Source='/', Destination='/host', RW=not read_only)])
+    def docker(argv, **kwargs):
+        return 'viewer' if argv[:3] == ['docker', 'ps', '-aq'] else json.dumps([viewer])
+    with patch('removal.run', side_effect=docker):
+        if read_only:
+            remove(dict(repo=str(tmp_path)), {'supervisor': True, 'experiment_data': True, 'guest_assets': True})
+            assert not directory.exists() and not guest.exists()
+        else:
+            with pytest.raises(ValueError, match='mounted by another container: /'):
+                remove(dict(repo=str(tmp_path)), {'supervisor': True, 'experiment_data': True, 'guest_assets': True})
+            assert directory.exists() and guest.exists()
+
+
+def test_podman_image_cleanup_handles_lowercase_fields_and_preserves_controller_images(tmp_path):
+    images = [dict(repository='localhost/chimaera', tag='orchestrator-app'),
+              dict(repository='localhost/chimaera-supervisor', tag='local'),
+              dict(repository='localhost/chimaera-orchestrator-controller', tag='latest'),
+              dict(repository='localhost/chimaera-orchestrator-dashboard', tag='latest'),
+              dict(repository='registry.example/chimaera', tag='orchestrator-app')]
+    calls = []
+    def docker(argv, **kwargs):
+        calls.append(argv)
+        if argv[:3] == ['docker', 'image', 'ls']:
+            return '\n'.join(json.dumps(image) for image in images)
+        return ''
+    with patch('removal.run', side_effect=docker):
+        remove(dict(repo=str(tmp_path)), {'supervisor': True, 'images': True})
+    assert [argv for argv in calls if argv[:3] == ['docker', 'image', 'rm']] == [
+        ['docker', 'image', 'rm', 'localhost/chimaera-supervisor:local', 'localhost/chimaera:orchestrator-app']]
+
+
+def test_podman_tracked_image_ids_without_sha_prefix_are_removed(tmp_path):
+    assets = tmp_path / '.chimaera-orchestrator/assets'
+    assets.mkdir(parents=True)
+    image = 'sha256:' + 'a' * 64
+    marker = assets / ('image-' + 'a' * 64 + '.json')
+    marker.write_text(json.dumps(dict(image_id=image)))
+    calls = []
+    def docker(argv, **kwargs):
+        calls.append(argv)
+        return 'a' * 64 if argv == ['docker', 'image', 'ls', '-q', '--no-trunc'] else ''
+    with patch('removal.run', side_effect=docker):
+        remove(dict(repo=str(tmp_path)), {'supervisor': True, 'images': True})
+    assert ['docker', 'image', 'rm', image] in calls
+    assert not marker.exists()

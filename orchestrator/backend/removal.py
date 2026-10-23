@@ -25,6 +25,29 @@ def run(argv, **kwargs):
     return result.stdout
 
 
+def protected_mounts(containers, root, excluded):
+    """The controller reads source from /repo; its durable results live in /data."""
+    for container in containers:
+        if container in excluded:
+            continue
+        labels = container.get('Config', {}).get('Labels') or {}
+        for mount in container.get('Mounts', []):
+            if not mount.get('Source'):
+                continue
+            controller_source = (
+                labels.get('com.docker.compose.service') == 'controller'
+                and labels.get('com.docker.compose.project.working_dir') == str(root / 'orchestrator')
+                and mount['Source'] == str(root)
+                and mount.get('Destination') == '/repo'
+                and mount.get('RW') is False
+            )
+            # A read-only host filesystem view (e.g. a disk usage browser) is
+            # observational; it must not pin every generated file on the host.
+            host_view = mount['Source'] == '/' and mount.get('RW') is False
+            if not controller_source and not host_view:
+                yield Path(mount['Source']).resolve()
+
+
 def remove(machine, cleanup):
     validate_cleanup(cleanup)
     root = Path(machine['repo'])
@@ -36,7 +59,7 @@ def remove(machine, cleanup):
             raise ValueError('Cleanup path is a symlink: ' + str(path))
     ids = run(['docker', 'ps', '-aq']).split()
     containers = json.loads(run(['docker', 'inspect', *ids])) if ids else []
-    supervisor = next((c for c in containers if c.get('Name') == '/chimaera-supervisor'), None)
+    supervisor = next((c for c in containers if c.get('Name', '').lstrip('/') == 'chimaera-supervisor'), None)
     if supervisor and not any(m.get('Source') == str(root) and m.get('Destination') == str(root)
                               for m in supervisor.get('Mounts', [])):
         raise ValueError('The supervisor belongs to a different repository')
@@ -49,10 +72,11 @@ def remove(machine, cleanup):
     if cleanup.get('experiment_data'):
         experiments = data / 'experiments'
         protected = [Path(p).resolve() for p in (machine.get('disk'), machine.get('kernel')) if p]
-        protected += [Path(m['Source']).resolve() for c in containers if c not in owned and c != supervisor
-                      for m in c.get('Mounts', []) if m.get('Source')]
-        if any(p.is_relative_to(experiments.resolve()) or experiments.resolve().is_relative_to(p) for p in protected):
-            raise ValueError('Experiment files contain a configured asset or are mounted by another container')
+        protected += list(protected_mounts(containers, root, [*owned, supervisor]))
+        blocking = [str(p) for p in protected if p.is_relative_to(experiments.resolve()) or experiments.resolve().is_relative_to(p)]
+        if blocking:
+            raise ValueError('Experiment files contain a configured asset or are mounted by another container: '
+                             + ', '.join(sorted(set(blocking))))
     if cleanup.get('supervisor') and supervisor:
         run(['docker', 'rm', '-f', supervisor['Id']], timeout=60)
     if cleanup.get('experiment_data'):
@@ -80,10 +104,15 @@ def remove(machine, cleanup):
         tags = set()
         for line in listing.splitlines():
             item = json.loads(line)
-            if item['Repository'] == 'chimaera' and item['Tag'].startswith(('sdk-', 'ball-', 'transfer-', 'orchestrator-')):
-                tags.add('chimaera:' + item['Tag'])
-            if item['Repository'] == 'chimaera-supervisor' and item['Tag'] == 'local':
-                tags.add('chimaera-supervisor:local')
+            # Podman's Docker-compatible CLI uses lowercase fields and qualifies
+            # locally built repositories with localhost/.
+            repository = item.get('Repository', item.get('repository', ''))
+            tag = item.get('Tag', item.get('tag', ''))
+            local_repository = repository.removeprefix('localhost/')
+            if local_repository == 'chimaera' and tag.startswith(('sdk-', 'ball-', 'transfer-', 'orchestrator-')):
+                tags.add(repository + ':' + tag)
+            if local_repository == 'chimaera-supervisor' and tag == 'local':
+                tags.add(repository + ':' + tag)
         if tags:
             # Docker refuses images in use. Never force deletion or prune the host.
             run(['docker', 'image', 'rm', *sorted(tags)], timeout=600)
@@ -91,17 +120,17 @@ def remove(machine, cleanup):
             image = json.loads(marker.read_text())['image_id']
             if not re.fullmatch(r'sha256:[0-9a-f]{64}', image):
                 raise ValueError('Invalid tracked image ID')
-            present = run(['docker', 'image', 'ls', '-q', '--no-trunc']).split()
-            if image in present:
+            present = {value.removeprefix('sha256:') for value in
+                       run(['docker', 'image', 'ls', '-q', '--no-trunc']).split()}
+            if image.removeprefix('sha256:') in present:
                 run(['docker', 'image', 'rm', image], timeout=120)
             marker.unlink()
         for name in ('current-images.json', 'kernel-builder.json'):
             (assets / name).unlink(missing_ok=True)
     if cleanup.get('guest_assets'):
         protected = [Path(p).resolve() for p in (machine.get('disk'), machine.get('kernel')) if p]
-        protected += [Path(m['Source']).resolve() for c in containers
-                      if not (cleanup.get('experiment_data') and c in owned) and c != supervisor
-                      for m in c.get('Mounts', []) if m.get('Source')]
+        excluded = [supervisor, *(owned if cleanup.get('experiment_data') else [])]
+        protected += list(protected_mounts(containers, root, excluded))
         for path in [*assets.glob('ball-catching-*.img'), *assets.glob('kernel-*')]:
             if path.is_symlink() or not (path.suffix == '.img' or re.fullmatch(r'kernel-[0-9a-f]{64}', path.name)):
                 continue

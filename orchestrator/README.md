@@ -644,3 +644,9 @@ Small supervisor release markers remain to prevent old work from restarting.
 If cleanup fails, the machine stays registered with an error. Completed cleanup
 steps cannot be undone; retry removal after resolving the error, or unregister
 without further cleanup. Removal resumes after a controller restart.
+
+A machine may also host the orchestrator. Cleanup preserves its controller,
+dashboard, and controller results volume. The controller's read-only source mount
+and read-only host filesystem views (such as disk usage browsers) do not pin
+remote working files; direct asset mounts and writable mounts remain protected.
+Removal supports both Docker and Podman's Docker-compatible CLI.
