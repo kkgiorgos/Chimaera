@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;color:var(--foreground,#182132);font-family:var(--font-sans,system-ui);font-size:14px;line-height:1.5}
+p{margin:0 0 12px}.intro{font-size:19px;line-height:1.35;font-weight:600}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:16px 0}
+button{font:inherit;border:1px solid var(--border,#cbd5e1);color:var(--muted-foreground,#566176);background:transparent;border-radius:8px;padding:8px 12px;cursor:pointer}
+button[aria-selected=true]{color:var(--primary-foreground,#fff);background:var(--primary,#344bb3);border-color:var(--primary,#344bb3)}
+button:focus-visible{outline:2px solid var(--ring,#697cce);outline-offset:3px}
+.caption{color:var(--muted-foreground,#566176);font-size:12px;margin-bottom:8px}
+.flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.node{position:relative;border:1px solid var(--border,#cbd5e1);border-radius:var(--radius,8px);padding:16px;min-height:126px;background:var(--card,#f5f7fa)}
+.node:not(:last-child):after{content:"→";position:absolute;right:-12px;top:48px;color:var(--muted-foreground,#566176);font-size:14px}
+.node b{display:block;font-size:13px;line-height:1.3;margin-bottom:7px}.node span{display:block;font-size:12px;color:var(--muted-foreground,#566176);line-height:1.45}
+.note{padding:16px;border-radius:var(--radius,8px);background:var(--secondary,#eef1f6);margin:12px 0}.note strong{display:block;margin-bottom:3px}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border,#cbd5e1)}
+.facts b{display:block;font-size:15px}.facts span{font-size:12px;color:var(--muted-foreground,#566176)}
+.source{font-size:12px;color:var(--muted-foreground,#566176);margin-top:14px}.source a{color:inherit;text-underline-offset:3px}
+@media(max-width:580px){.flow{grid-template-columns:1fr;gap:9px}.node{min-height:0;padding:16px}.node:not(:last-child):after{display:none}.node b{margin:0 0 3px}.facts{grid-template-columns:1fr;gap:9px}.intro{font-size:18px}}
+</style></head><body>
+<p class="intro">Protect small transfers at every shared stage.</p>
+<p>Extra buffer slots do not let a control message pass an active bulk transfer.</p>
+<div class="tabs" role="tablist" aria-label="Bridge architectures">
+<button role="tab" id="current-tab" aria-controls="architecture" aria-selected="true" data-mode="current">Current bridge</button>
+<button role="tab" id="lanes-tab" aria-controls="architecture" aria-selected="false" data-mode="lanes">Independent lanes</button>
+<button role="tab" id="m5-tab" aria-controls="architecture" aria-selected="false" data-mode="m5">DDS + m5ops</button>
+</div>
+<div id="architecture" role="tabpanel" aria-labelledby="current-tab" tabindex="0">
+<p class="caption" id="caption"></p><div class="flow" id="flow"></div><div class="note"><strong id="point"></strong><span id="detail"></span></div>
+</div>
+<div class="facts"><div><b>1 MiB + 64 B</b><span>Production-router structural probe</span></div><div><b>9 / 9 checks pass</b><span>Existing transport tests</span></div><div><b>Capacity unmeasured</b><span>No new simulation or latency result</span></div></div>
+<p class="source">Source: checkout 912ae01; retained probe and investigation in the repository. Functional memory semantics: <a href="https://www.gem5.org/documentation/general_docs/memory_system/" target="_blank" rel="noreferrer">gem5 documentation</a>.</p>
+<script>
+const modes={
+current:{caption:"Verified source behavior · DMA + custom DDS",nodes:[
+["DDS sender","One participant socket; complete-packet send lock."],
+["Local router","Independent clients progress; each stream stays FIFO."],
+["Controller + mailbox","One FIFO; later controls follow the bulk head."],
+["gem5 DMA","One active RX and TX; shared memory-request queue."],
+["DDS receiver","One reader; synchronous RTPS processing."]
+],point:"Some concurrency exists, but it does not span the complete path.",detail:"The probe confirms progress across independent sockets. Different channels on the same socket still wait behind its large packet. DMA readiness is already interrupt-driven."},
+lanes:{caption:"Proposed experiment · retain modeled DMA",nodes:[
+["DDS endpoint lanes","Separate control / bulk sending and receiving service."],
+["Independent IPC","Separate streams; bounded worker service."],
+["Reserved capacity","Separate queues, RX credits and completions."],
+["Fair DMA issue","Concurrent state; bounded bulk work below the scheduler."],
+["DDS delivery","Keep per-flow order and protect control service."]
+],point:"A small transfer must remain serviceable while bulk is active.",detail:"Do not queue every image page into the shared DMA port in advance. Reserve control resources and a minimum bulk share. Accept a throughput gain only if control tails and deadline misses also pass."},
+m5:{caption:"Proposed second experiment · functional payload transport",nodes:[
+["DDS transport hook","Direct bounded SUBMITV from serialized RTPS buffers."],
+["gem5 lane engine","Versioned descriptors; causal boundary admission."],
+["Registered RX buffers","Functional coherent writes; explicit ownership."],
+["Linux notification","Small interrupt endpoint wakes a waiting fd."],
+["DDS receiver","Reap batch → OnDataReceived → release buffers."]
+],point:"Remove payload DMA and the guest coordinator/socket handoff.",detail:"Functional copies avoid modeled DMA transfer time but still cost host work. Retain an OS-aware notification path; m5_quiesce suspends a CPU context, not just a Linux task. This architecture is not implemented or benchmarked."}
+};
+function select(mode){
+const item=modes[mode];
+document.querySelectorAll('[role=tab]').forEach(button=>button.setAttribute('aria-selected',String(button.dataset.mode===mode)));
+document.getElementById('architecture').setAttribute('aria-labelledby',mode+'-tab');
+document.getElementById('caption').textContent=item.caption;
+const flow=document.getElementById('flow');flow.replaceChildren();
+for(const [title,body] of item.nodes){const node=document.createElement('div');node.className='node';const b=document.createElement('b');b.textContent=title;const span=document.createElement('span');span.textContent=body;node.append(b,span);flow.append(node)}
+document.getElementById('point').textContent=item.point;document.getElementById('detail').textContent=item.detail;
+}
+document.querySelectorAll('[role=tab]').forEach(button=>{
+button.addEventListener('click',()=>select(button.dataset.mode));
+button.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const tabs=[...document.querySelectorAll('[role=tab]')];let i=tabs.indexOf(button);i=event.key==='Home'?0:event.key==='End'?tabs.length-1:(i+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[i].focus();select(tabs[i].dataset.mode)});
+});
+select('current');
+console.assert(document.querySelectorAll('.node').length===5,'Five stages expected');
+select('lanes');console.assert(document.getElementById('lanes-tab').getAttribute('aria-selected')==='true','Lane tab must select');
+select('m5');console.assert(document.getElementById('m5-tab').getAttribute('aria-selected')==='true','M5 tab must select');
+select('current');
+</script></body></html>

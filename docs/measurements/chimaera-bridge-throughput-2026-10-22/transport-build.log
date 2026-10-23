@@ -1,0 +1,58 @@
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Looking for C++ include pthread.h
+-- Looking for C++ include pthread.h - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /tmp/transport-build
+[  6%] Building CXX object CMakeFiles/gem5_host.dir/src/host_transport.cpp.o
+[  6%] Building CXX object CMakeFiles/gem5_guest.dir/src/guest_transport.cpp.o
+[  9%] Linking CXX static library libgem5_guest.a
+[  9%] Built target gem5_guest
+[ 12%] Building CXX object CMakeFiles/message_tests.dir/tests/message_tests.cpp.o
+[ 16%] Linking CXX static library libgem5_host.a
+[ 16%] Built target gem5_host
+[ 19%] Building CXX object CMakeFiles/dma_protocol_tests.dir/tests/dma_protocol_tests.cpp.o
+[ 22%] Linking CXX executable message_tests
+[ 22%] Built target message_tests
+[ 25%] Building CXX object CMakeFiles/mailbox_tests.dir/tests/mailbox_tests.cpp.o
+[ 29%] Linking CXX executable mailbox_tests
+[ 29%] Built target mailbox_tests
+[ 32%] Linking CXX executable dma_protocol_tests
+[ 35%] Building CXX object CMakeFiles/controller_protocol_tests.dir/tests/controller_protocol_tests.cpp.o
+[ 35%] Built target dma_protocol_tests
+[ 38%] Building CXX object CMakeFiles/stream_batch_tests.dir/tests/stream_batch_tests.cpp.o
+[ 41%] Linking CXX executable stream_batch_tests
+[ 45%] Linking CXX executable controller_protocol_tests
+[ 45%] Built target controller_protocol_tests
+[ 45%] Built target stream_batch_tests
+[ 51%] Building CXX object CMakeFiles/guest_m5ops_tests.dir/tests/guest_m5ops_tests.cpp.o
+[ 51%] Building CXX object CMakeFiles/guest_m5ops_tests.dir/src/guest_transport.cpp.o
+[ 54%] Building CXX object CMakeFiles/guest_m5ops_tests.dir/src/gem5_guest_controller.cpp.o
+[ 58%] Linking CXX executable guest_m5ops_tests
+[ 58%] Built target guest_m5ops_tests
+[ 64%] Building CXX object CMakeFiles/gem5_host_controller.dir/src/gem5_host_controller.cpp.o
+[ 64%] Building CXX object CMakeFiles/gem5_guest_controller.dir/src/gem5_guest_controller.cpp.o
+[ 67%] Building CXX object CMakeFiles/gem5_guest_controller.dir/src/dma_guest_controller.cpp.o
+[ 70%] Building CXX object CMakeFiles/gem5_host_controller.dir/src/gem5_timing_controller.cpp.o
+[ 74%] Building CXX object CMakeFiles/gem5_host_controller.dir/src/dma_host_controller.cpp.o
+[ 77%] Linking CXX static library libgem5_guest_controller.a
+[ 77%] Built target gem5_guest_controller
+[ 80%] Building CXX object CMakeFiles/dma_guest_tests.dir/tests/dma_guest_tests.cpp.o
+[ 83%] Linking CXX static library libgem5_host_controller.a
+[ 83%] Built target gem5_host_controller
+[ 87%] Building CXX object CMakeFiles/host_controller_tests.dir/tests/host_controller_tests.cpp.o
+[ 90%] Linking CXX executable dma_guest_tests
+[ 90%] Built target dma_guest_tests
+[ 93%] Building CXX object CMakeFiles/dma_host_tests.dir/tests/dma_host_tests.cpp.o
+[ 96%] Linking CXX executable host_controller_tests
+[ 96%] Built target host_controller_tests
+[100%] Linking CXX executable dma_host_tests
+[100%] Built target dma_host_tests

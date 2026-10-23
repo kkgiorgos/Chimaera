@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import runpy
 import struct
+import subprocess
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -39,7 +40,7 @@ def test_kernel_recipe_builds_selected_driver_against_full_pinned_tree(tmp_path,
     required = ('MODULES', 'MODVERSIONS', 'ATA_PIIX', 'EXT4_FS', 'DEVTMPFS', 'DEVMEM', 'SERIAL_8250_CONSOLE')
     (paths['/recipe'] / 'config.fragment').write_text(''.join(f'CONFIG_{option}=y\n' for option in required))
     name = 'chimaera_m5' if backend == 'm5ops' else 'chimaera_dma'
-    (paths['/driver'] / 'Makefile').write_text('obj-m += chimaera_dma.o\nobj-m += chimaera_m5.o\n')
+    (paths['/driver'] / 'Makefile').write_text((ROOT / 'gem5-transport/kernel/Makefile').read_text())
     (paths['/driver'] / (name + '.c')).write_text('driver source')
     paths['/gem5/include/gem5/chimaera_m5.h'].write_text('#define CHM5_ABI_VERSION 1\n')
     commands = []
@@ -57,7 +58,8 @@ def test_kernel_recipe_builds_selected_driver_against_full_pinned_tree(tmp_path,
         elif any(arg.startswith('M=') for arg in argv):
             driver = Path(next(arg[2:] for arg in argv if arg.startswith('M=')))
             assert (driver / (name + '.c')).is_file()
-            assert 'obj-m=' + name + '.o' in argv
+            assert 'CHIMAERA_MODULES=' + name + '.o' in argv
+            assert not any(arg.startswith('obj-m=') for arg in argv)
             assert any('vmlinux' in command and 'modules' in command for command in commands[:-1])
             (driver / (name + '.ko')).write_text('matching compiled module')
 
@@ -83,6 +85,24 @@ def test_kernel_recipe_builds_selected_driver_against_full_pinned_tree(tmp_path,
     assert metadata['kernel_release'] == metadata['vermagic'].split()[0]
     assert {path.name for path in paths['/output'].iterdir()} == {
         'kernel', name + '.ko', 'Module.symvers', 'kernel.config', 'build.json'}
+
+
+@pytest.mark.parametrize('selected', [None, 'chimaera_dma.o', 'chimaera_m5.o'])
+def test_driver_selection_allows_kbuild_to_rewrite_module_paths(tmp_path, selected):
+    # Exercise GNU make's command-line precedence, which a mocked build misses.
+    # Kbuild must be able to prefix obj-m with the external module directory.
+    makefile = tmp_path / 'Kbuild-test'
+    makefile.write_text(
+        'include $(src)/Makefile\n'
+        'obj-m := $(addprefix $(src)/,$(obj-m))\n'
+        'all:\n\t@echo $(obj-m)\n')
+    source = ROOT / 'gem5-transport/kernel'
+    command = ['make', '--no-print-directory', '-f', str(makefile), 'src=' + str(source)]
+    if selected:
+        command.append('CHIMAERA_MODULES=' + selected)
+    objects = subprocess.check_output(command, text=True).split()
+    expected = [selected] if selected else ['chimaera_dma.o', 'chimaera_m5.o']
+    assert objects == [str(source / name) for name in expected]
 
 
 @pytest.mark.parametrize('backend', ['dma', 'm5ops'])

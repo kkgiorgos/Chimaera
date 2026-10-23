@@ -50,8 +50,11 @@ def build(jobs, backend='dma'):
                 raise ValueError('Required guest kernel option missing: ' + option)
         # A full build supplies Module.symvers; modules_prepare alone does not.
         subprocess.run([*make, '-j' + str(jobs), 'vmlinux', 'modules'], check=True)
+        # Kbuild rewrites obj-m internally. A command-line obj-m override
+        # prevents those assignments and breaks external module target paths.
         subprocess.run([*make, '-j' + str(jobs), 'M=' + str(module),
-                        'GEM5_INCLUDE=/gem5/include', 'obj-m=' + driver_name + '.o', 'modules'], check=True)
+                        'GEM5_INCLUDE=/gem5/include',
+                        'CHIMAERA_MODULES=' + driver_name + '.o', 'modules'], check=True)
         release = subprocess.check_output([*make, '-s', 'kernelrelease'], text=True).strip()
         driver = module / (driver_name + '.ko')
         vermagic = subprocess.check_output(['modinfo', '-F', 'vermagic', str(driver)], text=True).strip()

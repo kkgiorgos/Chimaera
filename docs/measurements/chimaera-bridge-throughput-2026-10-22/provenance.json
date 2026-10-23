@@ -1,0 +1,42 @@
+{
+  "kind": "structural_diagnostic_and_existing_transport_tests",
+  "base_revision": "912ae01ec5b1f3bec0ef4427b8756d0a160b9f43",
+  "date": "2026-10-22",
+  "sdk_image": "sha256:c841ebb1000488c0010e21bc32a62b9d432b1a47e47f64e16501dc53bd66c8d4",
+  "source_mount": "read_only",
+  "network": "none",
+  "temporary_build_storage": "private_tmpfs_exec",
+  "compiler": "GNU C++ 11.4.0",
+  "fast_dds_version": "2.6.12",
+  "simulated_dma_executed": false,
+  "performance_measured": false,
+  "production_source_modified": false,
+  "existing_transport_tests_passed": 9,
+  "source_sha256": {
+    "profiling/chimaera_rewrite/head_of_line/CMakeLists.txt": "fefa486925223fd9bca0ddfc20876c85692f7d52bd1e2325e8ce1f50b90e6c62",
+    "profiling/chimaera_rewrite/head_of_line/probe.cpp": "a278505700242a8cac6ae6d85f1953e586435b3257e56d9a6908256f560be6fd",
+    "gem5-transport/include/chimaera/outgoing_queue.hpp": "148d136811f51bf6c9ff7415ed103c9e783dec1670ba7ba88783bfe14c024b3e",
+    "gem5-transport/include/chimaera/message.hpp": "f3d80f87c79c6730c026d1fa4f3f684e6eb385ed3bfa393f34bc11c4532a0300",
+    "gem5-transport/src/dma_protocol.hpp": "a8eb59a5e4acd696e84b0b71dc007ccd99f1ede87b06e32665e5d5da58627db8",
+    "gem5/include/gem5/chimaera_mailbox.hh": "49a7ca85061f148fe5ce43221843186f8a2ffff4995cbdff4c836826cb2b3d33",
+    "gem5/include/gem5/chimaera_dma.h": "613bdbac1c6a72909c4705a7f8ead62fa455559e12cb5e9240fdf51099747211",
+    "ros/chimaera_ros_ws/src/chimaera_dds_transport/src/router.cpp": "21dc63924d6d55868396690606e07ead18f840229eeca59243dc36f7278a1727",
+    "ros/chimaera_ros_ws/src/chimaera_dds_transport/src/protocol.hpp": "1b01116f47b22494a942e001cdfb96032f8ea4b6acceec44a3c267ed2a5e0e35",
+    "ros/chimaera_ros_ws/src/chimaera_dds_transport/include/chimaera_dds_transport/router.hpp": "62ccfe7b3321a365d5292e2af1651c96f28e8a6262d3322299fb4676165f307c",
+    "ros/chimaera_ros_ws/src/chimaera_dds_transport/include/chimaera_dds_transport/packet.hpp": "9cef98e5d0c0887288888bfb0c4397cee929d82a44409de94d597248838b4872",
+    "ros/chimaera_ros_ws/src/chimaera_dds_transport/include/chimaera_dds_transport/transport.hpp": "e047e2a5e370027c8de4895798811429447e44c76c9ecad3cce6b9bf390c3c9d"
+  },
+  "artifact_sha256": {
+    "README.md": "568386e087e0446db1bfcdf12fda72c436ab40fc26aa0de00d4e069bad48a668",
+    "architecture.html": "47dd2d147ee4ee0925cbd66ff2fdfad2a40950b6de173f86b3dbdc6fb385ebd9",
+    "probe-build.log": "7d345f27d5baeecc55d339ac2a92b732e9a8650770acab0b63c35c1860dd2d80",
+    "structural-probe.json": "c04fda17cd4735ce9bdb2c6688c7000f5e8d1e6e65988529788f93ddec3c8b12",
+    "transport-build.log": "67e1339d5f1c3b10816ea72622fa1cf3bb211255b986f42f2dd642f619f77c2b",
+    "transport-tests.log": "b013a070093f339fd6814e6c01cd1aca67b5d560bae2c1647d29f2aa43aa4e33"
+  },
+  "setup_attempts": [
+    "stdin_not_attached_no_script_ran",
+    "build_succeeded_but_tmpfs_noexec_prevented_execution",
+    "stdin_attached_and_executable_tmpfs_probe_and_tests_passed"
+  ]
+}
