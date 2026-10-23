@@ -9,7 +9,9 @@
 #include <vector>
 
 #include "dev/pci/device.hh"
+#include "base/statistics.hh"
 #include "gem5/chimaera_m5.h"
+#include "gem5/chimaera_m5_checkpoint.hh"
 #include "gem5/chimaera_mailbox.hh"
 #include "mem/port_proxy.hh"
 
@@ -22,42 +24,36 @@ namespace chimaera {
 // function supplies only registration and persistent Linux IRQ notifications.
 class ChimaeraM5 : public PciEndpoint
 {
-    using Frame = std::shared_ptr<const std::vector<uint8_t>>;
-    struct Packet {
-        Frame frame;
-        uint64_t epoch{}, sequence{};
-    };
-    enum class SlotState { posted, ready, loaned };
-    struct Slot {
-        std::vector<Addr> pages;
-        SlotState state{SlotState::posted};
-        uint32_t length{};
-        uint64_t epoch{}, sequence{};
-    };
-    struct Context {
-        uint64_t generation{}, notification{};
-        uint32_t process{}, lane{}, slotBytes{}, error{};
-        bool active{}, shutdown{}, waitAdmission{};
-        std::set<uint32_t> channels;
-        std::vector<Slot> slots;
-        std::deque<uint32_t> ready;
-        std::deque<Packet> pending;
-        size_t queuedBytes{};
-    };
-    struct Lane {
+    using Frame = chimaera_m5_checkpoint::Frame;
+    using Packet = chimaera_m5_checkpoint::Packet;
+    using SlotState = chimaera_m5_checkpoint::SlotState;
+    using Slot = chimaera_m5_checkpoint::Slot;
+    using Context = chimaera_m5_checkpoint::Context;
+    struct Lane : chimaera_m5_checkpoint::Lane {
         std::unique_ptr<chimaera_mailbox::Mailbox> h2g, g2h;
-        std::deque<Packet> outgoing, unmatched;
-        size_t outgoingBytes{}, unmatchedBytes{};
     };
     static std::vector<ChimaeraM5*> devices;
     const std::string h2gPath, g2hPath;
     const unsigned mailboxSlots, maxPending, ingressRecords;
     const size_t maxPendingBytes;
     PortProxy physical;
+    struct CopyStats : public statistics::Group {
+        explicit CopyStats(statistics::Group* parent);
+        statistics::Scalar copyCalls, copyBytes, fillCalls, fillBytes, faults;
+    } copyStats;
+    struct CheckpointStats : public statistics::Group {
+        explicit CheckpointStats(statistics::Group* parent);
+        statistics::Scalar restoredPeers, peerDisposalsQueued;
+    } checkpointStats;
     std::array<Context, CHM5_MAX_CONTEXTS> contexts;
     std::array<Lane, 2> lanes;
     uint64_t irqPending{}, nextGeneration{}, admissionEpoch{}, packetSequence{};
     bool irqAsserted{};
+    chimaera_rtps_rebind::Peers hostPeers;
+    bool rebindPending{}, retirementPrepared{};
+    std::deque<std::pair<unsigned, Packet>> peerRetirements;
+    std::set<std::pair<unsigned, uint64_t>> retirementOutstanding;
+    void retireHostPeers();
 
     bool validMemory(Addr, size_t) const;
     void updateInterrupt();

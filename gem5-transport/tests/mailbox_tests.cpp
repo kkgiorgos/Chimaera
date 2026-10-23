@@ -44,11 +44,16 @@ int main() {
         expect(consumer.peek(view) && view.data == received);
         expect(view.data[0] == 4 && view.data[2] == 6);
         expect(producer.write(nullptr, 0));
+        const auto snapshot = consumer.snapshot();
+        expect(snapshot.size() == 2 && snapshot[0] == std::vector<std::uint8_t>({4, 5, 6}) &&
+               snapshot[1].empty());
+        expect(consumer.peek(view) && view.data == received); // Snapshot returns no credit.
         expect(!producer.reserve(1));
         rejects([&] { producer.commit(1); });
         consumer.pop();
         expect(consumer.peek(view) && view.size == 0);
         consumer.pop();
+        expect(consumer.snapshot().empty());
 
         // Repeated full RGB frames across a real process boundary, with both
         // slots wrapping under concurrent publication and delayed consumption.
@@ -84,6 +89,7 @@ int main() {
         auto* length = reinterpret_cast<std::uint32_t*>(const_cast<std::uint8_t*>(view.data) - 64);
         *length = capacity + 1;
         rejects([&] { consumer.peek(view); });
+        rejects([&] { consumer.snapshot(); });
         *length = 0;
         consumer.pop();
     }

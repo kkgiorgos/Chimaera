@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 #include "gem5/chimaera_dma.h"
 
@@ -118,6 +119,20 @@ public:
         if (!peek(view)) throw std::runtime_error("mailbox empty");
         const auto consumed = header_->consumed.load(std::memory_order_relaxed);
         header_->consumed.store(consumed + 1, std::memory_order_release);
+    }
+    // Checkpoint caller must pause both producer and consumer. This does not
+    // consume credits or retain pointers into the external mapped ring.
+    std::vector<std::vector<std::uint8_t>> snapshot() const {
+        const auto consumed = header_->consumed.load(std::memory_order_acquire);
+        const auto written = header_->written.load(std::memory_order_acquire);
+        if (written - consumed > header_->slots) throw std::runtime_error("corrupt mailbox counters");
+        std::vector<std::vector<std::uint8_t>> result;
+        for (auto index = consumed; index != written; ++index) {
+            const auto size = *reinterpret_cast<const std::uint32_t*>(slot(index));
+            if (size > header_->capacity) throw std::runtime_error("corrupt mailbox payload");
+            result.emplace_back(slot(index) + 64, slot(index) + 64 + size);
+        }
+        return result;
     }
 };
 } // namespace chimaera_mailbox

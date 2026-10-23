@@ -23,6 +23,7 @@
 #define CHM5_FEATURE_LANES 4U
 #define CHM5_FEATURE_ADMISSION_IRQ 8U
 #define CHM5_FEATURE_RX_BATCH 16U
+#define CHM5_FEATURE_FUNCTIONAL_COPIES 32U
 
 #define CHM5_REG_MAGIC 0x00
 #define CHM5_REG_VERSION 0x04
@@ -83,6 +84,15 @@ struct chm5_bind {
 #define CHM5_DATA_POST_RX 4 /* initial posting is atomic with kernel REGISTER */
 #define CHM5_DATA_REAP_BATCH 5
 #define CHM5_DATA_RELEASE_BATCH 6
+/* Experimental modeling boundary: synchronous caller-virtual-memory operations.
+ * No context/registration is needed. bytes0 is the count (<= MAX_BYTES), address1
+ * the destination; COPY uses address0 as source and rejects overlapping ranges.
+ * FILL uses length as an unsigned byte. Other request fields are unused.
+ * These accesses are coherent/functional, excluding timed guest memory work.
+ * A failed operation may have written a destination prefix; it returns EFAULT.
+ * This is not a transport submission and does not change admission or credits. */
+#define CHM5_DATA_FUNCTIONAL_COPY 7
+#define CHM5_DATA_FUNCTIONAL_FILL 8
 
 /* Batch commands use address0/bytes0 for up to MAX_SLOTS completions.
  * REAP_BATCH writes the currently ready prefix and request.length=count, or

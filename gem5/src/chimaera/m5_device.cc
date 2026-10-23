@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -68,7 +69,7 @@ ChimaeraM5::ChimaeraM5(const Params& p)
     : PciEndpoint(p), h2gPath(p.h2g_mailbox), g2hPath(p.g2h_mailbox),
       mailboxSlots(p.mailbox_slots), maxPending(p.max_pending),
       ingressRecords(p.ingress_records), maxPendingBytes(p.max_pending_bytes),
-      physical(sys->getSystemPort(), sys->cacheLineSize())
+      physical(sys->getSystemPort(), sys->cacheLineSize()), copyStats(this), checkpointStats(this)
 {
     fatal_if(!mailboxSlots || mailboxSlots > 64 || !maxPending || maxPending > 1024 ||
         !ingressRecords || ingressRecords > 1024 || maxPendingBytes < CHM5_MAX_BYTES,
@@ -81,6 +82,19 @@ ChimaeraM5::~ChimaeraM5()
 {
     devices.erase(std::remove(devices.begin(), devices.end(), this), devices.end());
 }
+ChimaeraM5::CopyStats::CopyStats(statistics::Group* parent)
+    : statistics::Group(parent, "functionalCopies"),
+      ADD_STAT(copyCalls, statistics::units::Count::get(), "Host-executed middleware copy calls"),
+      ADD_STAT(copyBytes, statistics::units::Byte::get(), "Bytes copied without timed guest accesses"),
+      ADD_STAT(fillCalls, statistics::units::Count::get(), "Host-executed middleware fill calls"),
+      ADD_STAT(fillBytes, statistics::units::Byte::get(), "Bytes filled without timed guest accesses"),
+      ADD_STAT(faults, statistics::units::Count::get(), "Functional-copy memory faults; prefix may be written")
+{}
+ChimaeraM5::CheckpointStats::CheckpointStats(statistics::Group* parent)
+    : statistics::Group(parent, "checkpoint"),
+      ADD_STAT(restoredPeers, statistics::units::Count::get(), "Host DDS identities at restore"),
+      ADD_STAT(peerDisposalsQueued, statistics::units::Count::get(), "SPDP disposals queued before fresh ingress")
+{}
 
 bool ChimaeraM5::validMemory(Addr addr, size_t length) const
 {
@@ -322,6 +336,12 @@ void ChimaeraM5::flushOutgoing(unsigned lane)
     auto& l = lanes[lane];
     if (!l.g2h) return;
     unsigned count = 0;
+    while (!l.restoredEgress.empty() && count++ < ingressRecords) {
+        const auto& frame = *l.restoredEgress.front().frame;
+        if (!l.g2h->write(frame.data(), frame.size())) return;
+        l.restoredEgress.pop_front();
+    }
+    if (!l.restoredEgress.empty()) return;
     while (!l.outgoing.empty() && count++ < ingressRecords) {
         const auto& frame = *l.outgoing.front().frame;
         auto* target = l.g2h->reserve(frame.size());
@@ -354,17 +374,22 @@ void ChimaeraM5::ingress()
             if (!l.h2g) continue;
             for (unsigned count = 0; count < ingressRecords; ++count) {
                 chimaera_mailbox::Mailbox::View view{};
-                if (!l.h2g->peek(view)) break;
+                const bool restored = !l.restoredIngress.empty();
+                if (restored) {
+                    const auto& frame = *l.restoredIngress.front().frame;
+                    view = {frame.data(), frame.size()};
+                } else if (rebindPending || !l.h2g->peek(view)) break;
                 auto bytes = std::make_shared<std::vector<uint8_t>>(view.data, view.data + view.size);
                 if (!validFrame(*bytes, 1) || frameLane(*bytes) != lane || (*bytes)[32] == 1) {
-                    l.h2g->pop();
+                    if (restored) l.restoredIngress.pop_front(); else l.h2g->pop();
                     for (unsigned id = 0; id < contexts.size(); ++id)
                         if (contexts[id].active && contexts[id].lane == lane) fail(id, EPROTO);
                     continue;
                 }
                 const Packet packet{bytes, admissionEpoch, ++packetSequence};
                 if (!deliver(packet, lane, true)) break;
-                l.h2g->pop();
+                chimaera_rtps_rebind::remember(*bytes, hostPeers);
+                if (restored) l.restoredIngress.pop_front(); else l.h2g->pop();
             }
         } catch (const std::exception& e) {
             warn("ChimaeraM5 lane %u mailbox error: %s", lane, e.what());
@@ -372,7 +397,47 @@ void ChimaeraM5::ingress()
                 if (contexts[id].active && contexts[id].lane == lane) fail(id, EIO);
         }
     }
+    if (rebindPending) retireHostPeers();
     updateInterrupt();
+}
+
+void ChimaeraM5::retireHostPeers()
+{
+    // Finish the saved ingress prefix first. The disposal suffix then follows
+    // ready packets and outstanding loans on each participant's control FIFO.
+    for (const auto& lane : lanes)
+        if (!lane.restoredIngress.empty() || !lane.unmatched.empty()) return;
+    if (!retirementPrepared) {
+        retirementPrepared = true;
+        checkpointStats.restoredPeers = hostPeers.size();
+        for (unsigned id = 0; id < contexts.size(); ++id) {
+            const auto& context = contexts[id];
+            if (!context.active || context.shutdown || context.error || context.lane) continue;
+            const auto channel = chimaera_rtps_rebind::discovery_port(
+                context.channels, CHM5_APPLICATION_PORT_BIT);
+            if (!channel) continue;
+            for (const auto& [prefix, peer] : hostPeers) {
+                auto frame = chimaera_rtps_rebind::dispose(prefix, peer);
+                for (unsigned byte = 0; byte < 4; ++byte) {
+                    frame[28 + byte] = *channel >> (8 * byte);
+                    frame[36 + byte] = context.process >> (8 * byte);
+                }
+                frame[32] = 2;
+                peerRetirements.emplace_back(id, Packet{
+                    std::make_shared<const std::vector<uint8_t>>(std::move(frame)),
+                    admissionEpoch, ++packetSequence});
+            }
+        }
+    }
+    while (!peerRetirements.empty()) {
+        const auto& [id, packet] = peerRetirements.front();
+        if (!canQueue(contexts[id], packet.frame->size())) return;
+        queue(contexts[id], packet);
+        retirementOutstanding.emplace(id, packet.sequence);
+        ++checkpointStats.peerDisposalsQueued;
+        peerRetirements.pop_front();
+    }
+    rebindPending = false;
 }
 
 uint64_t ChimaeraM5::flush_egress()
@@ -388,7 +453,7 @@ uint64_t ChimaeraM5::flush_egress()
             l.g2h = std::make_unique<chimaera_mailbox::Mailbox>(
                 g2hPath + suffix, false, mailboxSlots);
         flushOutgoing(lane);
-        remaining += l.outgoing.size();
+        remaining += l.outgoing.size() + l.restoredEgress.size();
     }
     return remaining;
 }
@@ -463,8 +528,44 @@ uint64_t ChimaeraM5::invoke(ThreadContext* tc, bool data, uint64_t command, Addr
         request.length = CHM5_MAX_BYTES;
         request.slot = CHM5_MAX_SLOTS;
         request.status = CHM5_FEATURE_FUNCTIONAL | CHM5_FEATURE_PHYSICAL_RX |
-            CHM5_FEATURE_LANES | CHM5_FEATURE_ADMISSION_IRQ | CHM5_FEATURE_RX_BATCH;
+            CHM5_FEATURE_LANES | CHM5_FEATURE_ADMISSION_IRQ | CHM5_FEATURE_RX_BATCH |
+            CHM5_FEATURE_FUNCTIONAL_COPIES;
+        // During restore, application publishers stay paused until every
+        // disposal was processed and its RX loan returned by the DDS thread.
+        request.error = rebindPending || !retirementOutstanding.empty() ? EAGAIN : 0;
         return reply();
+    }
+    if (data && (command == CHM5_DATA_FUNCTIONAL_COPY || command == CHM5_DATA_FUNCTIONAL_FILL)) {
+        const auto count = request.bytes0;
+        const bool copy = command == CHM5_DATA_FUNCTIONAL_COPY;
+        if (count > CHM5_MAX_BYTES || (!copy && request.length > 255)) return errorResult(EINVAL);
+        if (!count) return 0;
+        const auto maximum = std::numeric_limits<Addr>::max();
+        if (request.address1 > maximum - count ||
+            (copy && request.address0 > maximum - count)) return errorResult(EFAULT);
+        if (copy && request.address0 < request.address1 + count &&
+            request.address1 < request.address0 + count) return errorResult(EINVAL);
+        // Bounded host scratch storage, independent of payload size. No guest
+        // address or borrowed buffer survives this handler, including on error.
+        std::array<uint8_t, 64 * 1024> scratch;
+        if (!copy) scratch.fill(static_cast<uint8_t>(request.length));
+        for (size_t offset = 0; offset < count;) {
+            const auto bytes = std::min<size_t>(scratch.size(), count - offset);
+            if ((copy && !caller.tryReadBlob(request.address0 + offset, scratch.data(), bytes)) ||
+                !caller.tryWriteBlob(request.address1 + offset, scratch.data(), bytes)) {
+                ++copyStats.faults;
+                return errorResult(EFAULT);
+            }
+            offset += bytes;
+        }
+        if (copy) {
+            ++copyStats.copyCalls;
+            copyStats.copyBytes += count;
+        } else {
+            ++copyStats.fillCalls;
+            copyStats.fillBytes += count;
+        }
+        return 0;
     }
     if (request.context >= contexts.size()) return errorResult(EINVAL);
     auto& c = contexts[request.context];
@@ -598,6 +699,8 @@ uint64_t ChimaeraM5::invoke(ThreadContext* tc, bool data, uint64_t command, Addr
                 return errorResult(ESTALE);
         }
         for (const auto& completion : completions)
+            retirementOutstanding.erase({request.context, completion.packet_sequence});
+        for (const auto& completion : completions)
             c.slots[completion.slot].state = SlotState::posted;
         fill(c);
         retryUnmatched(c.lane);
@@ -608,6 +711,7 @@ uint64_t ChimaeraM5::invoke(ThreadContext* tc, bool data, uint64_t command, Addr
             return errorResult(EINVAL);
         auto& slot = c.slots[request.slot];
         if (request.packet_sequence != slot.sequence) return errorResult(ESTALE);
+        retirementOutstanding.erase({request.context, request.packet_sequence});
         slot.state = SlotState::posted;
         fill(c);
         retryUnmatched(c.lane);
@@ -633,7 +737,8 @@ Tick ChimaeraM5::readDevice(PacketPtr packet)
     else if (offset == CHM5_REG_ADMISSION_EPOCH && packet->getSize() == 8) value = admissionEpoch;
     else if (offset == CHM5_REG_FEATURES && packet->getSize() == 4)
         value = CHM5_FEATURE_FUNCTIONAL | CHM5_FEATURE_PHYSICAL_RX |
-            CHM5_FEATURE_LANES | CHM5_FEATURE_ADMISSION_IRQ | CHM5_FEATURE_RX_BATCH;
+            CHM5_FEATURE_LANES | CHM5_FEATURE_ADMISSION_IRQ | CHM5_FEATURE_RX_BATCH |
+            CHM5_FEATURE_FUNCTIONAL_COPIES;
     else if (offset >= CHM5_CONTEXT_BASE) {
         const auto id = (offset - CHM5_CONTEXT_BASE) / CHM5_CONTEXT_STRIDE;
         const auto reg = (offset - CHM5_CONTEXT_BASE) % CHM5_CONTEXT_STRIDE;
@@ -677,12 +782,68 @@ Tick ChimaeraM5::writeConfig(PacketPtr packet)
     updateInterrupt();
     return delay;
 }
-void ChimaeraM5::serialize(CheckpointOut&) const
+void ChimaeraM5::serialize(CheckpointOut& cp) const
 {
-    fatal("ChimaeraM5 requires fresh boot and rebind; checkpoints are unsupported");
+    fatal_if(rebindPending || !retirementOutstanding.empty(), "Cannot checkpoint during ChimaeraM5 host rebind");
+    PciEndpoint::serialize(cp);
+    chimaera_m5_checkpoint::State state;
+    state.contexts = contexts;
+    state.irqPending = irqPending;
+    state.nextGeneration = nextGeneration;
+    state.admissionEpoch = admissionEpoch;
+    state.packetSequence = packetSequence;
+    state.irqAsserted = irqAsserted;
+    state.hostPeers = hostPeers;
+    for (unsigned index = 0; index < lanes.size(); ++index) {
+        const auto& lane = lanes[index];
+        auto& saved = state.lanes[index];
+        saved = lane;
+        // The host coordinator is blocked in BENCHMARK_CHECKPOINT and all
+        // simulated CPUs are drained. External ring snapshots are stable.
+        auto append = [](auto* mailbox, auto& queue) {
+            if (!mailbox) return;
+            for (auto& frame : mailbox->snapshot())
+                queue.push_back({std::make_shared<const std::vector<uint8_t>>(std::move(frame)), 0, 0});
+        };
+        append(lane.h2g.get(), saved.restoredIngress);
+        append(lane.g2h.get(), saved.restoredEgress);
+    }
+    std::ofstream output(CheckpointIn::dir() + name() + ".m5state", std::ios::binary);
+    fatal_if(!output, "Cannot open ChimaeraM5 checkpoint state");
+    try {
+        chimaera_m5_checkpoint::Archive archive(output);
+        chimaera_m5_checkpoint::transfer(archive, state,
+            {mailboxSlots, maxPending, ingressRecords, maxPendingBytes});
+    } catch (const std::exception& error) { fatal("ChimaeraM5 checkpoint: %s", error.what()); }
 }
-void ChimaeraM5::unserialize(CheckpointIn&)
+void ChimaeraM5::unserialize(CheckpointIn& cp)
 {
-    fatal("ChimaeraM5 requires fresh boot and rebind; checkpoint restore is unsupported");
+    PciEndpoint::unserialize(cp);
+    std::ifstream input(cp.getCptDir() + name() + ".m5state", std::ios::binary);
+    fatal_if(!input, "Missing ChimaeraM5 checkpoint state");
+    chimaera_m5_checkpoint::State state;
+    try {
+        chimaera_m5_checkpoint::Archive archive(input);
+        chimaera_m5_checkpoint::transfer(archive, state,
+            {mailboxSlots, maxPending, ingressRecords, maxPendingBytes});
+    } catch (const std::exception& error) { fatal("ChimaeraM5 restore: %s", error.what()); }
+    for (const auto& context : state.contexts)
+        for (const auto& slot : context.slots)
+            for (auto page : slot.pages)
+                fatal_if(!validMemory(page, CHM5_PAGE_BYTES), "Invalid restored ChimaeraM5 RX page");
+    contexts = std::move(state.contexts);
+    for (unsigned index = 0; index < lanes.size(); ++index) {
+        lanes[index].h2g.reset(); lanes[index].g2h.reset();
+        static_cast<chimaera_m5_checkpoint::Lane&>(lanes[index]) = std::move(state.lanes[index]);
+    }
+    irqPending = state.irqPending; nextGeneration = state.nextGeneration;
+    admissionEpoch = state.admissionEpoch; packetSequence = state.packetSequence;
+    irqAsserted = state.irqAsserted;
+    hostPeers = std::move(state.hostPeers);
+    checkpointStats.restoredPeers = hostPeers.size();
+    rebindPending = true; retirementPrepared = false; peerRetirements.clear(); retirementOutstanding.clear();
+    // PCI/interrupt-controller state restores the existing level. Do not post
+    // an extra interrupt during object reconstruction. ingress() reconnects
+    // to this run's fresh external rings at the next explicit boundary.
 }
 } } // namespace gem5::chimaera
