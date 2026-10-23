@@ -180,8 +180,11 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr geometry_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
+std::shared_ptr<rclcpp::Node> make_intercept() { return std::make_shared<Intercept>(); }
 }  // namespace ball_catching
+#ifndef BALL_CATCHING_COMPOSED
 int main(int argc, char ** argv)
 {
   return ball_catching::run<ball_catching::Intercept>(argc, argv);
 }
+#endif

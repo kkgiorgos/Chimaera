@@ -40,12 +40,23 @@ def start(context):
             Node(package='ball_catching_robot', executable='effort_control',
                  parameters=[{**common, 'control_hz': float(get('control_hz'))}],
                  output='screen')]
+    if get('composed').lower() == 'true':
+        nodes = [Node(package='ball_catching_robot', executable='robot_composed',
+                      parameters=[{**common, **calibration,
+                                   'camera_hz': float(get('camera_hz')),
+                                   'image_age_periods': float(get('image_age_periods')),
+                                   'image_diagnostics': get('image_diagnostics').lower() == 'true',
+                                   'control_hz': float(get('control_hz')),
+                                   'planner_hz': float(get('planner_hz')),
+                                   'plan_interval': float(get('plan_interval')),
+                                   'checkpoint_control': get('checkpoint_control').lower() == 'true'}], output='screen')]
     return [*nodes, *[RegisterEventHandler(OnProcessExit(target_action=node,
         on_exit=[EmitEvent(event=Shutdown(reason='Robot component exited'))])) for node in nodes]]
 
 
 def generate_launch_description():
     defaults = dict(robot_file='', output='', use_sim_time='true', control_hz='250',
+                    composed='false', checkpoint_control='false',
                     planner_hz='30', plan_interval='0.06',
                     camera_hz='90', image_age_periods='2',
                     image_diagnostics='false', record_telemetry='false',

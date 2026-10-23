@@ -91,10 +91,43 @@ class Recorder {
           recordingParameter<std::string>(*node, "gem5_time_origin_file", ""));
       }
     }
-    if (directory.empty()) return;
-    std::filesystem::create_directories(directory);
-    file_.open(std::filesystem::path(directory)/(name + ".jsonl"));
-    if (!file_) throw std::runtime_error("Cannot open robot recording output");
+    if (!directory.empty()) {
+      std::filesystem::create_directories(directory);
+      file_.open(std::filesystem::path(directory)/(name + ".jsonl"));
+      if (!file_) throw std::runtime_error("Cannot open robot recording output");
+    }
+    if (telemetry_) registry().push_back(this);
+  }
+  ~Recorder() {
+    auto & entries = registry();
+    entries.erase(std::remove(entries.begin(), entries.end(), this), entries.end());
+  }
+  // The composed executors must be stopped/joined before taking this snapshot.
+  static void checkpoint_watermarks(const std::string & path) {
+    std::ofstream output(path + ".tmp");
+    output << '{'; bool first = true;
+    for (const auto * recorder : registry()) {
+      if (!first) output << ',';
+      first = false;
+      output << '"' << recorder->name_ << "\":" << recorder->sequence_;
+    }
+    output << "}\n"; output.close();
+    if (!output) throw std::runtime_error("Cannot save checkpoint record counts");
+    std::filesystem::rename(path + ".tmp", path);
+  }
+  static bool subscribers_matched() {
+    for (const auto * recorder : registry())
+      // This benchmark has one journal consumer. A retained old reader would
+      // leave two matches and could later exhaust reliable writer history.
+      if (recorder->telemetry_->get_subscription_count() != 1) return false;
+    return true;
+  }
+  static void checkpoint_probe() {
+    // Metadata uses the real record writers, without consuming record sequences.
+    // A host receipt confirms the replacement reader knows each writer as well.
+    std_msgs::msg::String message;
+    message.data = "{\"checkpoint_probe\":\"chimaera-record-resume-v1\"}";
+    for (const auto * recorder : registry()) recorder->telemetry_->publish(message);
   }
   void write(std::initializer_list<std::pair<std::string, Field>> fields) {
     if (!file_.is_open() && !telemetry_) return;
@@ -137,6 +170,10 @@ class Recorder {
     json_object_put(record);
   }
  private:
+  static std::vector<Recorder *> & registry() {
+    static std::vector<Recorder *> entries;
+    return entries;
+  }
   std::ofstream file_;
   std::string name_;
   bool simulationTiming_{};

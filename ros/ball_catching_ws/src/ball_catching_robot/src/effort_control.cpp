@@ -146,8 +146,11 @@ private:
   rclcpp::Subscription<trajectory_msgs::msg::JointTrajectory>::SharedPtr targets_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
+std::shared_ptr<rclcpp::Node> make_effort_control() { return std::make_shared<EffortControl>(); }
 }  // namespace ball_catching
+#ifndef BALL_CATCHING_COMPOSED
 int main(int argc, char ** argv)
 {
   return ball_catching::run<ball_catching::EffortControl>(argc, argv);
 }
+#endif

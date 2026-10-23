@@ -237,8 +237,11 @@ private:
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr ready_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
+std::shared_ptr<rclcpp::Node> make_perception() { return std::make_shared<Perception>(); }
 }  // namespace ball_catching
+#ifndef BALL_CATCHING_COMPOSED
 int main(int argc, char ** argv)
 {
   return ball_catching::run<ball_catching::Perception>(argc, argv);
 }
+#endif
