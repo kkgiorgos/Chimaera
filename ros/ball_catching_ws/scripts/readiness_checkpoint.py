@@ -46,6 +46,15 @@ def freeze(root, identity, expected_groups):
         required = ('host-replay.bin', 'checkpoint-host-state', 'checkpoint-ready')
         if any(not (directory / name).is_file() for name in required):
             raise ValueError('Readiness checkpoint lacks synchronized host state')
+        if metadata.get('transport_backend') == 'm5ops':
+            if metadata.get('version') != 2 or not list((directory / 'cpt').glob('*.m5state')):
+                raise ValueError('m5ops readiness checkpoint lacks transport state')
+            required += ('host-commands.txt', 'host-commands.txt.tail',
+                         'guest_records.jsonl', 'gem5/checkpoint-record-counts.json')
+            if any(not (directory / name).is_file() for name in required):
+                raise ValueError('m5ops readiness checkpoint lacks its physics command prefix')
+        if metadata.get('transport_backend') == 'm5ops' and not records_drained(directory):
+            raise ValueError('m5ops readiness telemetry prefix has not drained')
         paths = [directory / name for name in (*required, 'checkpoint.json')]
         paths += [path for path in (directory / 'cpt').rglob('*') if path.is_file()]
         paths += sorted((directory / 'gem5').glob('chimaera-trace-*.jsonl'))
@@ -74,3 +83,32 @@ def validate(root, data, point, identity):
         if digest(directory / path) != expected:
             raise ValueError('Readiness checkpoint changed: ' + name)
     return directory
+
+
+def records_drained(directory):
+    """All paused application's completed records reached the host exactly once."""
+    directory = Path(directory)
+    counts = directory / 'gem5/checkpoint-record-counts.json'
+    if not counts.is_file():
+        return False
+    expected = json.loads(counts.read_text())
+    if (not isinstance(expected, dict) or any(name not in (
+            'perception', 'interception', 'control', 'control_timing') or
+            type(count) is not int or count < 0 for name, count in expected.items())):
+        raise ValueError('Invalid checkpoint record watermarks')
+    received = {name: 0 for name in expected}
+    path = directory / 'guest_records.jsonl'
+    if not path.is_file():
+        return False
+    with path.open() as stream:
+        for line in stream:
+            if not line.endswith('\n'):
+                return False  # A host callback is still flushing its last line.
+            row = json.loads(line)
+            name = row['stream']
+            if name not in received or row['sequence'] != received[name]:
+                raise ValueError('Checkpoint telemetry prefix contains a sequence gap')
+            received[name] += 1
+            if received[name] > expected[name]:
+                raise ValueError('Application produced records after its checkpoint watermark')
+    return received == expected

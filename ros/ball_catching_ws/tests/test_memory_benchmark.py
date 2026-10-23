@@ -9,9 +9,19 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from benchmark_metrics import memory_metrics, percentile, command_metrics
-from run_memory_suite import load_config, plan, routes, robot_command, native_trial
+from run_memory_suite import load_config, plan, routes, robot_command, native_trial, transport_summary
 
 WORKSPACE = Path(__file__).resolve().parents[1]
+
+
+def test_disabled_tracing_does_not_require_optional_postprocessor(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, 'chimaera_ros.tracing', None)
+    result = transport_summary(tmp_path, tmp_path / 'routes.json', .2, 1.7, enabled=False)
+    assert result['status'] == 'not_recorded'
+    assert result['enabled'] is False
+    assert result['streams'] == []
+    with pytest.raises(ModuleNotFoundError):
+        transport_summary(tmp_path, tmp_path / 'routes.json', .2, 1.7, enabled=True)
 
 
 def configuration(tmp_path):

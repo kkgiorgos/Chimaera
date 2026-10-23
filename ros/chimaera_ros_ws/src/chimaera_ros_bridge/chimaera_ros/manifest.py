@@ -109,7 +109,8 @@ def load(path):
     for key in ('dds_host_socket', 'dds_guest_socket'):
         if not Path(string(bridge[key])).is_absolute():
             raise ValueError(key + ' must be absolute')
-    if bridge['middleware_transport'] == 'fastdds' and bridge['checkpoint_control']:
+    if (bridge['middleware_transport'] == 'fastdds' and bridge['checkpoint_control'] and
+            bridge['transport_backend'] != 'm5ops'):
         raise ValueError('Fast DDS middleware routing currently requires a fresh boot')
     if bridge['transport_backend'] not in ('m5', 'dma', 'm5ops'):
         raise ValueError('transport_backend must be m5, dma or m5ops')
@@ -117,8 +118,8 @@ def load(path):
         raise ValueError('m5ops requires Fast DDS middleware routing')
     if type(bridge['dma_diagnostics']) is not bool:
         raise ValueError('dma_diagnostics must be boolean')
-    if bridge['transport_backend'] in ('dma', 'm5ops') and bridge['checkpoint_control']:
-        raise ValueError('DMA/m5ops requires a fresh boot; checkpointing is not supported')
+    if bridge['transport_backend'] == 'dma' and bridge['checkpoint_control']:
+        raise ValueError('DMA requires a fresh boot; checkpointing is not supported')
     for key in ('dma_device', 'dma_h2g', 'dma_g2h', 'm5_device'):
         if not Path(string(bridge[key])).is_absolute():
             raise ValueError(key + ' must be absolute')

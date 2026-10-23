@@ -26,6 +26,16 @@ SCRIPTS = WORKSPACE / 'scripts'
 GUEST_ROOT = '/opt/chimaera/ball_catching'
 
 
+def transport_summary(directory, routes_path, start, end, *, enabled):
+    if not enabled:
+        return dict(schema_version=1, status='not_recorded', enabled=False,
+                    clock='co-simulation', streams=[], files=[],
+                    start_seconds=start, end_seconds=end,
+                    scope='Transport tracing was explicitly disabled for this experiment.')
+    from chimaera_ros.tracing import summarize
+    return summarize(directory, routes_path, start, end)
+
+
 def write_json(path, value):
     """Atomic files let readers safely inspect the running suite."""
     path = Path(path)
@@ -82,6 +92,10 @@ def load_config(path, cpu_type=None):
     data['fixed'].setdefault('m5_module', '')
     data['fixed'].setdefault('middleware_transport', 'bridge')
     data['fixed'].setdefault('trace', True)
+    data['fixed'].setdefault('robot_execution', 'separate')
+    data['fixed'].setdefault('middleware_copy_mode', 'guest')
+    data['fixed'].setdefault('readiness_checkpoint', data['fixed']['transport_backend'] == 'm5')
+    data['fixed'].setdefault('checkpoint_readiness_cpu', 'detailed')
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
@@ -89,7 +103,8 @@ def load_config(path, cpu_type=None):
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
                   'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module',
-                  'middleware_transport', 'm5_module', 'trace'},
+                  'middleware_transport', 'm5_module', 'trace', 'robot_execution',
+                  'middleware_copy_mode', 'readiness_checkpoint', 'checkpoint_readiness_cpu'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -99,6 +114,19 @@ def load_config(path, cpu_type=None):
         if set(data[section]) != keys:
             raise ValueError(f'{section} fields must be: ' + ', '.join(sorted(keys)))
     fixed = data['fixed']
+    if fixed['checkpoint_readiness_cpu'] not in ('detailed', 'kvm'):
+        raise ValueError('checkpoint_readiness_cpu must be detailed or kvm')
+    if type(fixed['readiness_checkpoint']) is not bool:
+        raise ValueError('readiness_checkpoint must be boolean')
+    if fixed['readiness_checkpoint'] and fixed['transport_backend'] == 'dma':
+        raise ValueError('DMA readiness checkpoints are unsupported')
+    if fixed['robot_execution'] not in ('separate', 'composed'):
+        raise ValueError('robot_execution must be separate or composed')
+    if fixed['middleware_copy_mode'] not in ('guest', 'functional'):
+        raise ValueError('middleware_copy_mode must be guest or functional')
+    if fixed['middleware_copy_mode'] == 'functional' and (
+            fixed['transport_backend'] != 'm5ops' or fixed['middleware_transport'] != 'fastdds'):
+        raise ValueError('Functional middleware copies require DDS+m5ops')
     if fixed['middleware_transport'] not in ('bridge', 'fastdds'):
         raise ValueError('middleware_transport must be bridge or fastdds')
     if fixed['transport_backend'] not in ('m5', 'dma', 'm5ops'):
@@ -296,8 +324,15 @@ def session(output, data, point, calibration=None):
     from ament_index_python.packages import get_package_prefix
     fixed = data['fixed']
     robot = robot_command(point, calibration, fixed['image_age_periods'], fixed['image_diagnostics'])
+    robot.append('composed:=' + str(fixed.get('robot_execution') == 'composed').lower())
     guest_env = dict(LD_LIBRARY_PATH=GUEST_ROOT + '/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu',
                      RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+    if fixed['transport_backend'] == 'm5ops':
+        # The helper is scoped to the robot process. Host processes, the graph
+        # probe and the metadata coordinator must never execute guest copy ops.
+        robot = ['env', 'LD_PRELOAD=' + GUEST_ROOT + '/lib/libchimaera_functional_copies.so',
+                 'CHIMAERA_FUNCTIONAL_MIDDLEWARE_COPIES=' +
+                 str(int(fixed.get('middleware_copy_mode', 'guest') == 'functional')), *robot]
     if fixed['guest_dds_shm_bytes']:
         guest_env['FASTRTPS_DEFAULT_PROFILES_FILE'] = GUEST_ROOT + '/dds.xml'
     return dict(version=1, routes=str(output / 'routes.json'),
@@ -388,6 +423,11 @@ def prepare_bundle(output, data, points):
     from ament_index_python.packages import get_package_prefix
     clock = Path(get_package_prefix('chimaera_ros_bridge')) / 'lib/libchimaera_gem5_clock_addr.so'
     shutil.copyfile(clock, libraries / clock.name)
+    if data['fixed']['transport_backend'] == 'm5ops':
+        helper = Path(get_package_prefix('chimaera_dds_transport')) / 'lib/libchimaera_functional_copies.so'
+        if not helper.is_file():
+            raise ValueError('DDS+m5ops requires the current functional-copy helper; rebuild the SDK')
+        shutil.copyfile(helper, libraries / helper.name)
     # RMW is loaded dynamically and absent from application ldd output. Bundle
     # the selected plugin and its dependencies so DDS matches native validation.
     middleware = Path(get_package_prefix('rmw_fastrtps_cpp')) / 'lib/librmw_fastrtps_cpp.so'
@@ -411,7 +451,7 @@ def prepare_bundle(output, data, points):
     # Use each trial's injected session, rather than hard-coding its geometry/rates.
     (root / 'guest_start').write_text('#!/bin/bash\nset -e\ncd ' + shlex.quote(GUEST_ROOT) + '\n'
         + 'export PYTHONPATH=' + shlex.quote(GUEST_ROOT + '/runtime') + '\n'
-        + 'rm -f /tmp/chimaera-sim-time-origin.ns /tmp/chimaera-ball-dds-ready\n'
+        + 'rm -f /tmp/chimaera-sim-time-origin.ns /tmp/chimaera-ball-dds-ready /tmp/chimaera-app-checkpoint-freeze /tmp/chimaera-app-checkpoint-counts.json /tmp/chimaera-app-checkpoint-resume\n'
         + 'exec python3 -m chimaera_ros.runner run /tmp/chimaera-ball-session.json --side guest --guest-binary '
         + shlex.quote(GUEST_ROOT + '/runtime/guest_bridge') + '\n')
     bundle = output / 'guest.tar.gz'
@@ -533,11 +573,12 @@ def native_trial(directory, data, point):
 
 def gem5_trial(directory, output, data, point, args, calibration, bundle,
                checkpoint_prepare=None, checkpoint_restore=None):
-    if data['fixed'].get('transport_backend', 'm5') in ('dma', 'm5ops') and (checkpoint_prepare or checkpoint_restore):
+    if data['fixed'].get('transport_backend', 'm5') == 'dma' and (checkpoint_prepare or checkpoint_restore):
         raise ValueError('DMA requires a fresh boot; readiness checkpoints are not supported')
     if (checkpoint_prepare or checkpoint_restore) and (
             data['hardware'].get('cpu_type', 'timing') == 'kvm' or
-            data['fixed'].get('middleware_transport', 'bridge') == 'fastdds'):
+            (data['fixed'].get('middleware_transport', 'bridge') == 'fastdds' and
+             data['fixed'].get('transport_backend', 'm5') != 'm5ops')):
         raise ValueError('KVM and Fast DDS middleware validation require a fresh boot')
     from ball_catching_sim.scene import generate
     directory.mkdir(parents=True)
@@ -555,6 +596,10 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
                                   trace_clock_file=str(directory / 'trace-clock.bin'))
     if checkpoint_prepare:
         guest_session['bridge']['checkpoint_control'] = True
+        if fixed.get('transport_backend', 'm5') == 'm5ops':
+            if fixed.get('robot_execution') != 'composed':
+                raise ValueError('m5ops readiness requires the composed application checkpoint barrier')
+            guest_session['guest']['processes'][0]['command'].append('checkpoint_control:=true')
     guest_session['routes'] = GUEST_ROOT + '/routes.json'
     write_json(directory / 'guest-session.json', guest_session)
     start = directory / 'start-guest.sh'
@@ -652,8 +697,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     result = json.loads((directory / 'result.json').read_text())
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
-    from chimaera_ros.tracing import summarize
-    transport = summarize(directory, output / 'routes.json', result['launch_time'], result['result_time'])
+    transport = transport_summary(directory, output / 'routes.json', result['launch_time'],
+                                  result['result_time'], enabled=fixed.get('trace', True))
     write_json(directory / 'transport_latency.json', transport)
     metrics = memory_metrics(roi, data['peak_gbps'])
     pressure_warmup = 0
@@ -670,6 +715,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
         peak_gbps=data['peak_gbps'], wall_seconds=time.monotonic() - started,
         telemetry=telemetry, transport_latency=transport,
         checkpoint=str(checkpoint_restore) if checkpoint_restore else None,
+        modeling_boundary=dict(middleware_copies=fixed.get('middleware_copy_mode', 'guest'),
+            readiness_cpu=fixed.get('checkpoint_readiness_cpu', 'detailed') if checkpoint_restore else
+                          data['hardware']['cpu_type'], measurement_cpu=data['hardware']['cpu_type']),
         pressure_warmup_seconds=pressure_warmup,
         requested_pressure_warmup_seconds=fixed['pressure_warmup'] if checkpoint_restore else 0,
         measurement_window='launch boundary to final evaluation; boundary quantization applies',
@@ -713,10 +761,12 @@ def main():
     if args.bundle_from and not args.prepare_only:
         parser.error('--bundle-from requires --prepare-only')
     data = load_config(args.config, args.cpu_type)
-    if data['fixed']['transport_backend'] in ('dma', 'm5ops') and (args.checkpoint_create or args.checkpoint_from):
+    if data['fixed']['transport_backend'] == 'dma' and (args.checkpoint_create or args.checkpoint_from):
         parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
     if (args.checkpoint_create or args.checkpoint_from) and (
-            data['hardware']['cpu_type'] == 'kvm' or data['fixed']['middleware_transport'] == 'fastdds'):
+            data['hardware']['cpu_type'] == 'kvm' or
+            (data['fixed']['middleware_transport'] == 'fastdds' and
+             data['fixed']['transport_backend'] != 'm5ops')):
         parser.error('KVM and Fast DDS middleware validation require a fresh boot')
     all_points = plan(data)
     points = all_points

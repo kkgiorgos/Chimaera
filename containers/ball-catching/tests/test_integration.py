@@ -345,7 +345,8 @@ def test_m5ops_export_survives_relocation_and_removal_of_original_modules(tmp_pa
         worker.common(relocated, tmp_path / 'output')
 
 
-def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(tmp_path, monkeypatch):
+@pytest.mark.parametrize('copy_mode', ['guest', 'functional'])
+def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(tmp_path, monkeypatch, copy_mode):
     monkeypatch.syspath_prepend(str(ROOT / 'ros/chimaera_ros_ws/src/chimaera_ros_bridge'))
     from chimaera_ros import dds
     from chimaera_ros.manifest import load
@@ -354,7 +355,8 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
 
     sdk, app = tmp_path / 'sdk', tmp_path / 'application'
     libraries = ('libchimaera_gem5_clock_addr.so', 'librmw_fastrtps_cpp.so',
-                 'librmw_fastrtps_shared_cpp.so', 'libchimaera_dds_transport.so')
+                 'librmw_fastrtps_shared_cpp.so', 'libchimaera_dds_transport.so',
+                 'libchimaera_functional_copies.so')
     for name in [*('lib/' + name for name in libraries), 'lib/chimaera_ros_bridge/guest_bridge']:
         path = sdk / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -382,7 +384,8 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
     data = suite.load_config(source)
     driver = tmp_path / 'chimaera_m5.ko'
     driver.write_bytes(b'kernel-matched notification module')
-    data['fixed'].update(transport_backend='m5ops', middleware_transport='fastdds', m5_module=str(driver))
+    data['fixed'].update(transport_backend='m5ops', middleware_transport='fastdds', m5_module=str(driver),
+                         middleware_copy_mode=copy_mode, robot_execution='composed')
     output = tmp_path / 'prepared'
     output.mkdir()
     bundle = suite.prepare_bundle(output, data, suite.plan(data))
@@ -394,7 +397,7 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
         assert archive.extractfile(root + '/runtime/wait_dds_graph.py').read() == (
             configure.SCRIPTS / 'wait_dds_graph.py').read_bytes()
         runtime = json.load(archive.extractfile(root + '/runtime-libraries.json'))
-        for name in libraries[1:]:
+        for name in libraries[1:-1]:
             assert runtime[name]['sha256'] == worker.digest(sdk / 'lib' / name)
         assert root + '/lib/libc.so.6' not in archive.getnames()
     assert selected_plugins and set(selected_plugins) == {str(sdk / 'lib/librmw_fastrtps_cpp.so')}
@@ -408,3 +411,10 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
     assert next(p for p in guest['processes'] if p['name'] == 'dds_readiness')['command'] == [
         'python3', suite.GUEST_ROOT + '/runtime/wait_dds_graph.py',
         '--ready-file', '/tmp/chimaera-ball-dds-ready', '--timeout', str(data['fixed']['startup_timeout_s'])]
+
+    robot = next(p for p in guest['processes'] if p['name'] == 'robot')['command']
+    assert 'LD_PRELOAD=' + suite.GUEST_ROOT + '/lib/libchimaera_functional_copies.so' in robot
+    assert 'CHIMAERA_FUNCTIONAL_MIDDLEWARE_COPIES=' + str(int(copy_mode == 'functional')) in robot
+    assert 'composed:=true' in robot
+    assert 'LD_PRELOAD' not in guest['env']
+    assert not any('LD_PRELOAD' in argument for argument in coordinator)

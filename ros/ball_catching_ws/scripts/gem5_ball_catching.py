@@ -41,11 +41,12 @@ if cpu_type == 'kvm' and experiment['aggressor']['gbps']:
 configure_ticks()
 restore = experiment.get('checkpoint_restore')
 capture = experiment.get('checkpoint_prepare')
+kvm_readiness = bool(capture and experiment.get('fixed', {}).get('checkpoint_readiness_cpu') == 'kvm')
 if restore and capture:
     parser.error('Cannot prepare and restore a checkpoint together')
 if cpu_type == 'kvm' and (restore or capture):
     parser.error('KVM functional validation requires a fresh boot')
-if args.transport_backend in ('dma', 'm5ops') and (restore or capture):
+if args.transport_backend == 'dma' and (restore or capture):
     parser.error('DMA requires a fresh boot; readiness checkpoints are not supported')
 if capture and (experiment['aggressor']['pattern'] != 'none' or experiment['aggressor']['gbps']):
     parser.error('Readiness checkpoints require a disabled aggressor')
@@ -108,12 +109,13 @@ if args.instantiate_only:
     print('Full-system configuration instantiated without simulation: ' + json.dumps(record))
     raise SystemExit(0)
 
-def record_cpu():
+def record_cpu(expected=None):
+    expected = expected or cpu_type
     active = processor.get_cores()
-    if len(active) != hardware['num_cores'] or any(core.get_type().value != cpu_type for core in active):
+    if len(active) != hardware['num_cores'] or any(core.get_type().value != expected for core in active):
         raise RuntimeError('Detailed CPU switch did not select the requested model')
     (Path(m5.options.outdir) / 'cpu_roi.json').write_text(json.dumps(dict(
-        cpu_type=cpu_type, num_cores=len(active),
+        cpu_type=expected, requested_cpu_type=cpu_type, num_cores=len(active),
         simobjects=[core.get_simobject().type for core in active], tick=m5.curTick()), indent=2) + '\n')
 
 
@@ -123,10 +125,10 @@ def prepare_clock():
     counts = re.findall(r'^CHIMAERA_ONLINE_CPUS=(\d+)\r?$', serial, re.MULTILINE)
     if not counts or int(counts[-1]) != hardware['num_cores']:
         raise RuntimeError('Guest CPU count differs from the fixed architecture; inspect serial log')
-    if cpu_type != 'kvm':
+    if cpu_type != 'kvm' and not kvm_readiness:
         processor.switch_to_processor('detailed')
-    record_cpu()
-    # Readiness and the throw use one detailed CPU and one clock origin.
+    record_cpu('kvm' if kvm_readiness else cpu_type)
+    # Preserve one clock origin across readiness, the optional CPU switch and throw.
     # Boot readfile is consumed before workbegin. Reuse the existing m5 readfile
     # mechanism to give the guest the exact origin used by the timing server.
     boot_file = Path(str(board.readfile))
@@ -193,6 +195,10 @@ class BallTimingServer(TimingServer):
     def save_ready_checkpoint(self):
         if not capture or restore or not self.roi_started or self.detailed_started:
             raise RuntimeError('Not a readiness checkpoint preparation session')
+        if args.transport_backend == 'm5ops':
+            from readiness_checkpoint import records_drained
+            if not records_drained(capture):
+                raise RuntimeError('Application record prefix has not drained at the checkpoint barrier')
         boundary = m5.curTick()
         directory = Path(capture)
         stage = directory / 'checkpoint-stage.json'
@@ -209,11 +215,16 @@ class BallTimingServer(TimingServer):
         else:
             raise RuntimeError('Guest did not reach the checkpoint transport barrier')
         self.checkpoint_pending = False
+        if kvm_readiness:
+            processor.switch_to_processor('detailed')
+        record_cpu()
         stage.write_text(json.dumps({'phase': 'Saving guest memory and device state'}) + '\n')
         m5.checkpoint(str(directory / 'cpt'))
         origin = json.loads((Path(m5.options.outdir) / 'roi_time_origin.json').read_text())
         (directory / 'checkpoint.json').write_text(json.dumps(dict(
-            version=1, hardware=hardware, boundary_tick=boundary, saved_tick=m5.curTick(),
+            version=2 if args.transport_backend == 'm5ops' else 1,
+            transport_backend=args.transport_backend, hardware=hardware, boundary_tick=boundary, saved_tick=m5.curTick(),
+            readiness_cpu='kvm' if kvm_readiness else cpu_type,
             time_origin_ns=origin['nanoseconds'], aggressor_enabled=False), indent=2) + '\n')
         stage.write_text(json.dumps({'phase': 'Readiness checkpoint saved'}) + '\n')
         return f'CHECKPOINT {m5.curTick()}'
@@ -222,6 +233,20 @@ class BallTimingServer(TimingServer):
         return {**super().exit_handlers(), ExitEvent.CHECKPOINT: lambda: True}
 
     def handle_command(self, line):
+        if line == 'BENCHMARK_RECORDS_READY':
+            if (not restore or args.transport_backend != 'm5ops' or self.pressure_started or
+                    not (Path(m5.options.outdir).parent / 'checkpoint-record-readers-ready').is_file()):
+                raise RuntimeError('Record reader barrier requires m5ops restore')
+            Path(str(board.readfile)).write_text('CHIMAERA_CHECKPOINT_RECORDS_READY\n')
+            return 'RECORDS READY'
+        if line in ('BENCHMARK_FREEZE', 'BENCHMARK_RECORDS_DRAINED'):
+            if not capture or restore or args.transport_backend != 'm5ops':
+                raise RuntimeError('Application freeze requires m5ops checkpoint preparation')
+            if line == 'BENCHMARK_FREEZE':
+                Path(str(board.readfile)).write_text('CHIMAERA_CHECKPOINT_FREEZE\n')
+                return 'FREEZING'
+            from readiness_checkpoint import records_drained
+            return 'DRAINED ' + str(int(records_drained(capture)))
         if line == 'CHIMAERA_EGRESS' and args.transport_backend == 'm5ops':
             if not self.roi_started or self.finished:
                 raise ValueError('m5ops egress requires a live, paused ROI')
@@ -259,7 +284,9 @@ timing = BallTimingServer(on_ready=prepare_clock)
 simulator = Simulator(board=board, on_exit_event=timing.exit_handlers())
 if restore:
     record = json.loads((Path(restore) / 'checkpoint.json').read_text())
-    if record['version'] != 1 or record['hardware'] != hardware or record['aggressor_enabled'] is not False:
+    if (record['version'] != (2 if args.transport_backend == 'm5ops' else 1) or
+            record.get('transport_backend', 'm5') != args.transport_backend or
+            record['hardware'] != hardware or record['aggressor_enabled'] is not False):
         raise RuntimeError('Readiness checkpoint is incompatible with the requested architecture')
     simulator._instantiate()
     # Complete Ruby/cache and device startup while the aggressor is still

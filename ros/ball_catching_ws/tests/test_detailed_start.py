@@ -23,7 +23,7 @@ def lifecycle(tmp_path):
                          stats=SimpleNamespace(reset=lambda: calls.append('reset')))
     namespace = dict(Path=Path, json=json, re=__import__('re'), m5=m5, processor=processor,
                      board=SimpleNamespace(readfile=boot), hardware={'num_cores': 4}, cpu_type='o3',
-                     restore=None, capture=None,
+                     restore=None, capture=None, kvm_readiness=False,
                      memory=SimpleNamespace(get_memory_controllers=lambda: [SimpleNamespace(
                          setAggressorEnabled=lambda enabled: calls.append(('pressure', enabled)))]),
                      TimingServer=type('TimingServer', (), {'roi_started': True, 'finished': False}))
@@ -129,3 +129,22 @@ def test_checkpoint_preparation_cannot_enable_pressure_or_throw(tmp_path):
     with pytest.raises(RuntimeError, match='never throw'):
         server.begin_throw()
     assert calls == []
+
+
+def test_record_resume_requires_confirmed_replacement_readers(tmp_path):
+    scope, _ = lifecycle(tmp_path)
+    scope.update(restore='/checkpoint', args=SimpleNamespace(transport_backend='m5ops'))
+    scope['m5'].options.outdir = tmp_path / 'gem5'
+    server = scope['BallTimingServer']()
+    with pytest.raises(RuntimeError, match='reader barrier'):
+        server.handle_command('BENCHMARK_RECORDS_READY')
+    marker = tmp_path / 'checkpoint-record-readers-ready'
+    marker.write_text('\n')
+    try:
+        assert server.handle_command('BENCHMARK_RECORDS_READY') == 'RECORDS READY'
+        assert scope['board'].readfile.read_text() == 'CHIMAERA_CHECKPOINT_RECORDS_READY\n'
+        server.pressure_started = True
+        with pytest.raises(RuntimeError, match='reader barrier'):
+            server.handle_command('BENCHMARK_RECORDS_READY')
+    finally:
+        marker.unlink()
