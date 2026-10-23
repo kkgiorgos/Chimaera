@@ -107,7 +107,7 @@ def test_driver_selection_allows_kbuild_to_rewrite_module_paths(tmp_path, select
 
 @pytest.mark.parametrize('backend', ['dma', 'm5ops'])
 @pytest.mark.parametrize('valid_abi', [False, True])
-def test_guest_driver_probe_checks_actual_abi_without_booting(backend, valid_abi, capsys):
+def test_guest_driver_probe_checks_actual_abi_without_booting(backend, valid_abi, capsys, tmp_path):
     source = recipe('smoke').driver_probe(backend, '5.15.180-chimaera')
     guest_python = source.split("python3 - <<'PY'\n", 1)[1].rsplit('\nPY\n', 1)[0]
     lanes = []
@@ -136,16 +136,21 @@ def test_guest_driver_probe_checks_actual_abi_without_booting(backend, valid_abi
         def __exit__(self, *args):
             pass
     fake_mmap.mmap = lambda fd, size, **kwargs: Pages(size)
+    proof = tmp_path / 'proof.json'
+    namespace = dict(open=lambda path, mode: proof.open(mode))
     with patch.object(ctypes, 'CDLL', return_value=libc), patch.object(fcntl, 'ioctl', side_effect=ioctl), \
          patch.dict('sys.modules', os=fake_os, mmap=fake_mmap):
         if valid_abi:
-            exec(compile(guest_python, 'guest-driver-probe', 'exec'), {})
+            exec(compile(guest_python, 'guest-driver-probe', 'exec'), namespace)
         else:
             with pytest.raises(AssertionError):
-                exec(compile(guest_python, 'guest-driver-probe', 'exec'), {})
+                exec(compile(guest_python, 'guest-driver-probe', 'exec'), namespace)
             assert 'CHIMAERA_DRIVER_PROBE' not in capsys.readouterr().out
+            assert not proof.exists()
             return
     record = json.loads(capsys.readouterr().out.split('CHIMAERA_DRIVER_PROBE ', 1)[1])
+    assert json.loads(proof.read_text()) == record
+    assert '/usr/local/bin/m5 --addr writefile /tmp/chimaera-driver-probe.json driver-probe.json' in source
     assert record['backend'] == backend and record['abi_version'] == 1
     assert record['device'] == ('/dev/chimaera-m5' if backend == 'm5ops' else '/dev/chimaera-dma')
     assert record['device'] in opened
@@ -155,7 +160,8 @@ def test_guest_driver_probe_checks_actual_abi_without_booting(backend, valid_abi
 
 @pytest.mark.parametrize('namespace', ['__main__', '__m5_main__'])
 @pytest.mark.parametrize('backend', ['dma', 'm5ops'])
-def test_smoke_config_runs_and_writes_probe_result_in_gem5_namespace(tmp_path, namespace, backend):
+@pytest.mark.parametrize('failure', [None, 'missing', 'malformed', 'wrong-backend', 'non-object', 'disk-io', 'exit-code'])
+def test_smoke_config_runs_and_writes_probe_result_in_gem5_namespace(tmp_path, namespace, backend, failure):
     board, processor, simulator = Mock(), Mock(), Mock()
     processor.get_cores.return_value = [Mock(), Mock()]
     simulator.get_last_exit_event_cause.return_value = 'm5_exit instruction encountered'
@@ -187,11 +193,35 @@ def test_smoke_config_runs_and_writes_probe_result_in_gem5_namespace(tmp_path, n
     probe = dict(backend=backend, abi_version=1, kernel_release='5.15.180-chimaera')
     if backend == 'm5ops':
         probe.update(device='/dev/chimaera-m5', lanes=[0, 1])
-    (tmp_path / 'board.pc.com_1.device').write_text('CHIMAERA_DRIVER_PROBE ' + json.dumps(probe) + '\n')
+    # Serial may be truncated, and even a complete serial marker must not
+    # substitute for the proof exported by this invocation.
+    (tmp_path / 'board.pc.com_1.device').write_text(
+        'I/O error, dev sda' if failure == 'disk-io' else 'CHIMAERA_DRIVER_PROBE ' + json.dumps(probe) + '\n')
+    proof = tmp_path / 'driver-probe.json'
+    proof.write_text(json.dumps(probe))  # A stale proof must be discarded.
+
+    def run():
+        assert not proof.exists()
+        if failure == 'missing':
+            return
+        value = dict(probe, backend='other') if failure == 'wrong-backend' else probe
+        proof.write_text('invalid JSON' if failure == 'malformed' else
+                         json.dumps([] if failure == 'non-object' else value))
+        if failure is None:
+            (tmp_path / 'board.pc.com_1.device').write_text('CHIMAERA_GUEST_FI')
+
+    simulator.run.side_effect = run
+    if failure == 'exit-code':
+        simulator.get_last_exit_event_code.return_value = 1
     config = ROOT / 'orchestrator/kernel/smoke.py'
     with patch.dict('sys.modules', modules), patch('sys.path', []), \
          patch('sys.argv', [str(config), '--image', 'disk', '--kernel', 'kernel',
                             '--module', 'driver', '--backend', backend]):
+        if failure:
+            with pytest.raises(RuntimeError, match='Guest'):
+                runpy.run_path(str(config), run_name=namespace)
+            assert not (tmp_path / 'result.json').exists()
+            return
         runpy.run_path(str(config), run_name=namespace)
     simulator.run.assert_called_once_with()
     attach = modules['chimaera_m5'].attach_m5 if backend == 'm5ops' else modules['chimaera_dma'].attach_dma

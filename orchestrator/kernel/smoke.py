@@ -66,7 +66,15 @@ finally:
 print('CHIMAERA_KERNEL_DMA_OK', os.uname().release, flush=True)
 probe = dict(backend='dma', abi_version=1, device='/dev/chimaera-dma')
 '''
-    return script + "print('CHIMAERA_DRIVER_PROBE ' + json.dumps(dict(probe, kernel_release=os.uname().release)), flush=True)\nPY\n"
+    # A clean m5 exit can arrive before Linux drains its serial output queue.
+    # Export the proof synchronously instead of using UART text as the gate.
+    return script + """record = dict(probe, kernel_release=os.uname().release)
+with open('/tmp/chimaera-driver-probe.json', 'w') as output:
+    json.dump(record, output)
+print('CHIMAERA_DRIVER_PROBE ' + json.dumps(record), flush=True)
+PY
+/usr/local/bin/m5 --addr writefile /tmp/chimaera-driver-probe.json driver-probe.json >/dev/null
+"""
 
 
 def main():
@@ -104,6 +112,8 @@ def main():
                                  l1i_size='16KiB', l1i_assoc=8,
                                  l2_size='256KiB', l2_assoc=16, num_l2_banks=1))
     output = Path(m5.options.outdir)
+    proof = output / 'driver-probe.json'
+    proof.unlink(missing_ok=True)
     script = output / 'check-driver.sh'
     script.write_text(driver_probe(args.backend, args.expected_release))
     script.chmod(0o755)
@@ -129,11 +139,13 @@ def main():
     serial = (output / 'board.pc.com_1.device').read_text(errors='replace')
     if 'I/O error, dev sda' in serial:
         raise RuntimeError('Guest disk I/O errors during kernel/driver smoke; inspect guest serial')
-    probes = [json.loads(line.split(' ', 1)[1]) for line in serial.splitlines()
-              if line.startswith('CHIMAERA_DRIVER_PROBE ')]
-    if len(probes) != 1 or probes[0].get('backend') != args.backend:
-        raise RuntimeError('Guest kernel/driver ABI probe did not complete; inspect guest serial')
-    (output / 'result.json').write_text(json.dumps(dict(probes[0], status='passed', cause=cause, code=code)) + '\n')
+    try:
+        probe = json.loads(proof.read_text())
+    except (FileNotFoundError, ValueError) as error:
+        raise RuntimeError('Guest kernel/driver ABI probe did not export valid proof; inspect guest serial') from error
+    if not isinstance(probe, dict) or probe.get('backend') != args.backend:
+        raise RuntimeError('Guest kernel/driver ABI probe exported invalid backend proof; inspect guest serial')
+    (output / 'result.json').write_text(json.dumps(dict(probe, status='passed', cause=cause, code=code)) + '\n')
 
 
 if __name__ in ('__main__', '__m5_main__'):
