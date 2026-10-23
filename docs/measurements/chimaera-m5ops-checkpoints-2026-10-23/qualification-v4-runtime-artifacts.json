@@ -1,0 +1,19 @@
+{
+  "sdk_image_id": "sha256:1e5660166767a1f784ddd15608e2f7d1bf90ba38a9e86c9e082d73075330dc45",
+  "artifacts": {
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/libchimaera_dds_transport.so": "7bc7c34e8334e427993c5b038e776bc471fc4e36b3d2cbfa73c044ef4ee3a169",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/libchimaera_functional_copies.so": "c665a3a783f5ce0dcdbae89b8134908c6cba6ba08e837d075e11ebce6d41b30b",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/libchimaera_gem5_clock.so": "355c6fd497af9323bdeff522f0f76de8b691225ab6de3cf052273e504dd852f8",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/libchimaera_gem5_clock_addr.so": "fc315c8296f68241d2b284316ba5dc15e146df7a5fea626a72fb89540ebeba8c",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/librmw_fastrtps_cpp.so": "bed70ea6f45fbbd504bab528fc94f85a20551ccfd991c4edafd87fd8143820f3",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/librmw_fastrtps_shared_cpp.so": "431fa02a1eb7190fce7fcb8f85c9f1ca96aebe32f2c1827234ba02575113b864",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/chimaera_ros_bridge/guest_bridge": "2f0feb7841312a32603d4559eead69f864968fea84288035839ce84a7b0b69b8",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/chimaera_ros_bridge/gazebo_host_bridge": "fe9944e8bb97aabd8adba7e4cc19cd8a12f6fdfe87e37f2d37e7f77fe3a53f75",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot/lib/ball_catching_robot/effort_control": "37320b8d1cc4af19c3190727f2b695e479b3b890562729bac295d6e9db8a6593",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot/lib/ball_catching_robot/intercept": "548004fd2f7c1c75c309e7e4a71e4b4e8698b32373176456f82f8c300496ccf4",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot/lib/ball_catching_robot/perception": "3fa37fb202b2eb450181fbc2754efe7b02386307b9654e6f15b7ee877f853772",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot/lib/ball_catching_robot/robot_composed": "26334f433193ba4a0722f9a439470f171f7215e8fce75948eaa097caac56a77c",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot/lib/ball_catching_robot/validate_model": "d98e9d70523f49f4445152283da90a706183b7fa310308174a9babff8bd6f1b8",
+    ".chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_sim/lib/libball_catching_host.so": "989d9762e2e0802485b47e1050c97fd670797154957a508cdef92bc97f01d852"
+  }
+}

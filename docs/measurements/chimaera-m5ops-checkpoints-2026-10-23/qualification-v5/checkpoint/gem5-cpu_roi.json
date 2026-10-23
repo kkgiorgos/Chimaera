@@ -1,0 +1,10 @@
+{
+  "cpu_type": "timing",
+  "requested_cpu_type": "timing",
+  "num_cores": 2,
+  "simobjects": [
+    "BaseTimingSimpleCPU",
+    "BaseTimingSimpleCPU"
+  ],
+  "tick": 11771935230052
+}

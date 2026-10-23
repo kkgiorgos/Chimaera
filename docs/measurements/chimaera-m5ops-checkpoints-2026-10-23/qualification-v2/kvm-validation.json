@@ -1,0 +1,15 @@
+{
+  "mode": "kvm",
+  "directory": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm",
+  "wall_seconds": 356.5928489000071,
+  "score": {
+    "success": true,
+    "reason": "inside_cup_at_deadline",
+    "launch_time": 0.1905,
+    "result_time": 1.6905,
+    "duration": 1.5,
+    "contained_duration": 0.5315,
+    "flight_end_time": 1.159,
+    "flight_end_kind": "cup_capture"
+  }
+}

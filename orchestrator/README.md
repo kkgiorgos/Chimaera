@@ -22,8 +22,10 @@ Leave `fixed.m5_module` and the preparation machine's **kernel** field empty.
 The producer builds Linux 5.15.180 and `chimaera_m5.ko` from the same configured
 kernel tree, with module version checks enabled. The shared SDK includes the
 pinned custom Fast DDS RMW and direct transport plugin. Each case boots with KVM
-and switches to the CPU selected in `hardware`; readiness checkpoints are
-unavailable with m5ops. Guest receive notification uses the driver and interrupts.
+and switches to the CPU selected in `hardware`. Guest receive notification uses
+the driver and interrupts. The composed checkpoint candidate is described in
+[the integration record](../docs/chimaera-m5ops-checkpoints-2026-10-23.md);
+it remains separate from the default until robot and restore qualification passes.
 Payload copying is functional rather than timed DMA; CPU/application and memory
 work still run on the selected simulated hardware.
 
@@ -60,8 +62,9 @@ Requirements:
 - Linux x86-64 workers with Docker Engine/Compose, writable repositories,
   and permission for the SSH user to use Docker and the guest assets.
 - With the default m5 backend, KVM on the selected preparation machine for its
-  initial guest boot. Case workers restore detailed checkpoints. With DMA or m5ops, every
-  case worker needs `/dev/kvm` for a fresh guest boot.
+  initial guest boot. Case workers restore detailed checkpoints. DMA and m5ops
+  profiles without `fixed.readiness_checkpoint` need `/dev/kvm` on every worker.
+  The composed m5ops checkpoint candidate requires KVM only on its producer.
 - Bash and gzip on workers for compressed image streams. The producer also needs
   Python 3 and an OpenSSH client on its host.
 - SSH key access from the webserver to each worker. No inbound worker HTTP ports
@@ -253,8 +256,10 @@ arrives, preparation runs automatically:
    no other builder or daemon-wide cache is pruned.
 2. Reuse or construct the producer's base guest and kernel. Calibrate and freeze
    the application bundle. With DMA/m5ops, build and boot-check the exact matching
-   driver pair; every case subsequently boots with KVM. With legacy `m5`, create
-   readiness checkpoints once per compatible configuration on the producer.
+   driver pair. DMA and fresh-boot m5ops cases subsequently boot with KVM.
+   With legacy `m5`, or the composed m5ops candidate with
+   `fixed.readiness_checkpoint`, create readiness checkpoints once per compatible
+   configuration on the producer.
 3. Stream the application image and separate sparse readiness assets directly to
    each consumer over SSH. Consumers do not build a second SDK, disk or checkpoint.
 4. Verify image content and all asset hashes, validate shared calibration, and
@@ -292,7 +297,7 @@ controller rates require compatible checkpoints; preparation groups those separa
 Missing or incompatible checkpoints fail preparation/execution; there is no KVM
 fallback. Use a new experiment after updating the simulator/bridge for this protocol.
 
-Fresh-boot workers (including DMA and m5ops) also receive the dependency base image used
+Fresh-boot workers (including DMA and m5ops without readiness checkpoints) also receive the dependency base image used
 to construct their guest disk. Workers using transferred readiness checkpoints
 or an explicitly configured disk do not need that extra image. Destination image
 identities are recorded separately from the producer's calibration provenance.

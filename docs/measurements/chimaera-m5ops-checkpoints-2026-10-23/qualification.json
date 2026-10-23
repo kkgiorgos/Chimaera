@@ -1,0 +1,126 @@
+{
+  "generated_utc": "2026-10-23T22:19:28.395728+00:00",
+  "source_identity": {
+    "revision": "3901d19e310239800ef392e26b03a178fd22de4b",
+    "fingerprint": "cd9eae755771b80ebedc818598d9cba543f5ac943c9543f95dcb972ff1ab470c"
+  },
+  "budget": {
+    "start_utc": "2026-10-23T20:19:47.083734+00:00",
+    "deadline_utc": "2026-10-23T22:19:47.083734+00:00",
+    "cap_seconds": 7200,
+    "cleanup_reserve_seconds": 90,
+    "status": "validation_incomplete_cap_reached",
+    "recorded_utc": "2026-10-23T22:19:07.113435+00:00",
+    "default_activated": false,
+    "active_cutoff_utc": "2026-10-23T22:18:17.083734+00:00",
+    "runs_stopped_confirmed_utc": "2026-10-23T22:19:28.352086+00:00"
+  },
+  "cohorts": {
+    "qualification": {
+      "attempts": [
+        {
+          "mode": "kvm",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 458.6822054386139,
+          "timeout_seconds": 600
+        },
+        {
+          "mode": "capture",
+          "status": "failed",
+          "returncode": 143,
+          "wall_seconds": 680.2210395336151,
+          "timeout_seconds": 1800
+        }
+      ],
+      "status": "partial"
+    },
+    "qualification-v2": {
+      "attempts": [
+        {
+          "mode": "kvm",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 380.68194007873535,
+          "timeout_seconds": 600
+        },
+        {
+          "mode": "capture",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 197.9065408706665,
+          "timeout_seconds": 2400
+        },
+        {
+          "mode": "smoke1",
+          "status": "failed",
+          "returncode": 1,
+          "wall_seconds": 601.8353562355042,
+          "timeout_seconds": 900
+        }
+      ],
+      "status": "partial"
+    },
+    "qualification-v3": {
+      "attempts": [
+        {
+          "mode": "capture",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 182.87480473518372,
+          "timeout_seconds": 2400
+        },
+        {
+          "mode": "smoke1",
+          "status": "failed",
+          "returncode": 1,
+          "wall_seconds": 529.1701812744141,
+          "timeout_seconds": 900
+        }
+      ],
+      "status": "partial"
+    },
+    "qualification-v4": {
+      "attempts": [
+        {
+          "mode": "capture",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 218.48585653305054,
+          "timeout_seconds": 600
+        },
+        {
+          "mode": "smoke1",
+          "status": "failed",
+          "returncode": 1,
+          "wall_seconds": 784.1407098770142,
+          "timeout_seconds": 1000
+        }
+      ],
+      "scope": "checkpoint_capture_and_two_short_detailed_restores",
+      "full_timing_throws": "not_run_within_original_cap",
+      "status": "partial"
+    },
+    "qualification-v5": {
+      "attempts": [
+        {
+          "mode": "capture",
+          "status": "pass",
+          "returncode": 0,
+          "wall_seconds": 238.5199098587036,
+          "timeout_seconds": 600
+        },
+        {
+          "mode": "smoke1",
+          "status": "timeout",
+          "returncode": null,
+          "wall_seconds": 405.7310645580292,
+          "timeout_seconds": 405.191026
+        }
+      ],
+      "scope": "checkpoint_capture_and_two_short_detailed_restores",
+      "full_timing_throws": "not_run_within_original_cap",
+      "status": "partial"
+    }
+  }
+}

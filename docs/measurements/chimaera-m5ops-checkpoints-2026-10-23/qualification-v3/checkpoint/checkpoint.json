@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "transport_backend": "m5ops",
+  "hardware": {
+    "cpu_type": "timing",
+    "num_cores": 2,
+    "cpu_clock": "3GHz",
+    "l1d_size": "16KiB",
+    "l1i_size": "16KiB",
+    "l1_assoc": 8,
+    "l2_size": "256KiB",
+    "l2_assoc": 16
+  },
+  "boundary_tick": 11796322594602,
+  "saved_tick": 11800871011639,
+  "readiness_cpu": "kvm",
+  "time_origin_ns": 11303822594,
+  "aggressor_enabled": false
+}

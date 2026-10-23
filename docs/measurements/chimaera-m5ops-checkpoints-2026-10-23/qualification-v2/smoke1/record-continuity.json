@@ -1,0 +1,29 @@
+{
+  "lines": 12,
+  "next_sequence": {
+    "control_timing": 90,
+    "control": 11,
+    "perception": 17
+  },
+  "gaps": [
+    {
+      "line": 1,
+      "stream": "control_timing",
+      "expected": 0,
+      "received": 80
+    },
+    {
+      "line": 3,
+      "stream": "control",
+      "expected": 0,
+      "received": 10
+    },
+    {
+      "line": 7,
+      "stream": "perception",
+      "expected": 0,
+      "received": 16
+    }
+  ],
+  "raw_journal_sha256": "b9870a8c25c19d0470b4ea4a384d55aa945b5d8775d61cd27f009f967371deb6"
+}

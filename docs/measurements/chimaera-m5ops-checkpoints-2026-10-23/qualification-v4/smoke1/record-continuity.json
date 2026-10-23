@@ -1,0 +1,10 @@
+{
+  "lines": 107,
+  "next_sequence": {
+    "perception": 19,
+    "control_timing": 75,
+    "control": 13
+  },
+  "gaps": [],
+  "raw_journal_sha256": "eb23097452abf7540bcbf86346a7543e882655fbf33eb58ca506c3506e7a68ff"
+}

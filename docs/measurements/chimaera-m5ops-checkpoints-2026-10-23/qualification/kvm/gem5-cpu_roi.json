@@ -1,0 +1,9 @@
+{
+  "cpu_type": "kvm",
+  "num_cores": 2,
+  "simobjects": [
+    "X86KvmCPU",
+    "X86KvmCPU"
+  ],
+  "tick": 10799551129085
+}

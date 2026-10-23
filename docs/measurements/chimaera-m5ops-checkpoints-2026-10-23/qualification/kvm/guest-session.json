@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "routes": "/opt/chimaera/ball_catching/routes.json",
+  "host": {
+    "domain_id": 71,
+    "setup": [
+      "/opt/ros/humble/setup.bash"
+    ],
+    "processes": []
+  },
+  "guest": {
+    "domain_id": 71,
+    "setup": [
+      "/opt/ros/humble/setup.bash",
+      "/opt/chimaera/ball_catching/app/share/ball_catching_robot/local_setup.bash"
+    ],
+    "localhost_only": false,
+    "env": {
+      "LD_LIBRARY_PATH": "/opt/chimaera/ball_catching/lib:/opt/ros/humble/lib:/opt/ros/humble/lib/x86_64-linux-gnu",
+      "RMW_IMPLEMENTATION": "rmw_fastrtps_cpp",
+      "FASTRTPS_DEFAULT_PROFILES_FILE": "/opt/chimaera/ball_catching/dds.xml"
+    },
+    "processes": [
+      {
+        "name": "robot",
+        "command": [
+          "env",
+          "LD_PRELOAD=/opt/chimaera/ball_catching/lib/libchimaera_functional_copies.so",
+          "CHIMAERA_FUNCTIONAL_MIDDLEWARE_COPIES=1",
+          "ros2",
+          "launch",
+          "ball_catching_robot",
+          "robot.launch.py",
+          "robot_file:=/tmp/chimaera-ball.urdf",
+          "use_sim_time:=false",
+          "calibration:={\"focal\": 299.8407310387507, \"cx\": 240.0, \"cy\": 180.0, \"baseline\": 0.3, \"camera_origin\": [-2, 0.15, 2]}",
+          "image_age_periods:=2",
+          "image_diagnostics:=false",
+          "gem5_clock_library:=/opt/chimaera/ball_catching/lib/libchimaera_gem5_clock_addr.so",
+          "gem5_time_origin_file:=/tmp/chimaera-sim-time-origin.ns",
+          "record_telemetry:=true",
+          "control_hz:=250",
+          "planner_hz:=30",
+          "plan_interval:=0.06",
+          "camera_hz:=30",
+          "composed:=true"
+        ]
+      },
+      {
+        "name": "dds_readiness",
+        "command": [
+          "python3",
+          "/opt/chimaera/ball_catching/runtime/wait_dds_graph.py",
+          "--ready-file",
+          "/tmp/chimaera-ball-dds-ready",
+          "--timeout",
+          "180"
+        ]
+      }
+    ]
+  },
+  "bridge": {
+    "transport_backend": "m5ops",
+    "trace": true,
+    "trace_directory": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/kvm",
+    "trace_clock_file": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/kvm/trace-clock.bin",
+    "middleware_transport": "fastdds",
+    "dma_module": "",
+    "m5_module": "/opt/chimaera/ball_catching/runtime/chimaera_m5.ko",
+    "interval_us": 500,
+    "poll_us": 100,
+    "timing_backend": "gazebo",
+    "gazebo_world": "ball_catching",
+    "physics_step_ns": 500000,
+    "max_serialized_bytes": 522496,
+    "max_pending_messages": 16,
+    "m5ops": "address",
+    "wait_for_application": true,
+    "application_ready_file": "/tmp/chimaera-ball-dds-ready",
+    "max_image_age_ns": 66666667,
+    "image_diagnostics": false,
+    "simulation_time_from_readfile": true,
+    "checkpoint_control": false,
+    "startup_timeout_s": 180,
+    "status_bar": false
+  },
+  "deploy": {
+    "guest_root": "/opt/chimaera/ball_catching",
+    "install_trees": [
+      {
+        "source": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/robot-overlay/ball_catching_robot",
+        "destination": "app"
+      }
+    ]
+  }
+}

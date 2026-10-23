@@ -1,0 +1,12 @@
+---------- Begin Simulation Statistics ----------
+board.chimaera_m5.functionalCopies.copyCalls          180                       # Host-executed middleware copy calls (Count)
+board.chimaera_m5.functionalCopies.copyBytes     93318300                       # Bytes copied without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.fillCalls           92                       # Host-executed middleware fill calls (Count)
+board.chimaera_m5.functionalCopies.fillBytes     47692756                       # Bytes filled without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.faults            0                       # Functional-copy memory faults; prefix may be written (Count)
+---------- Begin Simulation Statistics ----------
+board.chimaera_m5.functionalCopies.copyCalls          180                       # Host-executed middleware copy calls (Count)
+board.chimaera_m5.functionalCopies.copyBytes     93318300                       # Bytes copied without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.fillCalls           92                       # Host-executed middleware fill calls (Count)
+board.chimaera_m5.functionalCopies.fillBytes     47692756                       # Bytes filled without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.faults            0                       # Functional-copy memory faults; prefix may be written (Count)

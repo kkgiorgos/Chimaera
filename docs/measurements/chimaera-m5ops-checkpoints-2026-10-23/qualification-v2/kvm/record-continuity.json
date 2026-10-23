@@ -1,0 +1,11 @@
+{
+  "lines": 355,
+  "next_sequence": {
+    "control_timing": 257,
+    "control": 37,
+    "perception": 50,
+    "interception": 11
+  },
+  "gaps": [],
+  "raw_journal_sha256": "756dc6da9ba870086310ddd5ff170950fd73df6a070f06541871d23d7c7d9669"
+}

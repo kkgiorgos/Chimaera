@@ -1,0 +1,91 @@
+[INFO] [launch]: All log files can be found below /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/ros_logs/2026-10-23-21-27-35-565963-bfb7da6aa2c1-38
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [parameter_bridge-1]: process started with pid [41]
+[INFO] [ign-2]: process started with pid [43]
+[INFO] [robot_state_publisher-3]: process started with pid [45]
+[INFO] [gazebo_host_bridge-4]: process started with pid [47]
+[INFO] [gem5.opt-5]: process started with pid [49]
+[gazebo_host_bridge-4] [INFO] [1792790856.131042280] [host_bridge]: Fast DDS middleware routing enabled (10 routes)
+[parameter_bridge-1] [37;1m2026-10-23 21:27:36.149 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed to create segment fastrtps_8ca564102260e978: No such file or directory[34;1m -> Function [36mSegment[m
+[parameter_bridge-1] [37;1m2026-10-23 21:27:36.149 [31;1m[[37;1mRTPS_MSG_OUT[31;1m Error] [37mNo such file or directory[34;1m -> Function [36minit[m
+[parameter_bridge-1] [37;1m2026-10-23 21:27:36.149 [31;1m[[37;1mRTPS_PARTICIPANT[31;1m Error] [37mUnable to Register SHM Transport. SHM Transport is not supported in the current platform.[34;1m -> Function [36mRTPSParticipantImpl[m
+[parameter_bridge-1] [INFO] [1792790856.195155639] [ros_gz_bridge]: Creating GZ->ROS Bridge: [/stereo/left/image_raw (ignition.msgs.Image) -> /stereo/left/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-1] [INFO] [1792790856.197585276] [ros_gz_bridge]: Creating GZ->ROS Bridge: [/stereo/right/image_raw (ignition.msgs.Image) -> /stereo/right/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[robot_state_publisher-3] [INFO] [1792790856.210331802] [robot_state_publisher]: got segment catch_cup
+[robot_state_publisher-3] [INFO] [1792790856.210539094] [robot_state_publisher]: got segment cup_bracket
+[robot_state_publisher-3] [INFO] [1792790856.210549326] [robot_state_publisher]: got segment cup_rim
+[robot_state_publisher-3] [INFO] [1792790856.210554036] [robot_state_publisher]: got segment fr3_link0
+[robot_state_publisher-3] [INFO] [1792790856.210558673] [robot_state_publisher]: got segment fr3_link0_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210562965] [robot_state_publisher]: got segment fr3_link0_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210567427] [robot_state_publisher]: got segment fr3_link1
+[robot_state_publisher-3] [INFO] [1792790856.210571673] [robot_state_publisher]: got segment fr3_link1_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210576056] [robot_state_publisher]: got segment fr3_link1_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210580105] [robot_state_publisher]: got segment fr3_link2
+[robot_state_publisher-3] [INFO] [1792790856.210584116] [robot_state_publisher]: got segment fr3_link2_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210588316] [robot_state_publisher]: got segment fr3_link2_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210592786] [robot_state_publisher]: got segment fr3_link3
+[robot_state_publisher-3] [INFO] [1792790856.210596814] [robot_state_publisher]: got segment fr3_link3_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210600912] [robot_state_publisher]: got segment fr3_link3_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210605048] [robot_state_publisher]: got segment fr3_link4
+[robot_state_publisher-3] [INFO] [1792790856.210609137] [robot_state_publisher]: got segment fr3_link4_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210613143] [robot_state_publisher]: got segment fr3_link4_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210617102] [robot_state_publisher]: got segment fr3_link5
+[robot_state_publisher-3] [INFO] [1792790856.210621125] [robot_state_publisher]: got segment fr3_link5_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792790856.210625123] [robot_state_publisher]: got segment fr3_link5_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792790856.210629317] [robot_state_publisher]: got segment fr3_link6
+[robot_state_publisher-3] [INFO] [1792790856.210633403] [robot_state_publisher]: got segment fr3_link7
+[robot_state_publisher-3] [INFO] [1792790856.210637499] [robot_state_publisher]: got segment fr3_link8
+[robot_state_publisher-3] [INFO] [1792790856.210641526] [robot_state_publisher]: got segment world
+[ign-2] [37;1m2026-10-23 21:27:36.491 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed to create segment fastrtps_0c68fc2c914786d2: No such file or directory[34;1m -> Function [36mSegment[m
+[ign-2] [37;1m2026-10-23 21:27:36.491 [31;1m[[37;1mRTPS_MSG_OUT[31;1m Error] [37mNo such file or directory[34;1m -> Function [36minit[m
+[ign-2] [37;1m2026-10-23 21:27:36.491 [31;1m[[37;1mRTPS_PARTICIPANT[31;1m Error] [37mUnable to Register SHM Transport. SHM Transport is not supported in the current platform.[34;1m -> Function [36mRTPSParticipantImpl[m
+[gem5.opt-5] Global frequency set at 1000000000000 ticks per second
+[gem5.opt-5] warn: board.workload.acpi_description_table_pointer.rsdt adopting orphan SimObject param 'entries'
+[gem5.opt-5] warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+[gem5.opt-5] src/sim/kernel_workload.cc:46: info: kernel located at: /work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel
+[gem5.opt-5] src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+[gem5.opt-5]       0: board.pc.south_bridge.cmos.rtc: Real-time clock set to Sun Jan  1 00:00:00 2012
+[gem5.opt-5] src/dev/serial/terminal.cc:174: warn: Sockets disabled, not accepting terminal connections
+[gem5.opt-5] src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+[gem5.opt-5] src/dev/intel_8254_timer.cc:128: warn: Reading current count from inactive timer.
+[gem5.opt-5] src/base/remote_gdb.cc:418: warn: Sockets disabled, not accepting gdb connections
+[gem5.opt-5] gem5 Simulator System.  https://www.gem5.org
+[gem5.opt-5] gem5 is copyrighted software; use the --copyright option for details.
+[gem5.opt-5] 
+[gem5.opt-5] gem5 version 25.1.0.1
+[gem5.opt-5] gem5 compiled Oct 23 2026 21:17:45
+[gem5.opt-5] gem5 started Oct 23 2026 21:27:36
+[gem5.opt-5] gem5 executing on bfb7da6aa2c1, pid 49
+[gem5.opt-5] command line: /work/gem5/build/X86/gem5.opt --outdir=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/gem5 -p /work/.chimaera-m5/orchestrator-checkpoints-20261023/overlay/share/chimaera_ros_bridge/config /work/ros/ball_catching_ws/scripts/gem5_ball_catching.py --gem5-root /work/gem5 --experiment /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/execution.json --bundle /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/guest.tar.gz --transport-backend m5ops --image /work/.chimaera-orchestrator/assets/ball-catching-11ad4c4c66f14b6faac0.img --kernel /work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel --managed-shutdown --guest-file /tmp/chimaera-ball-session.json=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/guest-session.json --guest-file /tmp/chimaera-ball.urdf=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/robot.urdf --guest-file /tmp/chimaera-ball-start=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/start-guest.sh
+[gem5.opt-5] 
+[gem5.opt-5] info: Standard input is not a terminal, disabling listeners.
+[gem5.opt-5] [host] Timing socket ready at /tmp/chimaera_time.sock; gem5 paused at 11800871011639
+[gazebo_host_bridge-4] [INFO] [1792790959.385232608] [host_bridge]: Replayed 985 host readiness intervals; gem5 stayed paused
+[gazebo_host_bridge-4] [INFO] [1792790959.385305726] [host_bridge]: Host bridge initialized; waiting for gem5 guest
+[gem5.opt-5] src/mem/ruby/system/Sequencer.cc:707: warn: Replacement policy updates recently became the responsibility of SLICC state machines. Make sure to setMRU() near callbacks in .sm files!
+[gem5.opt-5] src/arch/x86/interrupts.cc:529: hack: Assuming logical destinations are 1 << id.
+[gem5.opt-5] src/dev/x86/pc.cc:130: warn: Tried to clear PCI interrupt 17
+[gazebo_host_bridge-4] [INFO] [1792790960.895423176] [host_bridge]: Aligned restored host clock in 10 intervals
+[gem5.opt-5] src/dev/x86/pc.cc:117: warn: Don't know what interrupt to clear for console.
+[gazebo_host_bridge-4] Host bridge: gem5 finished before completing the interval at tick 11875764641373
+[ERROR] [gazebo_host_bridge-4]: process has died [pid 47, exit code 1, cmd '/work/.chimaera-m5/orchestrator-checkpoints-20261023/overlay/lib/chimaera_ros_bridge/gazebo_host_bridge --ros-args --params-file /tmp/launch_params_0xvhdzga'].
+[INFO] [gem5.opt-5]: sending signal 'SIGINT' to process[gem5.opt-5]
+[INFO] [robot_state_publisher-3]: sending signal 'SIGINT' to process[robot_state_publisher-3]
+[INFO] [ign-2]: sending signal 'SIGINT' to process[ign-2]
+[INFO] [parameter_bridge-1]: sending signal 'SIGINT' to process[parameter_bridge-1]
+[robot_state_publisher-3] [INFO] [1792791335.154323078] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-1] [INFO] [1792791335.155797429] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-1] Failed to delete datawriter, at /work/.chimaera-m5/orchestrator-checkpoints-20261023/rmw-source/rmw_fastrtps-6.2.10/rmw_fastrtps_shared_cpp/src/publisher.cpp:49 during '__function__'
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[ign-2] Chimaera DDS endpoint disposal: cannot register DDS endpoint with runtime
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 45]
+[INFO] [parameter_bridge-1]: process has finished cleanly [pid 41]
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [ign-2]: process has finished cleanly [pid 43]
+[ERROR] [gem5.opt-5]: process has died [pid 49, exit code -2, cmd '/work/gem5/build/X86/gem5.opt --outdir=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/gem5 -p /work/.chimaera-m5/orchestrator-checkpoints-20261023/overlay/share/chimaera_ros_bridge/config /work/ros/ball_catching_ws/scripts/gem5_ball_catching.py --gem5-root /work/gem5 --experiment /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/execution.json --bundle /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/guest.tar.gz --transport-backend m5ops --image /work/.chimaera-orchestrator/assets/ball-catching-11ad4c4c66f14b6faac0.img --kernel /work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel --managed-shutdown --guest-file /tmp/chimaera-ball-session.json=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/guest-session.json --guest-file /tmp/chimaera-ball.urdf=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/robot.urdf --guest-file /tmp/chimaera-ball-start=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v3/smoke1/start-guest.sh'].

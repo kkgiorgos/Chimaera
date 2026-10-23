@@ -1,0 +1,16 @@
+---------- Begin Simulation Statistics ----------
+board.chimaera_m5.checkpoint.restoredPeers            0                       # Host DDS identities at restore (Count)
+board.chimaera_m5.checkpoint.peerDisposalsQueued            0                       # SPDP disposals queued before fresh ingress (Count)
+board.chimaera_m5.functionalCopies.copyCalls          184                       # Host-executed middleware copy calls (Count)
+board.chimaera_m5.functionalCopies.copyBytes     95392040                       # Bytes copied without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.fillCalls           94                       # Host-executed middleware fill calls (Count)
+board.chimaera_m5.functionalCopies.fillBytes     48729554                       # Bytes filled without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.faults            0                       # Functional-copy memory faults; prefix may be written (Count)
+---------- Begin Simulation Statistics ----------
+board.chimaera_m5.checkpoint.restoredPeers            0                       # Host DDS identities at restore (Count)
+board.chimaera_m5.checkpoint.peerDisposalsQueued            0                       # SPDP disposals queued before fresh ingress (Count)
+board.chimaera_m5.functionalCopies.copyCalls          184                       # Host-executed middleware copy calls (Count)
+board.chimaera_m5.functionalCopies.copyBytes     95392040                       # Bytes copied without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.fillCalls           94                       # Host-executed middleware fill calls (Count)
+board.chimaera_m5.functionalCopies.fillBytes     48729554                       # Bytes filled without timed guest accesses (Byte)
+board.chimaera_m5.functionalCopies.faults            0                       # Functional-copy memory faults; prefix may be written (Count)

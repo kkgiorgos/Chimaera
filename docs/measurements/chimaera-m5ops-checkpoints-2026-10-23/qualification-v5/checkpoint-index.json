@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "provenance": {
+    "gem5_sha256": "acfb2031f796166b322a70403afe422f3b7340a3b02991aee36b997f65f7446f",
+    "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+    "disk_sha256": "d04e42486ae1e8045653004180accdd4e6c4f894cd933217712a9d7296196130",
+    "bundle_sha256": "71ec842b960d8bd8cfb6aa7f47765468297ed750fc4c637cc9dcbbe0ccd8ab64"
+  },
+  "groups": {
+    "3c5f1e723c56d54f93fa9bc5a6ce4dea8dc7cf58df715024a2b78b6d2588a19c": {
+      "host-replay.bin": "c04e3b2012630cc510dce880ecdd9dc6e5d47fe3180d172273b415a8c128437b",
+      "checkpoint-host-state": "3550a3d9907a40a729d8b05c1db2107f44d4fe35ab5df8ac17da574f49d9d43d",
+      "checkpoint-ready": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "host-commands.txt": "f9b5d18c41a345e1b886b4e6b2a24616b7585080b6f83be1b8e1e68e509439f9",
+      "host-commands.txt.tail": "ac2dd606ae60f6c5773026b48a182a11a8659b3998d7712da83478fe4b5baca5",
+      "guest_records.jsonl": "303af9566263724b2384f3604867e652bbba8ed3b581c5298060b1d18a332fbe",
+      "gem5/checkpoint-record-counts.json": "74f55f92b5c3ac7bc3398eafa4095404fa6fd716b64100a7b80b1d05212f0de5",
+      "checkpoint.json": "707f060c8d610b4c17adc69696a990eadfba66be2e997de96dab252d92ddd476",
+      "cpt/board.physmem.store0.pmem": "084976c8ace5c8e03b72e3b51831d35435660f82785beed0de4831dae80101b3",
+      "cpt/m5.cpt": "0570d4b66feddc511cd4deb9546ac0afc0dc57242ecc8dff07ed63a8aa612398",
+      "cpt/board.cache_hierarchy.ruby_system.cache.gz": "59869db34853933b239f1e2219cf7d431da006aa919635478511fabbfc8849d2",
+      "cpt/board.pc.south_bridge.ide.disks.image.cow": "40f1d59958909b6d7df5d3810189333ad397e8367c0b841b2bedddc354a11f75",
+      "cpt/board.chimaera_m5.m5state": "5949978ff7391f02793de56f29c1c7524787890b139f30138dfd2bb1601a6679",
+      "gem5/chimaera-trace-guest-177.jsonl": "a7a04a01e797e05aceb5f505887b958c4909aa52b2ae99b0540c73f7b6798683"
+    }
+  }
+}

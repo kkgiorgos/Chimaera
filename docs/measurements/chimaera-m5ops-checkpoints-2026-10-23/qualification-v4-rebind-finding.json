@@ -1,0 +1,11 @@
+{
+  "status": "failed",
+  "reason": "SPDP disposal selected ROS graph port 1 instead of built-in metatraffic port 25150",
+  "saved_control_channels": [
+    1,
+    25150,
+    25160
+  ],
+  "result": "Record barrier confirmed and records contiguous, but fresh camera writer never reconnected",
+  "action": "Owned simulator interrupted; default activation remains gated"
+}

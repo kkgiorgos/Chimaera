@@ -1,0 +1,11 @@
+{
+  "orchestrator_and_container_pytest": {"passed": 357},
+  "ros_workflow_pytest_humble": {"passed": 167, "skipped": 2},
+  "transport_ctest": {"passed": 9, "includes": "checkpoint codec, saved discovery-port regression, mailbox snapshots"},
+  "dds_ctest": {"passed": 7, "includes": "crash/restart with disposal, negative case without disposal"},
+  "robot_ctest": {"passed": 2},
+  "sim_core_ctest": {"passed": 2},
+  "native_fortress_checks": {"passed": ["launch_stepping", "legacy_checkpoint_replay"], "scope": "native physics with synthetic readiness/guest, separate from direct m5ops checkpoint qualification"},
+  "candidate_configuration": {"cases": 2, "labels": ["TIMING · loft-3 · camera_30 · baseline", "TIMING · loft-5 · camera_30 · baseline"]},
+  "notes": "The native DDS fixture does not exercise device discovery-port selection; actual direct m5ops rebind remains a simulation gate. No native check establishes full Timing catch success, latency tails, sustained throughput, O3 restore, or distributed worker execution."
+}

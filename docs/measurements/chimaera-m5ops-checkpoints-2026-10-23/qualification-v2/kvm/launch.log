@@ -1,0 +1,284 @@
+[INFO] [launch]: All log files can be found below /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/ros_logs/2026-10-23-20-55-14-689997-b45d087a68e0-38
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [parameter_bridge-1]: process started with pid [41]
+[INFO] [ign-2]: process started with pid [43]
+[INFO] [robot_state_publisher-3]: process started with pid [45]
+[INFO] [gazebo_host_bridge-4]: process started with pid [47]
+[INFO] [gem5.opt-5]: process started with pid [49]
+[gazebo_host_bridge-4] [INFO] [1792788915.295759980] [host_bridge]: Fast DDS middleware routing enabled (10 routes)
+[parameter_bridge-1] [37;1m2026-10-23 20:55:15.297 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed to create segment fastrtps_266b6226b7650c8b: No such file or directory[34;1m -> Function [36mSegment[m
+[parameter_bridge-1] [37;1m2026-10-23 20:55:15.297 [31;1m[[37;1mRTPS_MSG_OUT[31;1m Error] [37mNo such file or directory[34;1m -> Function [36minit[m
+[gazebo_host_bridge-4] [INFO] [1792788915.298814621] [host_bridge]: Host bridge initialized; waiting for gem5 guest
+[parameter_bridge-1] [37;1m2026-10-23 20:55:15.298 [31;1m[[37;1mRTPS_PARTICIPANT[31;1m Error] [37mUnable to Register SHM Transport. SHM Transport is not supported in the current platform.[34;1m -> Function [36mRTPSParticipantImpl[m
+[robot_state_publisher-3] [INFO] [1792788915.368236432] [robot_state_publisher]: got segment catch_cup
+[robot_state_publisher-3] [INFO] [1792788915.369195616] [robot_state_publisher]: got segment cup_bracket
+[robot_state_publisher-3] [INFO] [1792788915.369221822] [robot_state_publisher]: got segment cup_rim
+[robot_state_publisher-3] [INFO] [1792788915.369226984] [robot_state_publisher]: got segment fr3_link0
+[robot_state_publisher-3] [INFO] [1792788915.369231547] [robot_state_publisher]: got segment fr3_link0_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369236024] [robot_state_publisher]: got segment fr3_link0_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369240323] [robot_state_publisher]: got segment fr3_link1
+[robot_state_publisher-3] [INFO] [1792788915.369244783] [robot_state_publisher]: got segment fr3_link1_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369248999] [robot_state_publisher]: got segment fr3_link1_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369253078] [robot_state_publisher]: got segment fr3_link2
+[robot_state_publisher-3] [INFO] [1792788915.369257170] [robot_state_publisher]: got segment fr3_link2_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369261275] [robot_state_publisher]: got segment fr3_link2_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369265385] [robot_state_publisher]: got segment fr3_link3
+[robot_state_publisher-3] [INFO] [1792788915.369269682] [robot_state_publisher]: got segment fr3_link3_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369273962] [robot_state_publisher]: got segment fr3_link3_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369278084] [robot_state_publisher]: got segment fr3_link4
+[robot_state_publisher-3] [INFO] [1792788915.369282134] [robot_state_publisher]: got segment fr3_link4_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369286177] [robot_state_publisher]: got segment fr3_link4_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369290407] [robot_state_publisher]: got segment fr3_link5
+[robot_state_publisher-3] [INFO] [1792788915.369294663] [robot_state_publisher]: got segment fr3_link5_accelerometer_bottom
+[robot_state_publisher-3] [INFO] [1792788915.369298680] [robot_state_publisher]: got segment fr3_link5_accelerometer_top
+[robot_state_publisher-3] [INFO] [1792788915.369302716] [robot_state_publisher]: got segment fr3_link6
+[robot_state_publisher-3] [INFO] [1792788915.369306815] [robot_state_publisher]: got segment fr3_link7
+[robot_state_publisher-3] [INFO] [1792788915.369311029] [robot_state_publisher]: got segment fr3_link8
+[robot_state_publisher-3] [INFO] [1792788915.369315069] [robot_state_publisher]: got segment world
+[parameter_bridge-1] [INFO] [1792788915.383525921] [ros_gz_bridge]: Creating GZ->ROS Bridge: [/stereo/left/image_raw (ignition.msgs.Image) -> /stereo/left/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-1] [INFO] [1792788915.387220105] [ros_gz_bridge]: Creating GZ->ROS Bridge: [/stereo/right/image_raw (ignition.msgs.Image) -> /stereo/right/image_raw (sensor_msgs/msg/Image)] (Lazy 0)
+[ign-2] [37;1m2026-10-23 20:55:15.615 [31;1m[[37;1mRTPS_TRANSPORT_SHM[31;1m Error] [37mFailed to create segment fastrtps_20a3a6c73ec21324: No such file or directory[34;1m -> Function [36mSegment[m
+[ign-2] [37;1m2026-10-23 20:55:15.616 [31;1m[[37;1mRTPS_MSG_OUT[31;1m Error] [37mNo such file or directory[34;1m -> Function [36minit[m
+[ign-2] [37;1m2026-10-23 20:55:15.616 [31;1m[[37;1mRTPS_PARTICIPANT[31;1m Error] [37mUnable to Register SHM Transport. SHM Transport is not supported in the current platform.[34;1m -> Function [36mRTPSParticipantImpl[m
+[gem5.opt-5] Global frequency set at 1000000000000 ticks per second
+[gem5.opt-5] gem5 Simulator System.  https://www.gem5.org
+[gem5.opt-5] gem5 is copyrighted software; use the --copyright option for details.
+[gem5.opt-5] 
+[gem5.opt-5] gem5 version 25.1.0.1
+[gem5.opt-5] gem5 compiled Oct 23 2026 20:50:04
+[gem5.opt-5] gem5 started Oct 23 2026 20:55:15
+[gem5.opt-5] gem5 executing on b45d087a68e0, pid 49
+[gem5.opt-5] command line: /work/gem5/build/X86/gem5.opt --outdir=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/gem5 -p /work/.chimaera-m5/orchestrator-checkpoints-20261023/overlay/share/chimaera_ros_bridge/config /work/ros/ball_catching_ws/scripts/gem5_ball_catching.py --gem5-root /work/gem5 --experiment /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/execution.json --bundle /work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/guest.tar.gz --transport-backend m5ops --image /work/.chimaera-orchestrator/assets/ball-catching-11ad4c4c66f14b6faac0.img --kernel /work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel --managed-shutdown --guest-file /tmp/chimaera-ball-session.json=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/guest-session.json --guest-file /tmp/chimaera-ball.urdf=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/robot.urdf --guest-file /tmp/chimaera-ball-start=/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification-v2/kvm/start-guest.sh
+[gem5.opt-5] 
+[gem5.opt-5] info: Standard input is not a terminal, disabling listeners.
+[gem5.opt-5] [host] Booting until the guest bridge's workbegin marker
+[gem5.opt-5] warn: <orphan X86Board>.kvm_vm already has parent not resetting parent.
+[gem5.opt-5] 	Note: kvm_vm is not a parameter of X86Board
+[gem5.opt-5] warn: (Previously declared as <orphan X86Board>.processor.kvm_vm
+[gem5.opt-5] warn: board.workload.acpi_description_table_pointer.rsdt adopting orphan SimObject param 'entries'
+[gem5.opt-5] warn: No dot file generated. Please install pydot to generate the dot file and pdf.
+[gem5.opt-5] src/sim/kernel_workload.cc:46: info: kernel located at: /work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel
+[gem5.opt-5] src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+[gem5.opt-5]       0: board.pc.south_bridge.cmos.rtc: Real-time clock set to Sun Jan  1 00:00:00 2012
+[gem5.opt-5] src/dev/serial/terminal.cc:174: warn: Sockets disabled, not accepting terminal connections
+[gem5.opt-5] src/base/statistics.hh:279: warn: One of the stats is a legacy stat. Legacy stat is a stat that does not belong to any statistics::Group. Legacy stat is deprecated.
+[gem5.opt-5] src/cpu/kvm/base.cc:113: info: Using KVM CPU without perf. The stats related to the number of cycles and instructions executed by the KVM CPU will not be updated. The stats should not be used for performance evaluation.
+[gem5.opt-5] src/cpu/kvm/base.cc:113: info: Using KVM CPU without perf. The stats related to the number of cycles and instructions executed by the KVM CPU will not be updated. The stats should not be used for performance evaluation.
+[gem5.opt-5] src/dev/intel_8254_timer.cc:128: warn: Reading current count from inactive timer.
+[gem5.opt-5] src/base/remote_gdb.cc:418: warn: Sockets disabled, not accepting gdb connections
+[gem5.opt-5] src/cpu/kvm/base.cc:169: info: KVM: Coalesced MMIO disabled by config.
+[gem5.opt-5] src/cpu/kvm/base.cc:169: info: KVM: Coalesced MMIO disabled by config.
+[gem5.opt-5] src/cpu/kvm/base.cc:591: hack: Pretending totalOps is equivalent to totalInsts()
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xd90) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x309) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x30a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x30b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38f) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x390) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3f1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x600) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc2) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc3) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc4) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc5) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc6) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc7) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc8) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x186) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x187) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x188) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x189) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18c) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x12) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x11) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d01) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d00) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000000) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000001) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000020) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000021) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000022) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000023) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000100) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000101) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000102) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000103) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000104) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000105) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000003) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000002) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000010) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000080) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000b0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000073) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000106) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000107) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000108) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000118) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000ff) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f2) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f3) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f4) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f5) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d02) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d03) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d04) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d06) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d07) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x6e0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x10a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x345) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x1a0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4d0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x9e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x34) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xce) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x140) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x1fc) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x8b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x480) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48f) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x490) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x485) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x486) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x488) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48c) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x491) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc0010015) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d05) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:563: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xd90) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x309) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x30a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x30b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x38f) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x390) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3f1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x600) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc2) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc3) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc4) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc5) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc6) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc7) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc8) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x186) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x187) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x188) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x189) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18c) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x18d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x12) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x11) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d01) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d00) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000000) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000001) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000020) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000021) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000022) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000023) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000100) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000101) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000102) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000103) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000104) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000105) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000003) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000002) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000010) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000080) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000b0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000073) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000106) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000107) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000108) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x40000118) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000ff) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f1) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f2) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f3) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f4) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x400000f5) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d02) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d03) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d04) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d06) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d07) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x3b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x6e0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x10a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x345) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x1a0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4d0) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x9e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x34) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xce) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x140) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x1fc) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x8b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x480) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48d) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48e) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48f) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x490) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x485) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x486) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x488) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48a) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48b) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x48c) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x491) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0xc0010015) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:1711: warn: kvm-x86: MSR (0x4b564d05) unsupported by gem5. Skipping.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:563: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+[gem5.opt-5] src/arch/x86/kvm/x86_cpu.cc:563: warn: cs limit (0xffffffff) and g (0) combination is illegal.
+[gem5.opt-5] src/arch/x86/interrupts.cc:529: hack: Assuming logical destinations are 1 << id.
+[gem5.opt-5] src/dev/x86/pc.cc:117: warn: Don't know what interrupt to clear for console.
+[gem5.opt-5] src/dev/ps2/mouse.cc:153: warn: Unknown mouse command 0xea.
+[gem5.opt-5] src/dev/ps2/mouse.cc:153: warn: Unknown mouse command 0xea.
+[gem5.opt-5] src/dev/ps2/mouse.cc:153: warn: Unknown mouse command 0xe1.
+[gem5.opt-5] src/dev/ps2/mouse.cc:153: warn: Unknown mouse command 0xe1.
+[gem5.opt-5] src/dev/x86/pc.cc:130: warn: Tried to clear PCI interrupt 17
+[gem5.opt-5] [host] Timing socket ready at /tmp/chimaera_time.sock; gem5 paused at 10893730064302
+[gazebo_host_bridge-4] [INFO] [1792788926.610631887] [host_bridge]: Co-simulation runs without wall-clock pacing
+[ign-2] [INFO] [1792788965.560305181] [ball_catching_host]: Ball launched at simulation time 0.191
+[ign-2] [INFO] [1792789269.781967886] [ball_catching_host]: Catch result: {"success":true,"reason":"inside_cup_at_deadline","launch_time":0.1905,"result_time":1.6905,"duration":1.5,"contained_duration":0.5315,"flight_end_time":1.159,"flight_end_kind":"cup_capture"}
+[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)
+[INFO] [gem5.opt-5]: sending signal 'SIGINT' to process[gem5.opt-5]
+[INFO] [gazebo_host_bridge-4]: sending signal 'SIGINT' to process[gazebo_host_bridge-4]
+[INFO] [robot_state_publisher-3]: sending signal 'SIGINT' to process[robot_state_publisher-3]
+[INFO] [ign-2]: sending signal 'SIGINT' to process[ign-2]
+[INFO] [parameter_bridge-1]: sending signal 'SIGINT' to process[parameter_bridge-1]
+[gazebo_host_bridge-4] [INFO] [1792789269.998915985] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[robot_state_publisher-3] [INFO] [1792789269.999363379] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[parameter_bridge-1] [INFO] [1792789270.000766043] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[gazebo_host_bridge-4] [INFO] [1792789270.016962956] [host_bridge]: Simulated 1.691s in 343.406s; average 0.005x
+[INFO] [parameter_bridge-1]: process has finished cleanly [pid 41]
+[INFO] [robot_state_publisher-3]: process has finished cleanly [pid 45]
+[INFO] [ign-2]: process has finished cleanly [pid 43]
+[gazebo_host_bridge-4] [INFO] [1792789270.224525381] [host_bridge]: gem5 disconnected; TX 9018, RX 2325
+[gem5.opt-5] [host] Timing server stopped at tick 12584730064302
+[INFO] [gazebo_host_bridge-4]: process has finished cleanly [pid 47]
+[INFO] [gem5.opt-5]: process has finished cleanly [pid 49]

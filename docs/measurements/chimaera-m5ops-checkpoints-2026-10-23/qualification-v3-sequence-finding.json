@@ -1,0 +1,11 @@
+{
+  "status": "failed",
+  "reason": "Replacement reader was not ready when the publisher first reported a match",
+  "first_new_record_line": 84,
+  "stream": "control_timing",
+  "expected_sequence": 59,
+  "received_sequence": 67,
+  "missing_records": 8,
+  "action": "Owned simulator interrupted after direct sequence validation; no record rebasing or gap suppression",
+  "artifact": "qualification-v3/smoke1/guest_records.jsonl"
+}

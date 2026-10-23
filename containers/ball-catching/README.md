@@ -42,12 +42,19 @@ simulated architecture. Results remain coarse binary observations.
 For SSH deployment, a shared case queue, live logs/progress, Discord notifications,
 and central result collection, see the [orchestrator guide](../../orchestrator/README.md).
 The local workflow below remains available independently.
-The orchestrator adds `--checkpoint-create` on its preparation machine and
+For checkpoint-enabled profiles, the orchestrator adds `--checkpoint-create` on its preparation machine and
 distributes the application image and separate sparse readiness assets containing
 the exact disk and ready guest/host state. Its cases restore without KVM, apply a 50 ms simulated pressure
 warmup, and then throw with independent ball position/direction/speed settings.
 The standalone preparation command below retains its staging-only behavior;
 add `--checkpoint-create` to prepare reusable readiness checkpoints locally.
+The composed DDS+m5ops candidate supports `fixed.middleware_copy_mode` values
+`functional` and `guest`, with `fixed.readiness_checkpoint` enabling its reusable
+robot-ready state. `fixed.checkpoint_readiness_cpu: "kvm"` keeps readiness
+functional, then switches to the selected detailed CPU before saving. Restored
+throws execute on that detailed CPU. See the
+[integration and qualification record](../../docs/chimaera-m5ops-checkpoints-2026-10-23.md)
+before selecting this candidate; its default activation is gated on validation.
 
 ## Prepare only
 

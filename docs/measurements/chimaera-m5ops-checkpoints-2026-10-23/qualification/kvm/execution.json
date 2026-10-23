@@ -1,0 +1,98 @@
+{
+  "hardware": {
+    "cpu_type": "kvm",
+    "num_cores": 2,
+    "cpu_clock": "3GHz",
+    "l1d_size": "16KiB",
+    "l1i_size": "16KiB",
+    "l1_assoc": 8,
+    "l2_size": "256KiB",
+    "l2_assoc": 16
+  },
+  "aggressor": {
+    "read_percent": 80,
+    "stride": 4096,
+    "max_pending": 512,
+    "window": 268435456,
+    "seed": 1,
+    "backpressure": true,
+    "duty_percent": 100,
+    "period": 12000,
+    "pattern": "none",
+    "interval": 1,
+    "gbps": 0
+  },
+  "ramulator_config": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/kvm/ramulator.json",
+  "image": "/work/.chimaera-orchestrator/assets/ball-catching-11ad4c4c66f14b6faac0.img",
+  "kernel": "/work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/kernel",
+  "gem5_root": "/work/gem5",
+  "bundle": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/guest.tar.gz",
+  "options": {
+    "duration": 1.5,
+    "warmup": 0,
+    "physics_step": 0.0005,
+    "joint_hz": 1000,
+    "camera_position": [
+      -2,
+      0,
+      2
+    ],
+    "camera_width": 480,
+    "camera_height": 360,
+    "cup_radius": 0.12,
+    "cup_depth": 0.14,
+    "launch_position": [
+      1.8,
+      0.04,
+      3
+    ],
+    "launch_direction": [
+      -1,
+      0,
+      2
+    ],
+    "launch_speed": 3,
+    "camera_hz": 30,
+    "output": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/kvm"
+  },
+  "rates": {
+    "name": "camera_30",
+    "camera_hz": 30,
+    "planner_hz": 30,
+    "plan_interval": 0.06,
+    "control_hz": 250
+  },
+  "routes": "/work/.chimaera-m5/orchestrator-checkpoints-20261023/qualification/routes.json",
+  "fixed": {
+    "duration": 1.5,
+    "warmup": 0,
+    "physics_step": 0.0005,
+    "joint_hz": 1000,
+    "camera_position": [
+      -2,
+      0,
+      2
+    ],
+    "camera_width": 480,
+    "camera_height": 360,
+    "image_age_periods": 2,
+    "guest_dds_shm_bytes": 67108864,
+    "cup_radius": 0.12,
+    "cup_depth": 0.14,
+    "interval_us": 500,
+    "poll_us": 100,
+    "startup_timeout_s": 180,
+    "wall_timeout_s": 570,
+    "image_diagnostics": false,
+    "pressure_warmup": 0.0,
+    "transport_backend": "m5ops",
+    "middleware_transport": "fastdds",
+    "m5_module": "/work/.chimaera-orchestrator/assets/kernel-14ac7614f5619e88470f164431272f2302e606b7a02bd3d4c4a1b83606e6eabd/chimaera_m5.ko",
+    "dma_module": "",
+    "robot_execution": "composed",
+    "middleware_copy_mode": "functional",
+    "readiness_checkpoint": false,
+    "trace": true
+  },
+  "scripts": "/work/ros/ball_catching_ws/scripts"
+}

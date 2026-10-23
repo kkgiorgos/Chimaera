@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "provenance": {
+    "gem5_sha256": "a50556d75e5a2b97ccb31abf28370f3030a54793db631f7d61af111f5889fbdf",
+    "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+    "disk_sha256": "d04e42486ae1e8045653004180accdd4e6c4f894cd933217712a9d7296196130",
+    "bundle_sha256": "c4e1ee3cf75d19199e878ed1cf099f6c222090c5c7ed4d5bb90d187b3d518703"
+  },
+  "groups": {
+    "3c5f1e723c56d54f93fa9bc5a6ce4dea8dc7cf58df715024a2b78b6d2588a19c": {
+      "host-replay.bin": "0deba1228f57e286f59e28acd4d4d8d9b2d5efcda35a6ff0c177708875be3fd3",
+      "checkpoint-host-state": "360b2de7444b253dae6ae6c5a387f7d6dfd58fd81ef2e6957f3e1f9b5e07f7eb",
+      "checkpoint-ready": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "host-commands.txt": "d195ef23c8e0a35bd4581521af747ac0fa757605525f5539d77697960bf84f7b",
+      "host-commands.txt.tail": "c680d1c2dd1b1a3d46386198c742c5cba5beb0c8ae6bc5cd13a6a546e2a3ad1e",
+      "guest_records.jsonl": "36eb9cb3f243b741f29f77f103a63300133c5b9f8e45224f388956865a59be7b",
+      "gem5/checkpoint-record-counts.json": "3e314da5455bee11f4b9988c8db42bcb28980497dc9b2d513b3bbbf519598c9e",
+      "checkpoint.json": "a943de5ed2264ab13deaf9630caeefe9890b9b0fbf164684cf6cba3f9a623bd6",
+      "cpt/board.physmem.store0.pmem": "3e0c23c0da9564f8d4910baef74e103b78da81d536ae8001a7116600a1fe4730",
+      "cpt/m5.cpt": "ede204e4480e646c1e88453646c28e00f7167b1fba05b5d3cd83fa2a92b8bec4",
+      "cpt/board.cache_hierarchy.ruby_system.cache.gz": "59869db34853933b239f1e2219cf7d431da006aa919635478511fabbfc8849d2",
+      "cpt/board.pc.south_bridge.ide.disks.image.cow": "914ecbb55b22f8f34c4f9851bb840b118a72d1a00efa1576266b803e950d439d",
+      "cpt/board.chimaera_m5.m5state": "abb9ecef0f94fa313ce3781491af52a087cfe6f920d7f86d8fafcd52cf650166",
+      "gem5/chimaera-trace-guest-177.jsonl": "cb6b0b1aa99281af4229c9e38c6db1905d3b7311f3dc9d52165d13d5f9d586fc"
+    }
+  }
+}
