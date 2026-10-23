@@ -70,6 +70,8 @@ def load_trial(directory):
     plans = [r for r in _records(directory / 'interception.jsonl') if launch <= r['time'] <= end and _completed_by(r, end)]
     control_timing = [r for r in _records(directory / 'control_timing.jsonl')
                       if launch <= r['time'] <= end and _completed_by(r, end)]
+    transport_path = directory / 'transport_latency.json'
+    transport = json.loads(transport_path.read_text()) if transport_path.exists() else None
     with (directory / 'ground_truth.csv').open() as source:
         rows = [{k: float(v) for k, v in row.items()} for row in csv.DictReader(source)]
     rows = [r for r in rows if r['launched'] and launch <= r['time'] <= end]
@@ -164,6 +166,7 @@ def load_trial(directory):
                    evaluation_seconds=end-launch, duration=result['duration'],
                    contained_duration=result['contained_duration'],
                    timing_detail=details,
+                   transport_latency=transport,
                    processing_clock=next((r['clock'] for r in details
                                           if r['stage'] in ('perception', 'planning', 'control') and r['stats']),
                                          'not recorded'),

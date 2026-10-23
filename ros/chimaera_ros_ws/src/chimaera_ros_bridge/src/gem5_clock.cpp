@@ -25,10 +25,17 @@ extern "C" uint64_t chimaera_gem5_read_file(void * data, uint64_t size, uint64_t
   ensure_mapping();
   return m5_read_file_addr(data, size, offset);
 }
+extern "C" uint64_t chimaera_gem5_write_file(void * data, uint64_t size, uint64_t offset, const char * name) {
+  ensure_mapping();
+  return m5_write_file_addr(data, size, offset, name);
+}
 #else
 extern "C" uint64_t chimaera_gem5_time_ns() { return m5_rpns(); }
 extern "C" void chimaera_gem5_case_end() { m5_work_end(0, 0); }
 extern "C" uint64_t chimaera_gem5_read_file(void * data, uint64_t size, uint64_t offset) {
   return m5_read_file(data, size, offset);
+}
+extern "C" uint64_t chimaera_gem5_write_file(void * data, uint64_t size, uint64_t offset, const char * name) {
+  return m5_write_file(data, size, offset, name);
 }
 #endif

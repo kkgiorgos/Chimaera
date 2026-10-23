@@ -369,7 +369,8 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
     selected_plugins = []
     def middleware(path):
         selected_plugins.append(path)
-        return types.SimpleNamespace(chimaera_rmw_transport_abi=lambda: 1)
+        return types.SimpleNamespace(chimaera_rmw_transport_abi=lambda: 1,
+                                     chimaera_rmw_trace_abi=lambda: 1)
     monkeypatch.setattr(dds.ctypes, 'CDLL', middleware)
     dependencies = ''.join(f'{name} => {sdk / "lib" / name} (0x1)\n' for name in libraries[2:])
     dependencies += 'libc.so.6 => /lib/libc.so.6 (0x2)\n'
@@ -396,7 +397,7 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
         for name in libraries[1:]:
             assert runtime[name]['sha256'] == worker.digest(sdk / 'lib' / name)
         assert root + '/lib/libc.so.6' not in archive.getnames()
-    assert selected_plugins == [str(sdk / 'lib/librmw_fastrtps_cpp.so')]
+    assert selected_plugins and set(selected_plugins) == {str(sdk / 'lib/librmw_fastrtps_cpp.so')}
     guest = plan(load(output / 'staging-session.json'), 'guest', '/bridge')
     assert guest['env']['CHIMAERA_DDS_BACKEND'] == 'm5ops'
     assert guest['env']['CHIMAERA_M5_DEVICE'] == '/dev/chimaera-m5'

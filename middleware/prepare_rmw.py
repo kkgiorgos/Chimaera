@@ -100,9 +100,36 @@ def prepare(archive, output):
             needle, f"  chimaera_dds::endpoint_destroyed({handle}->topic_name, "
             + ("true" if name == "publisher" else "false") + ");\n" + needle))
     publisher = source / "rmw_fastrtps_cpp/src/publisher.cpp"
+    # Trace normal and serialized publication using DDS's own sample identity.
+    # No application message fields or DDS timestamps are changed.
+    publish = shared / 'rmw_publish.cpp'
+    text = '#include <chimaera_dds_transport/trace.hpp>\n' + publish.read_text()
+    if text.count('info->data_writer_->write(&data)') != 2:
+        raise ValueError('Expected typed and serialized RMW publish hooks')
+    text = text.replace('info->data_writer_->write(&data)',
+                        'chimaera_dds::trace::write(info->data_writer_, &data, publisher->topic_name)')
+    text = text.replace('info->data_writer_->write(const_cast<void *>(ros_message))',
+                        'chimaera_dds::trace::write(info->data_writer_, '
+                        'const_cast<void *>(ros_message), publisher->topic_name)')
+    publish.write_text(text)
+    take = shared / 'rmw_take.cpp'
+    text = '#include <chimaera_dds_transport/trace.hpp>\n' + take.read_text()
+    needle = 'if (info_seq[0].valid_data) {'
+    # _take_sequence delegates to _take. Serialized take has its own path.
+    if text.count(needle) != 2:
+        raise ValueError('Expected typed and serialized RMW take hooks')
+    text = text.replace(needle, needle + '\n      chimaera_dds::trace::take('
+                        'subscription->topic_name, info_seq[0].sample_identity);')
+    text = text.replace('if (item->info_seq[0].valid_data) {',
+                        'if (item->info_seq[0].valid_data) {\n'
+                        '      chimaera_dds::trace::take(subscription->topic_name, '
+                        'item->info_seq[0].sample_identity);')
+    take.write_text(text)
     publisher.write_text(publisher.read_text() + '\nextern "C" '
                          '__attribute__((visibility("default"))) '
-                         'int chimaera_rmw_transport_abi() { return 1; }\n')
+                         'int chimaera_rmw_transport_abi() { return 1; }\n'
+                         'extern "C" __attribute__((visibility("default"))) '
+                         'int chimaera_rmw_trace_abi() { return 1; }\n')
     return source
 
 

@@ -26,6 +26,48 @@
     const p=document.createElement("p");p.textContent=[counts ? `Matched pairs: ${counts.pairs} · detections: ${counts.detected} · usable tracks: ${counts.tracked} · expired during processing: ${s.expired_perception_count || 0}.` : "Perception counts were not recorded.",plans ? `Planning records: ${plans.updates} · feasible plans: ${plans.planned} · infeasible searches: ${plans.infeasible} · plans discarded after deadline: ${plans.deadline_missed || 0}.` : "Planning counts were not recorded."].join(" ");el("cadence").appendChild(p);
     for(const stage of ["perception","planning","control"]){if(selected!=="all"&&selected!==stage)continue;const detail=rows.find(r=>r.stage===stage&&r.cadence);if(detail){const p=document.createElement("p");p.textContent=`${stage[0].toUpperCase()+stage.slice(1)}: ${format(detail.achieved_hz,"Hz",1)} achieved / ${format(detail.desired_hz,"Hz",1)} desired (${format(detail.rate_percent,"%",0)} of target) · P95 update gap: ${format(detail.cadence.gaps.p95_ms,"ms",1)} (simulation clock).`;el("cadence").appendChild(p);}}
   }
+  function transportPlot() {
+    const svg=el("transport-chart");svg.replaceChildren();
+    const stream=current?.summary?.transport_latency?.streams?.find(s=>s.topic===el("transport-stream").value);
+    const points=stream?.time_trace||[];if(!points.length)return;
+    const origin=current.result.launch_time;
+    const xmax=Math.max(.001,current.summary.evaluation_seconds);
+    const ymax=Math.max(.001,...points.map(p=>p.latency_ms));
+    const node=(tag,attrs,text)=>{const n=document.createElementNS("http://www.w3.org/2000/svg",tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n;};
+    svg.append(node("path",{d:"M50 15V175H620",fill:"none",stroke:"#50636e"}));
+    svg.append(node("text",{x:50,y:12,fill:"#a6b5bd","font-size":11},`${ymax.toFixed(2)} ms`));
+    svg.append(node("text",{x:50,y:198,fill:"#a6b5bd","font-size":11},"0 s after launch"));
+    svg.append(node("text",{x:620,y:198,fill:"#a6b5bd","font-size":11,"text-anchor":"end"},`${xmax.toFixed(2)} s`));
+    for(const point of points){const dot=node("circle",{cx:50+570*Math.max(0,Math.min(1,(point.publish_seconds-origin)/xmax)),cy:175-150*point.latency_ms/ymax,r:2.5,fill:"#81bedc"});dot.append(node("title",{},`${(point.publish_seconds-origin).toFixed(4)} s: ${point.latency_ms.toFixed(3)} ms`));svg.append(dot);}
+  }
+  function transportTiming() {
+    const trace=current?.summary?.transport_latency;
+    const selector=el("transport-stream"), previous=selector.value;
+    el("transport-rows").replaceChildren();selector.replaceChildren();
+    el("transport-export").disabled=!trace;
+    for(const stream of trace?.streams||[]){
+      const row=document.createElement("tr");
+      cell(row,`${stream.topic} · ${stream.direction==="host_to_guest"?"Host → guest":"Guest → host"}`);
+      cell(row,stream.boundary==="bridge"?"Bridge ingress → publication":"Publish → RMW take");
+      cell(row,`${stream.received} / ${stream.published}`);cell(row,stream.missing_at_evaluation);
+      for(const key of ["mean_ms","p95_ms","p99_ms","maximum_ms"])cell(row,Number.isFinite(stream.latency?.[key])?stream.latency[key].toFixed(3):"—");
+      const quality=cell(row,stream.status.replaceAll("_"," "));
+      quality.title=`${stream.duplicates} duplicate/fanout receipts; ${stream.invalid_clock_events} invalid clocks; ${stream.negative_latency} negative delays; ${stream.unmatched_receipt_identities} unmatched identities`;
+      quality.setAttribute("aria-label",`${quality.textContent}: ${quality.title}`);
+      el("transport-rows").append(row);
+      const option=document.createElement("option");option.value=stream.topic;option.textContent=stream.topic;selector.append(option);
+    }
+    if([...selector.options].some(option=>option.value===previous))selector.value=previous;
+    selector.disabled=!selector.options.length;
+    el("transport-note").textContent=!trace||trace.status==="not_recorded"?"No Chimaera trace was recorded. Enable tracing and run a new experiment to measure latency.":`Trace: ${trace.status.replaceAll("_"," ")}. Window: launch through final evaluation. ${trace.files.length} recording files. Percentiles are computed separately for every topic; time plots show at most 2,000 samples per topic. Invalid clocks and unmatched identities are reported, not converted to delays.`;
+    transportPlot();
+  }
+  el("transport-stream").onchange=transportPlot;
+  el("transport-export").onclick=()=>{
+    const trace=current?.summary?.transport_latency;if(!trace)return;
+    const url=URL.createObjectURL(new Blob([JSON.stringify(trace,null,2)],{type:"application/json"}));
+    const link=document.createElement("a");link.href=url;link.download=`${current.id}-transport-latency.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
   el("stage-filter").onchange=()=>{showPipeline(el("stage-filter").value);detailedTiming();};
   for(const button of el("pipeline").children)button.onclick=()=>{el("stage-filter").value=button.dataset.stage;showPipeline(button.dataset.stage);detailedTiming();};
   showPipeline("perception");
@@ -34,7 +76,7 @@
     el("trial").replaceChildren();
     for (const [i, id] of point.trials.entries()) { const t=byId.get(id);if(!t)continue;const o=document.createElement("option");o.value=id;o.textContent=`Throw ${i+1} · ${t.summary.success ? "caught" : "miss"}`;el("trial").appendChild(o); }
     if (el("trial").options.length) chooseTrial(byId.get(el("trial").value));
-    else { playing=false;current=null;el("play").textContent="Play";el("scrub").value=0;el("time").textContent="0.000 s";el("timeline").replaceChildren();el("timing-note").textContent="";el("replay-note").textContent="No recorded motion for this point.";viewer?.setTrail([]);el("status").textContent=point.reason || "No completed throws for this data point.";el("flight").textContent="—";el("reaction").textContent="—";el("timing").replaceChildren();el("overview").replaceChildren();if(viewer)viewer.setFrame({},[-5,0,.04]); }
+    else { playing=false;current=null;transportTiming();el("play").textContent="Play";el("scrub").value=0;el("time").textContent="0.000 s";el("timeline").replaceChildren();el("timing-note").textContent="";el("replay-note").textContent="No recorded motion for this point.";viewer?.setTrail([]);el("status").textContent=point.reason || "No completed throws for this data point.";el("flight").textContent="—";el("reaction").textContent="—";el("timing").replaceChildren();el("overview").replaceChildren();if(viewer)viewer.setFrame({},[-5,0,.04]); }
   }
   for (const point of data.points) {
     const row=document.createElement("tr"), config=point.config||{}, catches=point.trials.filter(id=>byId.get(id)?.summary.success).length;
@@ -76,7 +118,7 @@
       label.style.top=`${19+index*20}px`;marker.appendChild(label);el("timeline").appendChild(marker);
     }
     if(viewer)el("replay-note").textContent=`Replay starts at launch. The arm starts vertically with only the elbow bend required by joint limits. The empty cup rotates upward during the visual approach; interception and braking follow during flight. Recorded motion is interpolated between samples. Gold shows the recorded path; the cyan ball locator is enlarged for visibility.`;
-    detailedTiming();draw();
+    detailedTiming();transportTiming();draw();
   }
   function draw(){if(!current)return;const frames=current.frames;let lo=0,hi=frames.length-1;while(lo+1<hi){const mid=(lo+hi)>>1;if(frames[mid].time<=time)lo=mid;else hi=mid;}const a=frames[lo],b=frames[hi],mix=Math.min(1,Math.max(0,(time-a.time)/(b.time-a.time||1)));const joints={};for(const [name,value]of Object.entries(a.joints))joints[name]=value+mix*((b.joints[name]??value)-value);const ball=a.ball.map((x,i)=>x+mix*(b.ball[i]-x));viewer?.setFrame(joints,ball);el("scrub").value=time;el("time").textContent=`${time.toFixed(3)} s`;}
   el("trial").onchange=()=>chooseTrial(byId.get(el("trial").value));el("scrub").oninput=()=>{time=Number(el("scrub").value);draw();};el("play").onclick=()=>{if(!current)return;if(time>=current.frames.at(-1).time)time=0;playing=!playing;el("play").textContent=playing?"Pause":"Play";};

@@ -90,6 +90,10 @@ public:
     }
     interval_ = interval;
     pending_ = true;
+    if (!trace_physics_origin_) {
+      std::lock_guard lock(mutex_);
+      trace_physics_origin_ = time_ns_;
+    }
     const auto begin = std::chrono::steady_clock::now();
     bridge_.exchange(*host_);
     const auto result = host_->step(interval_);
@@ -103,6 +107,7 @@ public:
     if (on_gem5_boundary) {
       on_gem5_boundary(gem5_.elapsed_ticks());
     }
+    chimaera_dds::trace::set_clock(*trace_physics_origin_ + gem5_.elapsed_ticks() / 1000);
     bridge_.exchange(*host_);
     // DDS and the host command gateway run asynchronously to the timing barrier.
     // Allow their executors to consume commands while both simulators are paused.
@@ -250,6 +255,7 @@ private:
     paused_ = message.paused();
     iterations_ = message.iterations();
     time_ns_ = message.sim_time().sec() * 1000000000LL + message.sim_time().nsec();
+    chimaera_dds::trace::set_clock(time_ns_);
     changed_.notify_all();
   }
   chimaera::Gem5TimingController gem5_;
@@ -262,6 +268,7 @@ private:
   std::condition_variable changed_;
   bool seen_{false}, paused_{false}, pending_{false};
   uint64_t iterations_{}, target_{};
+  std::optional<uint64_t> trace_physics_origin_;
   int64_t time_ns_{}, target_time_{};
   std::chrono::steady_clock::time_point gazebo_begin_;
   ignition::transport::Node gazebo_;

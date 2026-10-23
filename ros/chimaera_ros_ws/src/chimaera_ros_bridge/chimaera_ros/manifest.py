@@ -13,6 +13,7 @@ DEFAULTS = dict(interval_us=100000, poll_us=10000, steps=0,
                 dma_device='/dev/chimaera-dma', dma_module='', dma_module_options='', dma_diagnostics=False,
                 m5_module='', m5_device='/dev/chimaera-m5',
                 dma_h2g='/tmp/chimaera_dma_h2g', dma_g2h='/tmp/chimaera_dma_g2h',
+                trace=False, trace_directory='', trace_clock_file='',
                 middleware_transport='bridge', dds_host_socket='/tmp/chimaera-dds-host.sock',
                 dds_guest_socket='/tmp/chimaera-dds-guest.sock')
 
@@ -87,6 +88,17 @@ def load(path):
     bridge = data.setdefault('bridge', {})
     fields(bridge, DEFAULTS)
     bridge = data['bridge'] = DEFAULTS | bridge
+    if type(bridge['trace']) is not bool:
+        raise ValueError('trace must be boolean')
+    for key in ('trace_directory', 'trace_clock_file'):
+        if not isinstance(bridge[key], str) or '\0' in bridge[key]:
+            raise ValueError(key + ' must be a path string')
+        if bridge[key]:
+            bridge[key] = local(bridge[key])
+    if bridge['trace'] and (not bridge['trace_directory'] or not bridge['trace_clock_file']):
+        raise ValueError('Tracing requires trace_directory and trace_clock_file')
+    if bridge['trace'] and not bridge['simulation_time_from_readfile']:
+        raise ValueError('Tracing requires simulation_time_from_readfile for a shared time origin')
     if bridge['middleware_transport'] not in ('bridge', 'fastdds'):
         raise ValueError('middleware_transport must be bridge or fastdds')
     same_domain = data['host']['domain_id'] == data['guest']['domain_id']

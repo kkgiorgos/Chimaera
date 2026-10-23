@@ -53,6 +53,7 @@ int main(int argc, char ** argv)
     ]})";
     auto write = [&](const std::string & text) { std::ofstream(path) << text; };
     write(config);
+    if (std::getenv("CHIMAERA_TRACE")) setenv("CHIMAERA_TRACE_ROUTES", path.c_str(), 1);
     require(chimaera_ros_bridge::load_config(path).size() == 3, "valid stereo config rejected");
     for (const auto & change : std::vector<std::pair<std::string, std::string>>{
            {"\"coalesce\":true", "\"coalesce\":false"},

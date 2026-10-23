@@ -8,7 +8,7 @@
   const format = (value, digits = 1) => finite(value) ? value.toFixed(digits) : '—';
   el('memory-panel').hidden = false;
   el('report-title').textContent = 'Ball catching under memory interference';
-  el('report-description').textContent = 'Compare binary task outcomes, guest DRAM latency, processing times, and delivered control updates.';
+  el('report-description').textContent = 'Compare binary task outcomes, guest DRAM latency, processing times, message latency, and delivered control updates.';
   el('points-title').textContent = 'Benchmark cases';
   for (const [id, key] of [['memory-throw', 'throw'], ['memory-rates', 'rates']]) {
     for (const name of [...new Set(data.points.map(point => point[key].name))]) {
@@ -57,7 +57,9 @@
           `${benchmark.wall_seconds_lower_bound ? '≥ ' : ''}${format(benchmark.wall_seconds / 60)} min` : '—',
         trial?.summary?.timing_coverage?.status === 'partial' ?
           `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
-          trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked'];
+          trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked',
+        timing(trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command')?.latency),
+        (() => { const stream = trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command'); return stream ? `${stream.received} / ${stream.published}` : 'Not recorded'; })()];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';

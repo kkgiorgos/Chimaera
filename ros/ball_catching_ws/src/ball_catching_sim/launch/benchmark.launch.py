@@ -45,6 +45,7 @@ def start(context):
         '--guest-file', '/tmp/chimaera-ball-start=' + str(output / 'start-guest.sh')],
         output='screen', sigterm_timeout='10')
     fixed = execution['fixed']
+    trace_parameters = dict(trace_clock_file=str(output / 'trace-clock.bin')) if fixed.get('trace', True) else {}
     checkpoint_parameters = {}
     if execution.get('checkpoint_prepare'):
         checkpoint_parameters = dict(checkpoint_capture=str(output / 'host-replay.bin'),
@@ -64,7 +65,7 @@ def start(context):
             interval_us=fixed['interval_us'], poll_us=fixed['poll_us'],
             physics_step_ns=round(fixed['physics_step'] * 1e9), startup_timeout_s=fixed['startup_timeout_s'],
             max_serialized_bytes=fixed['camera_width'] * fixed['camera_height'] * 3 + 4096,
-            max_pending_messages=16, status_bar=False, **checkpoint_parameters)])
+            max_pending_messages=16, status_bar=False, **checkpoint_parameters, **trace_parameters)])
     return [application, bridge, simulator, *[RegisterEventHandler(OnProcessExit(target_action=process,
         on_exit=[EmitEvent(event=Shutdown(reason='Benchmark component exited'))])) for process in (bridge, simulator)]]
 

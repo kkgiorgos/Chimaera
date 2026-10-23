@@ -48,6 +48,7 @@ def freeze(root, identity, expected_groups):
             raise ValueError('Readiness checkpoint lacks synchronized host state')
         paths = [directory / name for name in (*required, 'checkpoint.json')]
         paths += [path for path in (directory / 'cpt').rglob('*') if path.is_file()]
+        paths += sorted((directory / 'gem5').glob('chimaera-trace-*.jsonl'))
         records[identifier] = {str(path.relative_to(directory)): digest(path) for path in paths}
     record = dict(version=1, provenance=identity, groups=records)
     temporary = root / 'index.json.tmp'

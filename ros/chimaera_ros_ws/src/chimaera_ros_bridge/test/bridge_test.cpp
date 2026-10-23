@@ -174,7 +174,15 @@ int main(int argc, char ** argv)
     rejects([&] {guest->submit(bad);});
     bad = saved; bad[4] = std::byte{255};
     rejects([&] {guest->submit(bad);});
-    bad = saved; bad[10] ^= std::byte{1};
+    // A traced frame wraps CBR1 with a variable-length identity envelope.
+    size_t frame_offset = 0;
+    if (saved.size() >= 8 && std::memcmp(saved.data(), "CBT1", 4) == 0) {
+      uint32_t length = 0;
+      for (unsigned i = 4; i < 8; ++i)
+        length = (length << 8) | std::to_integer<uint32_t>(saved[i]);
+      frame_offset = 8 + length;
+    }
+    bad = saved; bad[frame_offset + 10] ^= std::byte{1};
     rejects([&] {guest->submit(bad);});
     bad = saved; bad.push_back(std::byte{0});
     rejects([&] {guest->submit(bad);});  // max serialized payload + 1

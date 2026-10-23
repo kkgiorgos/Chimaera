@@ -6,6 +6,10 @@ host and guest launch files, a shared topic route JSON, and a session JSON descr
 setup files, build inputs, and image paths. Existing application launch files can be
 used directly; the bridge requires no application dependency or source changes.
 
+Enable `bridge.trace` to collect reusable per-topic message latency records.
+See [message tracing](../../docs/chimaera-tracing.md) for clock configuration,
+Fast DDS and serialized-bridge measurement boundaries, and analysis/export.
+
 The first version targets the existing Ubuntu 22.04/x86 ROS Humble guest. Guest
 binaries must be built in an environment matching that image. It transports topics;
 services and actions are outside this version. The

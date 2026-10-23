@@ -17,6 +17,7 @@ int main(int argc, char ** argv)
   int status = 0;
   try {
     auto node = std::make_shared<chimaera_ros_bridge::Bridge>("host");
+    chimaera_dds::trace::create_clock(node->declare_parameter<std::string>("trace_clock_file", ""));
     const auto interval = node->declare_parameter<int64_t>("interval_us", 100000);
     const auto poll = node->declare_parameter<int64_t>("poll_us", 10000);
     const auto steps = node->declare_parameter<int64_t>("steps", 0);

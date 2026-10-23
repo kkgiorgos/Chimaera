@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import socket
 import signal
+import struct
 import time
 import subprocess
 import sys
@@ -55,6 +56,7 @@ def check(binary, config, extra, expected, cancel=False):
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         timing_file = root / 'output' / 'timing.csv'
+        trace_clock = root / 'trace-clock.bin'
         world = root / 'world.sdf'
         world.write_text(WORLD)
         endpoint = str(root / 'timing.sock')
@@ -98,6 +100,7 @@ def check(binary, config, extra, expected, cancel=False):
                     command = [
                         binary, '--ros-args', '-p', f'timing_socket:={endpoint}',
                         '-p', f'steps:={0 if cancel else 3}', '-p', 'startup_timeout_s:=10',
+                        '-p', f'trace_clock_file:={trace_clock}',
                         '-p', 'gazebo_world:=wall_arena', '-p', 'status_bar:=false', '-p', f'timing_file:={timing_file}', '-p', f'config_file:={config}', *extra,
                     ]
                     if cancel:
@@ -123,6 +126,9 @@ def check(binary, config, extra, expected, cancel=False):
                         assert expected in result.stdout, result.stdout
                     elif not cancel:
                         assert steps == [100_000_000_000] * 3, steps
+                        magic, nanoseconds = struct.unpack('=QQ', trace_clock.read_bytes())
+                        assert magic == 0x434c42434c4f434b
+                        assert nanoseconds == 300_000_000, nanoseconds
                         with timing_file.open() as stream:
                             rows = list(csv.DictReader(stream))
                         assert len(rows) == 3

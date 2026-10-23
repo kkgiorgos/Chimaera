@@ -122,6 +122,9 @@ if(BUILD_TESTING)
   target_compile_definitions(bridge_test PRIVATE
     TEST_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/test/routes.json")
   add_test(NAME bridge_test COMMAND bridge_test)
+  add_test(NAME bridge_trace_test COMMAND bridge_test)
+  set_tests_properties(bridge_trace_test PROPERTIES TIMEOUT 20
+    ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=192;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs;CHIMAERA_TRACE=1;CHIMAERA_TRACE_SIDE=host;CHIMAERA_TRACE_DIR=${CMAKE_CURRENT_BINARY_DIR};CHIMAERA_TRACE_ROUTES=${CMAKE_CURRENT_SOURCE_DIR}/test/routes.json;CHIMAERA_TRACE_CLOCK_FILE=${CMAKE_CURRENT_BINARY_DIR}/unused-trace-clock")
   set_tests_properties(bridge_test PROPERTIES TIMEOUT 20
     ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=197;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
   if(BUILD_GAZEBO_BRIDGE)
@@ -139,6 +142,9 @@ if(BUILD_TESTING)
     target_link_libraries(stereo_freshness_test PRIVATE bridge)
     ament_target_dependencies(stereo_freshness_test PUBLIC rclcpp sensor_msgs std_msgs)
     add_test(NAME stereo_freshness_test COMMAND stereo_freshness_test)
+    add_test(NAME stereo_trace_test COMMAND stereo_freshness_test)
+    set_tests_properties(stereo_trace_test PROPERTIES TIMEOUT 30
+      ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=191;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs;CHIMAERA_TRACE=1;CHIMAERA_TRACE_SIDE=host;CHIMAERA_TRACE_DIR=${CMAKE_CURRENT_BINARY_DIR};CHIMAERA_TRACE_CLOCK_FILE=${CMAKE_CURRENT_BINARY_DIR}/unused-trace-clock")
     set_tests_properties(stereo_freshness_test PROPERTIES TIMEOUT 30
       ENVIRONMENT "ROS_LOCALHOST_ONLY=1;ROS_DOMAIN_ID=194;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test_ros_logs")
     set_tests_properties(sensor_bridge_test PROPERTIES TIMEOUT 30
@@ -153,6 +159,10 @@ if(BUILD_TESTING)
   add_test(NAME manifest_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_manifest.py)
   set_tests_properties(manifest_test PROPERTIES ENVIRONMENT
+    "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
+  add_test(NAME tracing_analysis_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
+    -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_tracing.py)
+  set_tests_properties(tracing_analysis_test PROPERTIES ENVIRONMENT
     "PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}")
   add_test(NAME latency_analysis_test COMMAND ${Python3_EXECUTABLE} -m unittest discover
     -s ${CMAKE_CURRENT_SOURCE_DIR}/test -p test_latency.py)

@@ -6,11 +6,13 @@
 #include <atomic>
 #include <chimaera_dds_transport/router.hpp>
 #include <deque>
+#include <list>
 #include <map>
 #include <mutex>
 #include <thread>
 
 #include "protocol.hpp"
+#include "rtps_control.hpp"
 
 namespace chimaera_dds
 {
@@ -33,7 +35,8 @@ struct Router::Impl
   };
   struct Lane
   {
-    std::deque<Packet> outgoing;
+    std::list<Packet> outgoing;
+    std::map<std::string, std::list<Packet>::iterator> repeated_control;
     std::size_t local_bytes{}, remote_bytes{};
   };
   std::string path;
@@ -135,21 +138,38 @@ struct Router::Impl
   {
     auto & lane = lanes[lane_index(packet)];
     const auto targets = recipients(packet, sender);
+    const auto key = remote && side == 1 ? repeated_control_key(packet) : std::string{};
+    const auto previous = lane.repeated_control.find(key);
+    const bool replace = !key.empty() && previous != lane.repeated_control.end();
     // Check the entire fanout and independent remote budget before any queue
     // mutation. Division avoids overflow when accounting for many recipients.
     if (
       targets.size() > (limit - lane.local_bytes) / packet.size() ||
-      (remote && packet.size() > limit - lane.remote_bytes))
+      (remote && !replace && packet.size() > limit - lane.remote_bytes))
       return false;
     for (auto * target : targets) {
       target->output.push_back(packet);
       lane.local_bytes += packet.size();
     }
     if (remote) {
-      lane.outgoing.push_back(packet);
-      lane.remote_bytes += packet.size();
+      if (replace) {
+        *previous->second = packet;
+      } else {
+        lane.outgoing.push_back(packet);
+        lane.remote_bytes += packet.size();
+        if (!key.empty()) lane.repeated_control.emplace(key, std::prev(lane.outgoing.end()));
+      }
     }
     return true;
+  }
+  void pop_remote(Lane & lane)
+  {
+    const auto & packet = lane.outgoing.front();
+    const auto key = repeated_control_key(packet);
+    if (!key.empty()) lane.repeated_control.erase(key);
+    lane.remote_bytes -= packet.size();
+    lane.outgoing.pop_front();
+    retry_inputs = true;
   }
   void release_local(const Packet & packet)
   {
@@ -439,10 +459,8 @@ std::optional<Packet> Router::take()
   if (impl_->bounded_service) {
     for (auto & lane : impl_->lanes) {
       if (lane.outgoing.empty()) continue;
-      auto packet = std::move(lane.outgoing.front());
-      lane.outgoing.pop_front();
-      lane.remote_bytes -= packet.size();
-      impl_->retry_inputs = true;
+      auto packet = lane.outgoing.front();
+      impl_->pop_remote(lane);
       impl_->signal();
       return packet;
     }
@@ -459,17 +477,16 @@ std::size_t Router::transfer_outgoing(const std::function<bool(Packet)> & receiv
   std::lock_guard lock(impl_->mutex);
   if (!impl_->failure.empty()) throw std::runtime_error(impl_->failure);
   std::size_t accepted = 0;
-  auto transfer = [&](std::deque<Packet> & queue, Impl::Lane * lane) {
+  auto transfer = [&](auto & queue, Impl::Lane * lane) {
     while (!queue.empty()) {
       const auto size = queue.front().size();
       // Packet is a shared-storage copy. Do not release this queue's original
       // owner/credit until the downstream stage confirms it accepted the copy.
       if (!receiver(queue.front())) break;
-      queue.pop_front();
       if (lane) {
-        lane->remote_bytes -= size;
-        impl_->retry_inputs = true;
+        impl_->pop_remote(*lane);
       } else {
+        queue.pop_front();
         impl_->queued -= size;
       }
       ++accepted;

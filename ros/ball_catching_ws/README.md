@@ -106,6 +106,11 @@ fingerprints. The example suite writes an incremental `experiment_manifest.json`
 
 Open the generated `dashboard.html` locally to select throws, replay recorded
 ball and arm motion, scrub or slow playback, and inspect computation timings.
+Memory experiments also enable Chimaera's reusable message tracing by default
+(`fixed.trace: false` disables it). The report includes per-topic latency,
+delivery counts, time plots and exports, alongside the existing statistics.
+See [message tracing](../../docs/chimaera-tracing.md) for measurement boundaries,
+runtime rebuilds and checkpoint requirements.
 The page embeds its robot assets and works offline. Rebuild a report with:
 
 ```zsh
@@ -157,6 +162,8 @@ once on its preparation machine, including a host readiness replay and the exact
 backing disk. Cases restore without KVM, warm up under their selected pressure
 for 50 simulated ms by default, then reset statistics immediately before throwing.
 Ball position/direction/speed remain independent host-side launch settings.
+Guests read gem5 time directly; `/clock` is absent from both the host/guest
+routes and the benchmark's Gazebo-to-ROS bridge. Native runs retain ROS simulation time.
 Rebuild gem5, transport, `chimaera_ros_bridge` and `ball_catching_sim`, then prepare
 a new experiment and checkpoints after updating.
 See [the experiment protocol](../../docs/ball-catching-memory-contention.md)

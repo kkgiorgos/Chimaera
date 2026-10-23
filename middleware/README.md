@@ -32,6 +32,13 @@ Participating nodes use `RMW_IMPLEMENTATION=rmw_fastrtps_cpp` and:
 This is an experimental implementation. End-to-end acceptance and performance
 results are tracked in `docs/chimaera-dds-middleware.md`.
 
+The overlay also provides opt-in, application-independent publication-to-take
+tracing through `bridge.trace` in the session manifest. It joins DDS sample
+identities without modifying messages. See
+[Chimaera message tracing](../docs/chimaera-tracing.md) for setup, collection,
+clock resolution and the reusable analyzer. Reprepare and rebuild the overlay
+to obtain the `chimaera_rmw_trace_abi` hooks.
+
 For a self-contained SDK overlay, use the dedicated image recipe:
 
 ```sh
@@ -64,6 +71,13 @@ bridge sessions keep that count limit. Per-side IPC runtimes have a separate
 In middleware mode, the original endpoints own QoS, history and freshness.
 Legacy bridge queue coalescing and bridge-level stereo expiry are bypassed;
 the existing ball-catching consumer still rejects expired or unmatched frames.
+
+For m5ops timing guests, the host router keeps only the newest pending copy of
+semantically identical discovery HEARTBEAT/ACKNACK packets. Host wall-clock
+reliability timers can otherwise flood a paused detailed guest. Changed sequence
+ranges, acknowledgement bitmaps, flags, DATA and application-port traffic are
+preserved. See the [controller feedback diagnosis](../docs/ball-catching-controller-feedback.md)
+for the regression and bounded timing validation.
 
 Router queues share owning `Packet` buffers, including local fanout. A packet
 must remain immutable after submission. `Router::take()` transfers its owner to

@@ -15,7 +15,8 @@ public:
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())))),
     record_(declare_parameter<std::string>("output", ""), "control", this),
     timing_(get_parameter("output").as_string(), "control_timing", this),
-    processingClock_(*this), applicationClock_(*this)
+    processingClock_(*this),
+    applicationClock_(*this)
   {
     arm_.validateHome(home_);
     const double hz = declare_parameter("control_hz", 250.);
@@ -27,12 +28,17 @@ public:
     joints_ = create_subscription<sensor_msgs::msg::JointState>(
       "/robot/joint_states", rclcpp::SensorDataQoS(),
       [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
+        ++feedbackMessages_;
+        const bool first = !feedback_.valid;
         feedback_.update(*msg, arm_.names);
+        if (first && feedback_.valid)
+          RCLCPP_INFO(get_logger(), "First valid joint feedback at %.9f", feedback_.time);
       });
     targets_ = create_subscription<trajectory_msgs::msg::JointTrajectory>(
       "/robot/joint_trajectory", 1,
       [this](trajectory_msgs::msg::JointTrajectory::ConstSharedPtr msg) { target(*msg); });
     timer_ = timer(*this, 1. / hz, [this] { control(); });
+    RCLCPP_INFO(get_logger(), "Effort controller initialized at %.1f Hz", hz);
   }
 
 private:
@@ -68,7 +74,17 @@ private:
     if (!current) return;
     const auto stamp = *current;
     const double time = stamp.seconds();
-    if (!feedback_.valid || time - feedback_.time < 0 || time - feedback_.time >= .05) return;
+    if (!feedback_.valid || time - feedback_.time < 0 || time - feedback_.time >= .05) {
+      if (time - lastFeedbackWarning_ >= .5) {
+        lastFeedbackWarning_ = time;
+        RCLCPP_WARN(
+          get_logger(),
+          "Control waiting for joint feedback: messages=%zu valid=%d time=%.9f feedback_time=%.9f "
+          "age=%.9f",
+          feedbackMessages_, feedback_.valid, time, feedback_.time, time - feedback_.time);
+      }
+      return;
+    }
     const auto started = processingClock_.now();
     const MotionState desired = trajectories_.sample(time, {home_, Vec7::Zero(), Vec7::Zero()});
     const Vec7 correction =
@@ -120,6 +136,8 @@ private:
   ApplicationClock applicationClock_;
   Feedback feedback_;
   double lastLog_{-1}, lastControl_{-1};
+  double lastFeedbackWarning_{-1};
+  size_t feedbackMessages_{};
   Vec7 integral_ = Vec7::Zero();
   TrajectorySchedule trajectories_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr commands_;

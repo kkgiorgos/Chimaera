@@ -1,5 +1,6 @@
 """Process supervision, reviewable plans, and relocatable guest staging."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,12 +23,23 @@ def plan(data, side, package_prefix=None, simulate=False):
     package_prefix = Path(package_prefix) if package_prefix else prefix()
     config = data[side]
     env = dict(config['env'], ROS_DOMAIN_ID=str(config['domain_id']),
-               ROS_LOCALHOST_ONLY='1' if config.get('localhost_only', True) else '0')
+               ROS_LOCALHOST_ONLY='1' if config.get('localhost_only', True) else '0',
+               CHIMAERA_TRACE='1' if data['bridge'].get('trace', False) else '0')
     if side == 'guest':
         env.setdefault('ROS_LOG_DIR', '/tmp/chimaera-guest-logs')
     parameters = {'config_file': data['routes'], **{key: data['bridge'][key] for key in
                   ('max_serialized_bytes', 'max_pending_messages', 'max_image_age_ns', 'image_diagnostics',
                    'transport_backend')}}
+    if data['bridge'].get('trace', False):
+        env.update(CHIMAERA_TRACE='1', CHIMAERA_TRACE_SIDE=side,
+                   CHIMAERA_TRACE_ROUTES=data['routes'])
+        if side == 'host':
+            env.update(CHIMAERA_TRACE_DIR=data['bridge']['trace_directory'],
+                       CHIMAERA_TRACE_CLOCK_FILE=data['bridge']['trace_clock_file'])
+            parameters['trace_clock_file'] = data['bridge']['trace_clock_file']
+        else:
+            env.update(CHIMAERA_TRACE_CLOCK_LIBRARY=data['deploy']['guest_root'] + '/lib/libchimaera_gem5_clock_addr.so',
+                       CHIMAERA_TRACE_ORIGIN_FILE='/tmp/chimaera-sim-time-origin.ns')
     middleware = data['bridge'].get('middleware_transport', 'bridge') == 'fastdds'
     if middleware:
         socket = data['bridge']['dds_' + side + '_socket']
@@ -86,6 +98,13 @@ def plan(data, side, package_prefix=None, simulate=False):
 
 
 def supervise(spec):
+    if spec['env'].get('CHIMAERA_TRACE_DIR'):
+        Path(spec['env']['CHIMAERA_TRACE_DIR']).mkdir(parents=True, exist_ok=True)
+    if (spec['env'].get('CHIMAERA_TRACE') == '1'
+            and spec['env'].get('CHIMAERA_TRACE_SIDE') == 'host'
+            and spec['env'].get('CHIMAERA_DDS_SOCKET')):
+        from .dds import require_trace_overlay
+        require_trace_overlay()
     profile = spec['env'].get('FASTRTPS_DEFAULT_PROFILES_FILE')
     if profile and not Path(profile).is_file():
         raise ValueError('DDS profile does not exist: ' + profile)
@@ -140,6 +159,9 @@ def supervise(spec):
 
 def stage(data, output, package_prefix=None):
     """Stage a guest-root tree without mounting or changing a disk image."""
+    if data['bridge'].get('trace') and data['bridge']['middleware_transport'] == 'fastdds':
+        from .dds import require_trace_overlay
+        require_trace_overlay()
     package_prefix = Path(package_prefix) if package_prefix else prefix()
     output = Path(output).resolve()
     if output.exists():
@@ -175,6 +197,10 @@ def stage(data, output, package_prefix=None):
                     if handle.read(4) == b'\x7fELF':
                         binaries.append(candidate)
     libraries = stage_libraries(root / 'lib', binaries)
+    if data['bridge'].get('trace', False):
+        clock = package_prefix / 'lib/libchimaera_gem5_clock_addr.so'
+        shutil.copy2(clock, root / 'lib')
+        libraries[clock.name] = dict(source=str(clock), sha256=hashlib.sha256(clock.read_bytes()).hexdigest())
     (root / 'runtime-libraries.json').write_text(json.dumps(libraries, indent=2) + '\n')
     guest_env = guest['guest'].setdefault('env', {})
     guest_env['LD_LIBRARY_PATH'] = data['deploy']['guest_root'] + '/lib:' + guest_env.get(

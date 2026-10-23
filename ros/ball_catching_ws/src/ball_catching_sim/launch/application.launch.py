@@ -53,17 +53,23 @@ def start(context):
     if get('gui').lower() != 'true':
         command += ['-s', '--headless-rendering']
     gazebo = ExecuteProcess(cmd=[*command, str(world)], additional_env=env, output='screen')
-    bridge = Node(package='ros_gz_bridge', executable='parameter_bridge', arguments=[
-        '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock',
+    # Detailed co-simulation reads gem5 time directly in the guest. Its host
+    # processes do not consume ROS time, so keep /clock out of this bridge too.
+    native_robot = get('robot').lower() == 'true'
+    ros_clock = native_robot or not bool(options['detailed_timing_socket'])
+    bridge_topics = [
         '/stereo/left/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
-        '/stereo/right/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image'],
+        '/stereo/right/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image']
+    if ros_clock:
+        bridge_topics.insert(0, '/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock')
+    bridge = Node(package='ros_gz_bridge', executable='parameter_bridge', arguments=bridge_topics,
         additional_env={'IGN_PARTITION': get('partition'), 'IGN_IP': get('transport_ip')}, output='screen')
     actions = [RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(
         function=lambda context: temporary.cleanup())])), bridge, gazebo,
         Node(package='robot_state_publisher', executable='robot_state_publisher',
-             parameters=[{'robot_description': urdf, 'use_sim_time': True}],
+             parameters=[{'robot_description': urdf, 'use_sim_time': ros_clock}],
              remappings=[('/joint_states', '/robot/joint_states')], output='screen')]
-    if get('robot').lower() == 'true':
+    if native_robot:
         share = Path(get_package_share_directory('ball_catching_robot'))
         actions.append(IncludeLaunchDescription(PythonLaunchDescriptionSource(
             str(share / 'launch/robot.launch.py')), launch_arguments={

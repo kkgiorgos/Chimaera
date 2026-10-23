@@ -57,6 +57,17 @@ def require_middleware_overlay():
     return library
 
 
+def require_trace_overlay():
+    """Old routing overlays do not contain the opt-in publication/take hooks."""
+    library = require_middleware_overlay()
+    try:
+        if ctypes.CDLL(str(library)).chimaera_rmw_trace_abi() != 1:
+            raise AttributeError('unsupported trace ABI')
+    except (OSError, AttributeError) as error:
+        raise ValueError('Tracing requires the current RMW overlay; rebuild with middleware/prepare_rmw.py') from error
+    return library
+
+
 def shared_memory_profile(segment_bytes):
     if type(segment_bytes) is not int or not 1024 * 1024 <= segment_bytes <= 128 * 1024 * 1024:
         raise ValueError('DDS shared memory must be 1..128 MiB')

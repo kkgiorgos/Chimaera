@@ -81,6 +81,7 @@ def load_config(path, cpu_type=None):
     data['fixed'].setdefault('dma_module', '')
     data['fixed'].setdefault('m5_module', '')
     data['fixed'].setdefault('middleware_transport', 'bridge')
+    data['fixed'].setdefault('trace', True)
     if cpu_type is not None:
         data['hardware']['cpu_type'] = cpu_type
     required = {
@@ -88,7 +89,7 @@ def load_config(path, cpu_type=None):
                   'camera_width', 'camera_height', 'image_age_periods', 'cup_radius', 'cup_depth',
                   'interval_us', 'poll_us', 'startup_timeout_s', 'wall_timeout_s', 'image_diagnostics',
                   'guest_dds_shm_bytes', 'pressure_warmup', 'transport_backend', 'dma_module',
-                  'middleware_transport', 'm5_module'},
+                  'middleware_transport', 'm5_module', 'trace'},
         'hardware': {'cpu_type', 'num_cores', 'cpu_clock', 'l1d_size', 'l1i_size', 'l1_assoc', 'l2_size', 'l2_assoc'},
         'aggressor': {'read_percent', 'stride', 'max_pending', 'window', 'seed',
                      'backpressure', 'duty_percent', 'period'},
@@ -120,6 +121,8 @@ def load_config(path, cpu_type=None):
         fixed['m5_module'] = str(module)
     if type(fixed['image_diagnostics']) is not bool:
         raise ValueError('image_diagnostics must be boolean')
+    if type(fixed['trace']) is not bool:
+        raise ValueError('trace must be boolean')
     for key in ('duration', 'physics_step', 'joint_hz', 'interval_us', 'poll_us',
                 'startup_timeout_s', 'wall_timeout_s', 'camera_width', 'camera_height',
                 'cup_radius', 'cup_depth', 'image_age_periods'):
@@ -310,6 +313,8 @@ def session(output, data, point, calibration=None):
                            '--timeout', str(fixed['startup_timeout_s'])])]
                          if fixed.get('middleware_transport', 'bridge') == 'fastdds' else [])]),
         bridge=dict(transport_backend=fixed['transport_backend'],
+                    trace=fixed.get('trace', True),
+                    trace_directory=str(output), trace_clock_file=str(output / 'trace-clock.bin'),
                     middleware_transport=fixed.get('middleware_transport', 'bridge'),
                     dma_module=GUEST_ROOT + '/runtime/chimaera_dma.ko' if fixed['dma_module'] else '',
                     m5_module=GUEST_ROOT + '/runtime/chimaera_m5.ko' if fixed['m5_module'] else '',
@@ -362,6 +367,9 @@ def prepare_bundle(output, data, points):
     if data['fixed'].get('middleware_transport', 'bridge') == 'fastdds':
         from chimaera_ros.dds import require_middleware_overlay
         require_middleware_overlay()
+        if data['fixed'].get('trace', True):
+            from chimaera_ros.dds import require_trace_overlay
+            require_trace_overlay()
     write_json(output / 'routes.json', routes())
     write_json(output / 'staging-session.json', session(output, data, points[0]))
     staged = output / 'staged'
@@ -534,12 +542,17 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     from ball_catching_sim.scene import generate
     directory.mkdir(parents=True)
     fixed = data['fixed']
+    if fixed.get('trace', True) and checkpoint_restore:
+        from chimaera_ros.tracing import restore_prefix
+        restore_prefix(checkpoint_restore, directory)
     options = {key: fixed[key] for key in ('duration', 'warmup', 'physics_step', 'joint_hz',
                 'camera_position', 'camera_width', 'camera_height', 'cup_radius', 'cup_depth')}
     options.update({key: value for key, value in point['throw'].items() if key != 'name'},
                    camera_hz=point['rates']['camera_hz'], output=str(directory))
     _, robot, _, camera = generate(directory, **options)
     guest_session = session(output, data, point, camera)
+    guest_session['bridge'].update(trace_directory=str(directory),
+                                  trace_clock_file=str(directory / 'trace-clock.bin'))
     if checkpoint_prepare:
         guest_session['bridge']['checkpoint_control'] = True
     guest_session['routes'] = GUEST_ROOT + '/routes.json'
@@ -570,8 +583,13 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     command = ['ros2', 'launch', 'ball_catching_sim', 'benchmark.launch.py',
                'execution:=' + str(directory / 'execution.json'), 'output:=' + str(directory)]
     environment = os.environ | {'ROS_DOMAIN_ID': '71', 'ROS_LOCALHOST_ONLY': '1',
+                               'CHIMAERA_TRACE': '0',
                                'ROS_LOG_DIR': str(directory / 'ros_logs'),
                                'IGN_LOG_PATH': str(directory / 'gazebo_logs')}
+    if fixed.get('trace', True):
+        environment.update(CHIMAERA_TRACE='1', CHIMAERA_TRACE_SIDE='host',
+            CHIMAERA_TRACE_ROUTES=str(output / 'routes.json'), CHIMAERA_TRACE_DIR=str(directory),
+            CHIMAERA_TRACE_CLOCK_FILE=str(directory / 'trace-clock.bin'))
     if fixed.get('middleware_transport', 'bridge') == 'fastdds':
         environment.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock',
             CHIMAERA_DDS_SIDE='host', CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
@@ -634,6 +652,9 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     result = json.loads((directory / 'result.json').read_text())
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
+    from chimaera_ros.tracing import summarize
+    transport = summarize(directory, output / 'routes.json', result['launch_time'], result['result_time'])
+    write_json(directory / 'transport_latency.json', transport)
     metrics = memory_metrics(roi, data['peak_gbps'])
     pressure_warmup = 0
     if checkpoint_restore:
@@ -647,7 +668,7 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
                             peak_gbps=data['peak_gbps']),
         calibrated_sustainable_gbps=calibration[point['pattern']]['sustainable_gbps'] if point['pressure'] else None,
         peak_gbps=data['peak_gbps'], wall_seconds=time.monotonic() - started,
-        telemetry=telemetry,
+        telemetry=telemetry, transport_latency=transport,
         checkpoint=str(checkpoint_restore) if checkpoint_restore else None,
         pressure_warmup_seconds=pressure_warmup,
         requested_pressure_warmup_seconds=fixed['pressure_warmup'] if checkpoint_restore else 0,

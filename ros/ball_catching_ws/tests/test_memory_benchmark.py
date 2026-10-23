@@ -96,6 +96,10 @@ def test_session_uses_the_resolved_package_prefix_for_container_staging(tmp_path
     data = load_config(WORKSPACE / 'experiments/memory_contention_patterns.json')
     trees = session(tmp_path, data, plan(data)[0])['deploy']['install_trees']
     assert trees == [dict(source='/opt/container/ball_catching_robot', destination='app')]
+    assert data['fixed']['trace'] is True
+    bridge = session(tmp_path, data, plan(data)[0])['bridge']
+    assert bridge['trace'] is True
+    assert bridge['trace_clock_file'] == str(tmp_path / 'trace-clock.bin')
 
 
 @pytest.mark.parametrize('backend', ['m5', 'dma'])
@@ -296,7 +300,7 @@ def test_guest_failure_stops_attempt_without_waiting_for_wall_timeout(tmp_path, 
 
     monkeypatch.setattr(ball_catching_sim.scene, 'generate', lambda *args, **kwargs: (
         None, tmp_path / 'robot.urdf', None, {'focal': 640}))
-    monkeypatch.setattr(runner, 'session', lambda *args: {})
+    monkeypatch.setattr(runner, 'session', lambda *args: {'bridge': {}})
     monkeypatch.setattr(runner.subprocess, 'Popen', RunningHost)
     monkeypatch.setattr(runner, 'stop', lambda process: stopped.append(process))
     monkeypatch.setattr(runner, 'timing_command', lambda *args: pytest.fail('Do not reset/dump a failed guest'))
@@ -333,7 +337,7 @@ def test_invalid_launch_stops_without_accepting_a_task_miss(tmp_path, monkeypatc
 
     monkeypatch.setattr(ball_catching_sim.scene, 'generate', lambda *args, **kwargs: (
         None, tmp_path / 'robot.urdf', None, {'focal': 640}))
-    monkeypatch.setattr(runner, 'session', lambda *args: {})
+    monkeypatch.setattr(runner, 'session', lambda *args: {'bridge': {}})
     monkeypatch.setattr(runner.subprocess, 'Popen', RunningHost)
     monkeypatch.setattr(runner, 'stop', lambda process: stopped.append(process))
     monkeypatch.setattr(runner, 'timing_command', lambda *args: pytest.fail('Do not measure an invalid throw'))

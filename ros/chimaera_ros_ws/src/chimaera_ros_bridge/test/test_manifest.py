@@ -42,6 +42,47 @@ class SessionTest(unittest.TestCase):
         self.assertFalse(any(arg.startswith('ratio:=')
                              for arg in host['processes'][0]['command']))
 
+    def test_tracing_is_opt_in_and_propagates_to_both_sides(self):
+        self.assertEqual(plan(self.load(), 'host', '/opt/bridge')['env']['CHIMAERA_TRACE'], '0')
+        self.data['bridge'] = dict(trace=True, trace_directory='records',
+                                   trace_clock_file='records/clock.bin',
+                                   simulation_time_from_readfile=True)
+        data = self.load()
+        host, guest = [plan(data, side, '/opt/bridge') for side in ('host', 'guest')]
+        self.assertEqual(host['env']['CHIMAERA_TRACE_DIR'], str(self.root / 'records'))
+        self.assertIn('trace_clock_file:=' + str(self.root / 'records/clock.bin'),
+                      host['processes'][0]['command'])
+        self.assertEqual(guest['env']['CHIMAERA_TRACE_SIDE'], 'guest')
+        self.assertTrue(guest['env']['CHIMAERA_TRACE_CLOCK_LIBRARY'].endswith(
+            '/lib/libchimaera_gem5_clock_addr.so'))
+        self.assertNotIn('CHIMAERA_TRACE_DIR', guest['env'])
+        self.data['bridge']['simulation_time_from_readfile'] = False
+        with self.assertRaisesRegex(ValueError, 'shared time origin'):
+            self.load()
+        self.data['bridge']['trace'] = 'true'
+        with self.assertRaisesRegex(ValueError, 'boolean'):
+            self.load()
+
+    def test_stage_includes_trace_clock_export_library_and_fingerprint(self):
+        prefix = self.root / 'prefix'
+        binary = prefix / 'lib/chimaera_ros_bridge/guest_bridge'
+        binary.parent.mkdir(parents=True)
+        binary.write_text('guest binary')
+        clock = prefix / 'lib/libchimaera_gem5_clock_addr.so'
+        clock.write_bytes(b'clock and export fixture')
+        self.data['bridge'] = dict(trace=True, trace_directory='records',
+                                   trace_clock_file='records/clock.bin',
+                                   simulation_time_from_readfile=True)
+        def dependencies(destination, binaries):
+            destination.mkdir(parents=True)
+            return {}
+        with patch('chimaera_ros.runner.stage_libraries', side_effect=dependencies):
+            staged = stage(self.load(), self.root / 'staged', prefix)
+        self.assertEqual((staged / 'lib' / clock.name).read_bytes(), clock.read_bytes())
+        libraries = json.loads((staged / 'runtime-libraries.json').read_text())
+        self.assertEqual(libraries[clock.name]['source'], str(clock))
+        self.assertEqual(len(libraries[clock.name]['sha256']), 64)
+
     def test_middleware_routing_shares_domain_and_excludes_coordinator_participant(self):
         self.data['bridge'] = dict(middleware_transport='fastdds')
         with self.assertRaisesRegex(ValueError, 'shared ROS domain'):

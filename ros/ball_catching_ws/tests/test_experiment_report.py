@@ -61,6 +61,24 @@ def test_statistics_convert_seconds_and_cadence_uses_timestamps():
     assert _cadence([dict(time=1.)], 'time') is None
 
 
+def test_report_preserves_reusable_transport_measurements_and_old_runs(tmp_path):
+    write_trial(tmp_path)
+    assert load_trial(tmp_path)['summary']['transport_latency'] is None
+    transport = dict(schema_version=1, status='recorded', files=['chimaera-trace-host-1.jsonl'],
+                     streams=[dict(topic='/robot/effort_command', direction='guest_to_host',
+                                   boundary='rmw', published=20, received=17,
+                                   missing_at_evaluation=3, latency=dict(mean_ms=2., p95_ms=4., p99_ms=5.))])
+    (tmp_path / 'transport_latency.json').write_text(json.dumps(transport))
+    assert load_trial(tmp_path)['summary']['transport_latency'] == transport
+    destination = tmp_path / 'dashboard.html'
+    create_dashboard([tmp_path], destination)
+    page = destination.read_text()
+    assert 'Chimaera message latency' in page
+    assert 'transport-stream' in page
+    saved = json.loads((tmp_path / 'summary.json').read_text())
+    assert saved['transport_latency'] == transport
+
+
 def test_report_measures_arrival_before_impact_and_preserves_cup_timing(tmp_path):
     write_trial(tmp_path)
     trial = load_trial(tmp_path)

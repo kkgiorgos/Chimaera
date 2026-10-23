@@ -3,6 +3,7 @@
 #include <chimaera/controller.hpp>
 #include <chimaera/outgoing_queue.hpp>
 #include <chimaera_dds_transport/router.hpp>
+#include <chimaera_dds_transport/trace.hpp>
 #include <chimaera_ros_bridge/config.hpp>
 #include <chimaera_ros_bridge/serialized_view.hpp>
 #include <chimaera_ros_bridge/stereo_queue.hpp>
@@ -75,6 +76,7 @@ public:
       return;
     }
     for (const auto & route : routes) {
+      trace_topics_[route.key] = route.host_topic;
       const auto & topic = side == "host" ? route.host_topic : route.guest_topic;
       if (!route.coalesce_group.empty()) {
         stereo_.add(route.coalesce_group, route.key, route.coalesce);
@@ -86,21 +88,35 @@ public:
           topic, route.type, route.qos,
           [this, key = route.key, coalesce = route.coalesce,
            group = route.coalesce_group](std::shared_ptr<rclcpp::SerializedMessage> message) {
+            const auto & trace_topic = trace_topics_.at(key);
+            const bool tracing = chimaera_dds::trace::enabled(trace_topic.c_str());
+            const auto trace_started = tracing ?
+              chimaera_dds::trace::now() : chimaera_dds::trace::unset;
             ++callback_generation_;
             if (message->size() > byte_limit_) {
               throw std::runtime_error(
                 "bridge outgoing queue or serialized message limit exceeded");
             }
-            auto bytes = allocate(8 + key.size() + message->size());
-            std::memcpy(bytes.data(), "CBR1", 4);
+            const auto id = tracing ? chimaera_dds::trace::next_identity() : std::string{};
+            const size_t trace_header = tracing ? 8 + id.size() : 0;
+            auto bytes = allocate(trace_header + 8 + key.size() + message->size());
+            auto * frame = bytes.data() + trace_header;
+            std::memcpy(frame, "CBR1", 4);
             const auto length = static_cast<std::uint32_t>(key.size());
             for (unsigned i = 0; i < 4; ++i) {
-              bytes[4 + i] = static_cast<std::byte>(length >> (24 - 8 * i));
+              frame[4 + i] = static_cast<std::byte>(length >> (24 - 8 * i));
             }
-            std::memcpy(bytes.data() + 8, key.data(), key.size());
+            std::memcpy(frame + 8, key.data(), key.size());
             std::memcpy(
-              bytes.data() + 8 + key.size(), message->get_rcl_serialized_message().buffer,
+              frame + 8 + key.size(), message->get_rcl_serialized_message().buffer,
               message->size());
+            if (tracing) {
+              std::memcpy(bytes.data(), "CBT1", 4);
+              for (unsigned i = 0; i < 4; ++i)
+                bytes[4 + i] = static_cast<std::byte>(id.size() >> (24 - 8 * i));
+              std::memcpy(bytes.data() + 8, id.data(), id.size());
+              chimaera_dds::trace::record("publish", trace_topic.c_str(), id, trace_started, "bridge");
+            }
             if (group.empty()) {
               outgoing_.submit(
                 std::move(bytes), coalesce ? std::string_view(key) : std::string_view{});
@@ -183,6 +199,8 @@ public:
         stale_image();
         return;
       }
+      trace_received(left);
+      trace_received(right);
       publishers_.at(left.key)->publish(left_message.message());
       publishers_.at(right.key)->publish(right_message.message());
       if (image_diagnostics_) trace_image("published", stamp);
@@ -194,6 +212,7 @@ public:
     if (stereo_groups_.count(value.key))
       throw std::runtime_error("stereo route requires paired delivery");
     SerializedView message(value.data, value.size);
+    trace_received(value);
     publishers_.at(value.key)->publish(message.message());
     ++received_;
     last_receive_ = std::chrono::steady_clock::now();
@@ -205,6 +224,7 @@ private:
     std::string key;
     const std::byte * data;
     std::size_t size;
+    std::string trace_id;
   };
   static uint32_t length_at(const std::byte * bytes)
   {
@@ -214,6 +234,15 @@ private:
   }
   Frame frame(const std::byte * bytes, std::size_t byte_count) const
   {
+    std::string trace_id;
+    if (byte_count >= 8 && std::memcmp(bytes, "CBT1", 4) == 0) {
+      const auto length = length_at(bytes + 4);
+      if (!length || length > 128 || length > byte_count - 8)
+        throw std::runtime_error("invalid trace envelope");
+      trace_id.assign(reinterpret_cast<const char *>(bytes + 8), length);
+      bytes += 8 + length;
+      byte_count -= 8 + length;
+    }
     if (byte_count < 8 || std::memcmp(bytes, "CBR1", 4) != 0)
       throw std::runtime_error("invalid bridge frame/version");
     const auto length = length_at(bytes + 4);
@@ -226,7 +255,13 @@ private:
     const auto size = byte_count - 8 - length;
     if (size < 4 || size > byte_limit_)
       throw std::runtime_error("invalid incoming serialized message size");
-    return {key, bytes + 8 + length, size};
+    return {key, bytes + 8 + length, size, trace_id};
+  }
+  void trace_received(const Frame & value) const
+  {
+    if (!value.trace_id.empty())
+      chimaera_dds::trace::record("take", trace_topics_.at(value.key).c_str(),
+        value.trace_id, chimaera_dds::trace::now(), "bridge");
   }
   std::optional<int64_t> trace_image(const char * stage, int64_t stamp)
   {
@@ -403,6 +438,7 @@ private:
   std::uint64_t callback_generation_{};
   std::uint64_t transmitted_{};
   std::uint64_t received_{};
+  std::map<std::string, std::string> trace_topics_;
   int64_t image_age_ns_{};
   uint64_t stale_pairs_{};
   bool image_diagnostics_{};
