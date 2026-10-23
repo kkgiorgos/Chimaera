@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.22)
+project(chimaera_functional_copies LANGUAGES C CXX ASM)
+find_package(ament_cmake REQUIRED)
+find_package(rmw REQUIRED)
+set(GEM5_TRANSPORT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../gem5-transport"
+    CACHE PATH "Chimaera transport sources")
+add_subdirectory("${GEM5_TRANSPORT_ROOT}" transport EXCLUDE_FROM_ALL)
+add_library(chimaera_functional_copies SHARED preload.cpp)
+ament_target_dependencies(chimaera_functional_copies PUBLIC rmw)
+target_link_libraries(chimaera_functional_copies PRIVATE chimaera::m5_endpoint ${CMAKE_DL_LIBS})
+target_include_directories(chimaera_functional_copies PRIVATE "${GEM5_ROOT}/include")
+target_compile_options(chimaera_functional_copies PRIVATE -Wall -Wextra -Wpedantic
+  -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-memmove)
+# Keep this mapping independent of the clock plugin and the DDS DSO.
+target_link_options(chimaera_functional_copies PRIVATE "LINKER:--exclude-libs,ALL")
+install(TARGETS chimaera_functional_copies LIBRARY DESTINATION lib)
+option(COPY_OFFLOAD_BUILD_TESTS "Build native memory-contract checks with a fake m5 backend" ON)
+if(COPY_OFFLOAD_BUILD_TESTS)
+  enable_testing()
+  add_executable(functional_copy_test preload.cpp test_memory.cpp)
+  ament_target_dependencies(functional_copy_test PUBLIC rmw)
+  target_link_libraries(functional_copy_test PRIVATE chimaera::m5_endpoint ${CMAKE_DL_LIBS})
+  target_include_directories(functional_copy_test PRIVATE "${GEM5_ROOT}/include")
+  target_compile_definitions(functional_copy_test PRIVATE CHIMAERA_COPY_TESTING)
+  target_compile_options(functional_copy_test PRIVATE -Wall -Wextra -Wpedantic
+    -fno-builtin-memcpy -fno-builtin-memset -fno-builtin-memmove)
+  target_link_options(functional_copy_test PRIVATE "LINKER:--exclude-libs,ALL")
+  add_test(NAME functional_copy_test COMMAND functional_copy_test)
+  set_tests_properties(functional_copy_test PROPERTIES TIMEOUT 30
+    ENVIRONMENT "CHIMAERA_FUNCTIONAL_MIDDLEWARE_COPIES=0")
+endif()

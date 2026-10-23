@@ -7,6 +7,7 @@
   <license>Apache-2.0</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
   <depend>fastrtps</depend>
+  <depend>rmw</depend>
   <depend>libjson-c-dev</depend>
   <test_depend>rclcpp</test_depend>
   <test_depend>sensor_msgs</test_depend>

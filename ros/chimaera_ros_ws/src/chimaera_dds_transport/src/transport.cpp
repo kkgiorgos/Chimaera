@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <chimaera_dds_transport/packet.hpp>
+#include <chimaera_dds_transport/functional_copy.hpp>
 #include <chimaera_dds_transport/transport.hpp>
 #include <chrono>
 #include <condition_variable>
@@ -133,10 +134,12 @@ class Transport final : public TransportInterface
         destination.port, size - wire::header_bytes);
     // Distinct topic ports keep image processing off a control channel's lock.
     std::lock_guard lock(channel->mutex);
-    if (channel->receiver)
+    if (channel->receiver) {
+      FunctionalCopyScope middleware_copies;
       channel->receiver->OnDataReceived(
         bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
         wire::locator(bytes + 8));
+    }
   }
 #ifdef CHIMAERA_DDS_HAS_M5OPS
   void read_lane(unsigned index)
