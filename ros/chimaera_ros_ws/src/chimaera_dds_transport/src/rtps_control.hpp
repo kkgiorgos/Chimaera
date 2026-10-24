@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <chimaera_dds_transport/packet.hpp>
+#include <map>
 #include <string>
+#include <vector>
 
 #include "protocol.hpp"
 
@@ -12,9 +14,10 @@ namespace chimaera_dds
 // DDS continues its wall-clock discovery retransmissions meanwhile. Collapse
 // only semantically identical pending HEARTBEAT/ACKNACK packets: retain the
 // newest RTPS count, without replacing DATA, changed ranges/bitmaps, or flags.
-inline std::string repeated_control_key(const Packet & packet)
+template <class Frame>
+inline std::string repeated_control_key(const Frame & packet)
 {
-  const auto * data = packet.data();
+  const auto * data = reinterpret_cast<const uint8_t *>(packet.data());
   const auto size = packet.size();
   if (
     size < wire::header_bytes + 20 || size > 4096 || data[5] != wire::data ||
@@ -53,5 +56,20 @@ inline std::string repeated_control_key(const Packet & packet)
     offset = body + length;
   }
   return control ? key : std::string{};
+}
+
+template <class Batch>
+void retain_control(const Batch & batch, std::vector<bool> & keep)
+{
+  std::map<std::string, std::size_t> pending;
+  for (std::size_t i = 0; i < batch.size(); ++i) {
+    const auto key = repeated_control_key(batch[i]);
+    if (key.empty()) continue;
+    auto [entry, inserted] = pending.emplace(key, i);
+    if (!inserted) {
+      keep[entry->second] = false;
+      entry->second = i;
+    }
+  }
 }
 }  // namespace chimaera_dds

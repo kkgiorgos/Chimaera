@@ -27,6 +27,10 @@
 
 #include "latest_sample.hpp"
 #include "protocol.hpp"
+#include "rtps_control.hpp"
+#ifdef CHIMAERA_DDS_HAS_M5OPS
+#include "receive_batch.hpp"
+#endif
 
 namespace chimaera_dds
 {
@@ -78,7 +82,7 @@ class Transport final : public TransportInterface
     std::size_t tx_bytes{}, tx_records{};
     std::condition_variable tx_ready;
     std::thread writer;
-    uint64_t coalesced{};
+    uint64_t coalesced{}, coalesced_control{};
     ~Lane()
     {
       if (cancel >= 0) ::close(cancel);
@@ -160,11 +164,19 @@ class Transport final : public TransportInterface
         // Batches contain only packets already ready. The driver retains any
         // arrival between the empty check and poll; no periodic wakeup is needed.
         while (!stopped_) {
-          auto messages = service.endpoint->take_batch();
+          auto clock = [] { return trace::enabled() ? trace::now() : trace::unset; };
+          ReceiveBatch batch;
+          if (index == 0) {
+            FunctionalCopyScope middleware_copies;
+            batch = drain_control([&] { return service.endpoint->take_batch(); }, clock);
+          } else {
+            // Bulk retains its zero-copy physical loans and ordinary ordering.
+            batch.messages = service.endpoint->take_batch();
+            if (!batch.messages.empty())
+              batch.arrivals.assign(batch.messages.size(), clock());
+          }
+          const auto & messages = batch.messages;
           if (messages.empty()) break;
-          // All loans are already present. DDS work for an earlier datagram in
-          // this batch must not become a later datagram's transport delay.
-          const auto arrived = trace::enabled() ? trace::now() : trace::unset;
           for (const auto & message : messages) {
             const auto * bytes = reinterpret_cast<const uint8_t *>(message.data());
             const auto size = message.size();
@@ -180,19 +192,24 @@ class Transport final : public TransportInterface
               throw std::runtime_error("invalid direct DDS locator or lane");
           }
           std::vector<bool> candidates;
-          const auto keep = retain_latest(messages, coalesce_latest, &candidates);
+          auto keep = retain_latest(messages, coalesce_latest, &candidates);
+          if (index == 0) retain_control(messages, keep);
           for (std::size_t i = 0; i < messages.size(); ++i) {
-            // Every arrival remains traced, including superseded best-effort
+            // Every application arrival remains traced, including superseded
             // state. Only DDS dispatch is skipped; loans are returned normally.
-            service.coalesced += !keep[i];
+            if (!keep[i]) {
+              if (candidates[i])
+                ++service.coalesced;
+              else
+                ++service.coalesced_control;
+            }
             const auto * bytes = reinterpret_cast<const uint8_t *>(messages[i].data());
             const trace::ReceiveInfo info{
               uint32_t(messages.size()), keep[i], coalesce_latest(wire::read32(bytes + 28)),
               candidates[i]};
-            deliver(bytes, messages[i].size(), arrived, &info);
+            deliver(bytes, messages[i].size(), batch.arrivals[i], &info);
           }
-          // Batch owns every registered RX slot through all OnDataReceived
-          // calls, then returns the complete group in one m5 operation.
+          // Bulk returns its physical group after all OnDataReceived calls.
         }
         if (stopped_) break;
         pollfd descriptors[2]{
@@ -517,6 +534,11 @@ public:
         std::fprintf(
           stderr, "Chimaera DDS lane %u: coalesced %llu superseded state samples\n", index,
           static_cast<unsigned long long>(lanes_[index].coalesced));
+    for (unsigned index = 0; index < lanes_.size(); ++index)
+      if (lanes_[index].coalesced_control)
+        std::fprintf(
+          stderr, "Chimaera DDS lane %u: coalesced %llu redundant discovery controls\n", index,
+          static_cast<unsigned long long>(lanes_[index].coalesced_control));
     for (auto & service : lanes_)
       if (service.writer.joinable()) service.writer.join();
     for (auto & service : lanes_) {

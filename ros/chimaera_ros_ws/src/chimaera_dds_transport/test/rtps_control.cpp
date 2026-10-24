@@ -63,6 +63,16 @@ int main()
     require(
       chimaera_dds::repeated_control_key(application).empty(), "application QoS was replaced");
 
+    std::vector<Packet> snapshot{frame(7, 1), frame(7, 2), frame(6, 1), data, application};
+    std::vector<bool> keep(snapshot.size(), true);
+    chimaera_dds::retain_control(snapshot, keep);
+    require(
+      keep == std::vector<bool>({false, true, true, true, true}),
+      "received retries were not coalesced conservatively");
+    keep.assign(1, true);
+    chimaera_dds::retain_control(std::vector<Packet>{frame(7, 1)}, keep);
+    require(keep[0], "received control state escaped its snapshot");
+
     ::setenv("CHIMAERA_DDS_BACKEND", "m5ops", 1);
     const auto path = "/tmp/chimaera-control-test-" + std::to_string(::getpid());
     chimaera_dds::Router router(path, 1);
