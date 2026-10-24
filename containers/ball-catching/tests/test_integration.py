@@ -372,7 +372,8 @@ def test_direct_m5ops_guest_bundle_contains_runtime_and_graph_admission_helper(t
     def middleware(path):
         selected_plugins.append(path)
         return types.SimpleNamespace(chimaera_rmw_transport_abi=lambda: 1,
-                                     chimaera_rmw_trace_abi=lambda: 1)
+                                     chimaera_rmw_trace_abi=lambda: 1,
+                                     chimaera_dds_trace_transport_abi=lambda: 1)
     monkeypatch.setattr(dds.ctypes, 'CDLL', middleware)
     dependencies = ''.join(f'{name} => {sdk / "lib" / name} (0x1)\n' for name in libraries[2:])
     dependencies += 'libc.so.6 => /lib/libc.so.6 (0x2)\n'

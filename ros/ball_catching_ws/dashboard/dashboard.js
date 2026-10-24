@@ -26,10 +26,14 @@
     const p=document.createElement("p");p.textContent=[counts ? `Matched pairs: ${counts.pairs} · detections: ${counts.detected} · usable tracks: ${counts.tracked} · expired during processing: ${s.expired_perception_count || 0}.` : "Perception counts were not recorded.",plans ? `Planning records: ${plans.updates} · feasible plans: ${plans.planned} · infeasible searches: ${plans.infeasible} · plans discarded after deadline: ${plans.deadline_missed || 0}.` : "Planning counts were not recorded."].join(" ");el("cadence").appendChild(p);
     for(const stage of ["perception","planning","control"]){if(selected!=="all"&&selected!==stage)continue;const detail=rows.find(r=>r.stage===stage&&r.cadence);if(detail){const p=document.createElement("p");p.textContent=`${stage[0].toUpperCase()+stage.slice(1)}: ${format(detail.achieved_hz,"Hz",1)} achieved / ${format(detail.desired_hz,"Hz",1)} desired (${format(detail.rate_percent,"%",0)} of target) · P95 update gap: ${format(detail.cadence.gaps.p95_ms,"ms",1)} (simulation clock).`;el("cadence").appendChild(p);}}
   }
+  function messageMeasurement(stream) {
+    if(el("transport-measure").value==="delivery")return stream?.delivery||stream;
+    return current?.summary?.transport_latency?.schema_version>=2?stream?.transport:null;
+  }
   function transportPlot() {
     const svg=el("transport-chart");svg.replaceChildren();
     const stream=current?.summary?.transport_latency?.streams?.find(s=>s.topic===el("transport-stream").value);
-    const points=stream?.time_trace||[];if(!points.length)return;
+    const points=messageMeasurement(stream)?.time_trace||[];if(!points.length)return;
     const origin=current.result.launch_time;
     const xmax=Math.max(.001,current.summary.evaluation_seconds);
     const ymax=Math.max(.001,...points.map(p=>p.latency_ms));
@@ -46,23 +50,29 @@
     el("transport-rows").replaceChildren();selector.replaceChildren();
     el("transport-export").disabled=!trace;
     for(const stream of trace?.streams||[]){
+      const measured=messageMeasurement(stream);
       const row=document.createElement("tr");
       cell(row,`${stream.topic} · ${stream.direction==="host_to_guest"?"Host → guest":"Guest → host"}`);
-      cell(row,stream.boundary==="bridge"?"Bridge ingress → publication":"Publish → RMW take");
-      cell(row,`${stream.received} / ${stream.published}`);cell(row,stream.missing_at_evaluation);
-      for(const key of ["mean_ms","p95_ms","p99_ms","maximum_ms"])cell(row,Number.isFinite(stream.latency?.[key])?stream.latency[key].toFixed(3):"—");
-      const quality=cell(row,stream.status.replaceAll("_"," "));
-      quality.title=`${stream.duplicates} duplicate/fanout receipts; ${stream.invalid_clock_events} invalid clocks; ${stream.negative_latency} negative delays; ${stream.unmatched_receipt_identities} unmatched identities`;
+      cell(row,!measured?"Not recorded":measured.boundary==="transport"?"Serialized send → complete arrival":measured.boundary==="bridge"?"Bridge callback → publication":"Publish → RMW take");
+      const available=measured&&measured.status!=="not_recorded";
+      cell(row,available?`${measured.received} / ${measured.published}`:"—");cell(row,available?measured.missing_at_evaluation:"—");
+      for(const key of ["mean_ms","p95_ms","p99_ms","maximum_ms"])cell(row,Number.isFinite(measured?.latency?.[key])?measured.latency[key].toFixed(3):"—");
+      cell(row,format(stream.serialization_and_send?.p95_ms,"ms",3));
+      cell(row,format(stream.receive_to_take?.p95_ms,"ms",3));
+      const quality=cell(row,(measured?.status||"not_recorded").replaceAll("_"," "));
+      quality.title=`${measured?.invalid_clock_events||0} invalid clocks; ${measured?.negative_latency||0} negative delays; ${measured?.duplicates||measured?.duplicate_fragments||0} duplicate observations`;
       quality.setAttribute("aria-label",`${quality.textContent}: ${quality.title}`);
       el("transport-rows").append(row);
       const option=document.createElement("option");option.value=stream.topic;option.textContent=stream.topic;selector.append(option);
     }
     if([...selector.options].some(option=>option.value===previous))selector.value=previous;
     selector.disabled=!selector.options.length;
-    el("transport-note").textContent=!trace||trace.status==="not_recorded"?"No Chimaera trace was recorded. Enable tracing and run a new experiment to measure latency.":`Trace: ${trace.status.replaceAll("_"," ")}. Window: launch through final evaluation. ${trace.files.length} recording files. Percentiles are computed separately for every topic; time plots show at most 2,000 samples per topic. Invalid clocks and unmatched identities are reported, not converted to delays.`;
+    const missingTransport=el("transport-measure").value==="transport"&&!(trace?.streams||[]).some(stream=>stream.transport&&stream.transport.status!=="not_recorded");
+    el("transport-note").textContent=!trace||trace.status==="not_recorded"?"No Chimaera trace was recorded. Enable tracing and run a new experiment to measure latency.":missingTransport?"Transport arrival timestamps were not recorded. Publication → delivery shows the available delivery measurements.":`Trace: ${trace.status.replaceAll("_"," ")}. Window: launch through final evaluation. ${trace.files.length} recording files. Percentiles are computed separately for every topic; time plots show at most 2,000 samples per topic. Invalid clocks and unmatched identities are reported, not converted to delays.`;
     transportPlot();
   }
   el("transport-stream").onchange=transportPlot;
+  el("transport-measure").onchange=transportTiming;
   el("transport-export").onclick=()=>{
     const trace=current?.summary?.transport_latency;if(!trace)return;
     const url=URL.createObjectURL(new Blob([JSON.stringify(trace,null,2)],{type:"application/json"}));

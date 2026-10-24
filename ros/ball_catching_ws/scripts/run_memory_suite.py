@@ -26,14 +26,14 @@ SCRIPTS = WORKSPACE / 'scripts'
 GUEST_ROOT = '/opt/chimaera/ball_catching'
 
 
-def transport_summary(directory, routes_path, start, end, *, enabled):
+def transport_summary(directory, routes_path, start, end, *, enabled, clock_resolution_ns=None):
     if not enabled:
-        return dict(schema_version=1, status='not_recorded', enabled=False,
+        return dict(schema_version=2, status='not_recorded', enabled=False,
                     clock='co-simulation', streams=[], files=[],
                     start_seconds=start, end_seconds=end,
                     scope='Transport tracing was explicitly disabled for this experiment.')
     from chimaera_ros.tracing import summarize
-    return summarize(directory, routes_path, start, end)
+    return summarize(directory, routes_path, start, end, clock_resolution_ns=clock_resolution_ns)
 
 
 def write_json(path, value):
@@ -698,7 +698,8 @@ def gem5_trial(directory, output, data, point, args, calibration, bundle,
     from guest_records import import_guest_records
     telemetry = import_guest_records(directory)
     transport = transport_summary(directory, output / 'routes.json', result['launch_time'],
-                                  result['result_time'], enabled=fixed.get('trace', True))
+                                  result['result_time'], enabled=fixed.get('trace', True),
+                                  clock_resolution_ns=fixed['interval_us'] * 1000)
     write_json(directory / 'transport_latency.json', transport)
     metrics = memory_metrics(roi, data['peak_gbps'])
     pressure_warmup = 0

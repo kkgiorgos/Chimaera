@@ -64,6 +64,18 @@ if(BUILD_TESTING)
   add_test(NAME dds_trace_test COMMAND dds_trace_test)
   set_tests_properties(dds_trace_test PROPERTIES TIMEOUT 20 SKIP_RETURN_CODE 77
     ENVIRONMENT "ROS_DOMAIN_ID=193;ROS_LOCALHOST_ONLY=1;ROS_LOG_DIR=${CMAKE_CURRENT_BINARY_DIR}/trace_ros_logs")
+  add_executable(dds_trace_packet_test test/trace_packet.cpp)
+  target_include_directories(dds_trace_packet_test PRIVATE src)
+  target_link_libraries(dds_trace_packet_test PRIVATE ${PROJECT_NAME})
+  add_test(NAME dds_trace_packet_test COMMAND dds_trace_packet_test)
+  add_executable(dds_trace_transport_test test/trace_transport.cpp)
+  target_link_libraries(dds_trace_transport_test PRIVATE ${PROJECT_NAME} PkgConfig::JSON_C)
+  ament_target_dependencies(dds_trace_transport_test PUBLIC rclcpp sensor_msgs)
+  target_compile_definitions(dds_trace_transport_test PRIVATE
+    TEST_ROUTES="${CMAKE_CURRENT_SOURCE_DIR}/test/routes.json"
+    TEST_OUTPUT="${CMAKE_CURRENT_BINARY_DIR}/trace-transport-validation")
+  add_test(NAME dds_trace_transport_test COMMAND dds_trace_transport_test)
+  set_tests_properties(dds_trace_transport_test PROPERTIES TIMEOUT 35)
   add_executable(dds_rtps_control_test test/rtps_control.cpp)
   target_include_directories(dds_rtps_control_test PRIVATE src)
   target_link_libraries(dds_rtps_control_test PRIVATE ${PROJECT_NAME})

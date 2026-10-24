@@ -17,6 +17,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "rtps_trace.hpp"
+
 namespace chimaera_dds::trace
 {
 namespace
@@ -32,7 +34,7 @@ bool active()
   static const bool value = std::string(env("CHIMAERA_TRACE")) == "1";
   return value;
 }
-std::mutex mutex;
+std::mutex mutex, clock_mutex;
 uint64_t * writer_clock{};
 struct State
 {
@@ -104,12 +106,27 @@ std::string quoted(const char * text)
   json_object_put(value);
   return result;
 }
+void append(State & s, const std::string & bytes)
+{
+  if (s.side == "guest") {
+    const auto count =
+      s.export_file(const_cast<char *>(bytes.data()), bytes.size(), s.offset, s.filename.c_str());
+    if (count != bytes.size()) throw std::runtime_error("incomplete Chimaera trace export");
+    s.offset += count;
+  } else {
+    s.output << bytes;
+    s.output.flush();
+    if (!s.output) throw std::runtime_error("Chimaera trace write failed");
+  }
+}
 }  // namespace
+bool enabled() { return active(); }
 bool enabled(const char * topic) { return active() && state().topics.count(topic); }
 uint64_t now()
 {
   if (!active()) return unset;
-  std::lock_guard lock(mutex);
+  // A trace export on another thread must not postpone a boundary timestamp.
+  std::lock_guard lock(clock_mutex);
   auto & s = state();
   if (s.side == "guest") {
     if (s.origin == unset) {
@@ -161,24 +178,39 @@ void record(
   std::lock_guard lock(mutex);
   auto & s = state();
   std::ostringstream row;
-  row << "{\"version\":1,\"event\":" << quoted(event) << ",\"topic\":" << quoted(topic)
+  row << "{\"version\":2,\"event\":" << quoted(event) << ",\"topic\":" << quoted(topic)
       << ",\"id\":" << quoted(id.c_str()) << ",\"side\":" << quoted(s.side.c_str())
+      << ",\"process\":" << quoted(std::to_string(getpid()).c_str())
       << ",\"boundary\":" << quoted(boundary) << ",\"time_ns\":";
   if (time == unset)
     row << "null";
   else
     row << time;
   row << "}\n";
-  const auto bytes = row.str();
-  if (s.side == "guest") {
-    const auto count =
-      s.export_file(const_cast<char *>(bytes.data()), bytes.size(), s.offset, s.filename.c_str());
-    if (count != bytes.size()) throw std::runtime_error("incomplete Chimaera trace export");
-    s.offset += count;
-  } else {
-    s.output << bytes;
-    s.output.flush();
-    if (!s.output) throw std::runtime_error("Chimaera trace write failed");
+  append(s, row.str());
+}
+void packet(
+  const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port)
+{
+  if (!active()) return;
+  const auto metadata = parts(bytes, size);
+  if (metadata.empty()) return;
+  std::lock_guard lock(mutex);
+  auto & s = state();
+  for (const auto & part : metadata) {
+    std::ostringstream row;
+    row << "{\"version\":2,\"boundary\":\"transport\",\"topic\":null,\"event\":" << quoted(event)
+        << ",\"id\":" << quoted(part.id.c_str()) << ",\"side\":" << quoted(s.side.c_str())
+        << ",\"process\":" << quoted(std::to_string(getpid()).c_str()) << ",\"receiver\":"
+        << quoted((std::to_string(getpid()) + ":" + std::to_string(port)).c_str())
+        << ",\"fragment_first\":" << part.first << ",\"fragment_count\":" << part.count
+        << ",\"fragment_total\":" << part.total << ",\"time_ns\":";
+    if (time == unset)
+      row << "null";
+    else
+      row << time;
+    row << "}\n";
+    append(s, row.str());
   }
 }
 bool write(eprosima::fastdds::dds::DataWriter * writer, void * data, const char * topic)
@@ -221,3 +253,5 @@ void set_clock(uint64_t nanoseconds)
   }
 }
 }  // namespace chimaera_dds::trace
+
+extern "C" int chimaera_dds_trace_transport_abi() { return 1; }

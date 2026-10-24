@@ -58,8 +58,8 @@
         trial?.summary?.timing_coverage?.status === 'partial' ?
           `Partial · ${trial.summary.timing_coverage.missing_control_timings} missing control timings` :
           trial?.summary?.timing_coverage?.status === 'no_missing_delivered_control_timings' ? 'Control timings match deliveries' : 'Not checked',
-        timing(trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command')?.latency),
-        (() => { const stream = trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command'); return stream ? `${stream.received} / ${stream.published}` : 'Not recorded'; })()];
+        timing(trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command')?.transport?.latency),
+        (() => { const stream = trial?.summary?.transport_latency?.streams?.find(stream => stream.topic === '/robot/effort_command')?.transport; return stream&&stream.status!=='not_recorded' ? `${stream.received} / ${stream.published}` : 'Not recorded'; })()];
       for (const [index, value] of values.entries()) {
         const cell = document.createElement('td'); cell.textContent = value;
         if (index === 1 && trial) cell.className = trial.result.success ? 'good' : 'bad';

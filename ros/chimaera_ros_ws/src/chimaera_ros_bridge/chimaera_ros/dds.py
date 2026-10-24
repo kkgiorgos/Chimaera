@@ -61,10 +61,12 @@ def require_trace_overlay():
     """Old routing overlays do not contain the opt-in publication/take hooks."""
     library = require_middleware_overlay()
     try:
-        if ctypes.CDLL(str(library)).chimaera_rmw_trace_abi() != 1:
+        plugin = ctypes.CDLL(str(library))
+        if plugin.chimaera_rmw_trace_abi() != 1 or plugin.chimaera_dds_trace_transport_abi() != 1:
             raise AttributeError('unsupported trace ABI')
     except (OSError, AttributeError) as error:
-        raise ValueError('Tracing requires the current RMW overlay; rebuild with middleware/prepare_rmw.py') from error
+        raise ValueError('Transport tracing requires the current DDS runtime and RMW overlay; '
+                         'rebuild chimaera_dds_transport and the middleware overlay') from error
     return library
 
 

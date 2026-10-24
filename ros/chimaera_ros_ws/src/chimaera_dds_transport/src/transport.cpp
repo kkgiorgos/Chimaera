@@ -14,6 +14,7 @@
 #include <chimaera_dds_transport/packet.hpp>
 #include <chimaera_dds_transport/functional_copy.hpp>
 #include <chimaera_dds_transport/transport.hpp>
+#include <chimaera_dds_transport/trace.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -118,7 +119,7 @@ class Transport final : public TransportInterface
       // EAGAIN retains an already-pending, persistent cancellation notification.
     }
   }
-  void deliver(const uint8_t * bytes, std::size_t size)
+  void deliver(const uint8_t * bytes, std::size_t size, uint64_t arrived)
   {
     const auto destination = wire::locator(bytes + 28);
     std::shared_ptr<Channel> channel;
@@ -133,13 +134,17 @@ class Transport final : public TransportInterface
         stderr, "Chimaera DDS receive: side=%u port=%u bytes=%zu\n", descriptor_.side,
         destination.port, size - wire::header_bytes);
     // Distinct topic ports keep image processing off a control channel's lock.
-    std::lock_guard lock(channel->mutex);
-    if (channel->receiver) {
-      FunctionalCopyScope middleware_copies;
-      channel->receiver->OnDataReceived(
-        bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
-        wire::locator(bytes + 8));
+    {
+      std::lock_guard lock(channel->mutex);
+      if (channel->receiver) {
+        FunctionalCopyScope middleware_copies;
+        channel->receiver->OnDataReceived(
+          bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
+          wire::locator(bytes + 8));
+      }
     }
+    trace::packet("receive", bytes + wire::header_bytes, size - wire::header_bytes,
+                  arrived, destination.port);
   }
 #ifdef CHIMAERA_DDS_HAS_M5OPS
   void read_lane(unsigned index)
@@ -152,6 +157,9 @@ class Transport final : public TransportInterface
         while (!stopped_) {
           auto messages = service.endpoint->take_batch();
           if (messages.empty()) break;
+          // All loans are already present. DDS work for an earlier datagram in
+          // this batch must not become a later datagram's transport delay.
+          const auto arrived = trace::enabled() ? trace::now() : trace::unset;
           for (const auto & message : messages) {
             const auto * bytes = reinterpret_cast<const uint8_t *>(message.data());
             const auto size = message.size();
@@ -165,7 +173,7 @@ class Transport final : public TransportInterface
               (destination.address[0] && destination.address[0] != 2) ||
               lane_index(destination.port) != index)
               throw std::runtime_error("invalid direct DDS locator or lane");
-            deliver(bytes, size);
+            deliver(bytes, size, arrived);
           }
           // Batch owns every registered RX slot through all OnDataReceived
           // calls, then returns the complete group in one m5 operation.
@@ -294,7 +302,7 @@ class Transport final : public TransportInterface
       }
     }
   }
-  bool send_packet(
+  bool send_packet_impl(
     wire::Type type, const wire::Locator & source, const wire::Locator & destination,
     const void * body = nullptr, std::size_t size = 0)
   {
@@ -333,6 +341,18 @@ class Transport final : public TransportInterface
     stop();
     return false;
   }
+  bool send_packet(
+    wire::Type type, const wire::Locator & source, const wire::Locator & destination,
+    const void * body = nullptr, std::size_t size = 0)
+  {
+    if (type != wire::data || !trace::enabled())
+      return send_packet_impl(type, source, destination, body, size);
+    const auto started = trace::now();
+    const auto accepted = send_packet_impl(type, source, destination, body, size);
+    if (accepted)
+      trace::packet("send", static_cast<const uint8_t *>(body), size, started, destination.port);
+    return accepted;
+  }
   void read_socket(int socket, int service_index = -1)
   {
     try {
@@ -346,11 +366,12 @@ class Transport final : public TransportInterface
         if (!wire::receive_all(
               socket, packet.data() + wire::header_bytes, size - wire::header_bytes))
           break;
+        const auto arrived = trace::enabled() ? trace::now() : trace::unset;
         if (
           service_index >= 0 &&
           lane_index(wire::locator(packet.data() + 28).port) != unsigned(service_index))
           throw std::runtime_error("DDS socket received a packet on the wrong lane");
-        deliver(packet.data(), size);
+        deliver(packet.data(), size, arrived);
       }
     } catch (const std::exception & error) {
       std::fprintf(stderr, "Chimaera DDS receive: %s\n", error.what());
