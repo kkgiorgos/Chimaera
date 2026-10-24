@@ -1,0 +1,1 @@
+{"backend": "m5ops", "abi_version": 1, "device": "/dev/chimaera-m5", "lanes": [0, 1], "kernel_release": "5.15.180-chimaera", "concurrent_exports": 1024, "status": "passed", "cause": "m5_exit instruction encountered", "code": 0}
