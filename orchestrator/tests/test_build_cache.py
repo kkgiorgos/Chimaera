@@ -135,6 +135,24 @@ def test_rmw_preparation_changes_sdk_cache_and_source_identity(tmp_path):
     assert source_identity(tmp_path) != identity
 
 
+def test_source_identity_does_not_depend_on_git_hash_abbreviation(tmp_path):
+    subprocess.run(['git', 'init', '-q', str(tmp_path)], check=True)
+    source = tmp_path / 'orchestrator/backend/transport.py'
+    source.parent.mkdir(parents=True)
+    source.write_text('original transport')
+    subprocess.run(['git', '-C', str(tmp_path), 'add', '.'], check=True)
+    subprocess.run(['git', '-C', str(tmp_path), '-c', 'user.name=Test',
+                    '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture'], check=True)
+    clean = source_identity(tmp_path)
+    source.write_text('fixed transport')
+    identities = []
+    for length in ('7', '8', '40'):
+        subprocess.run(['git', '-C', str(tmp_path), 'config', 'core.abbrev', length], check=True)
+        identities.append(source_identity(tmp_path))
+    assert identities[0] != clean
+    assert identities[0] == identities[1] == identities[2]
+
+
 def pipeline_fixture(tmp_path):
     directory = tmp_path / '.chimaera-orchestrator/experiments/experiment'
     identity = dict(revision='revision', fingerprint='sources')

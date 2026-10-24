@@ -22,10 +22,15 @@ class SSH:
             input=json.dumps(dict(machine=machine, cleanup=cleanup)).encode(), timeout=1200)
         return True
 
-    def base(self, machine):
+    def base(self, machine, *, bulk=False):
+        # Large Docker imports and sparse asset transfers can briefly saturate
+        # a worker or its link. Keep RPC failure detection short, but do not
+        # abandon a bulk stream after the RPC's ten-second liveness window.
+        # Each caller still enforces its own cancellation and total deadline.
+        interval, count = (15, 12) if bulk else (5, 2)
         return ['ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
-                '-o', 'ConnectTimeout=8', '-o', 'ServerAliveInterval=5',
-                '-o', 'ServerAliveCountMax=2', '-p', str(machine['port']),
+                '-o', 'ConnectTimeout=8', '-o', f'ServerAliveInterval={interval}',
+                '-o', f'ServerAliveCountMax={count}', '-p', str(machine['port']),
                 '--', machine['target']]
 
     def deploy(self, machine):
@@ -58,7 +63,7 @@ class SSH:
         if cancel is not None and cancel.is_set():
             raise RuntimeError('Result collection cancelled')
         with destination.open('wb') as stream, tempfile.TemporaryFile() as errors:
-            process = subprocess.Popen(self.base(machine) + [command], stdout=stream, stderr=errors)
+            process = subprocess.Popen(self.base(machine, bulk=True) + [command], stdout=stream, stderr=errors)
             deadline = time.monotonic() + 1800
             try:
                 while process.poll() is None:
@@ -92,9 +97,9 @@ class SSH:
         helper = Path(__file__).with_name('readiness_transfer.py').read_text()
         path = str(Path(source['repo']) / '.chimaera-orchestrator/experiments' / experiment / 'export-assets')
         command = shlex.join(['python3', '-c', helper, path, directory,
-                             json.dumps(self.base(destination)), str(timeout)])
+                             json.dumps(self.base(destination, bulk=True)), str(timeout)])
         with tempfile.TemporaryFile() as errors:
-            process = subprocess.Popen(self.base(source) + [command], stdin=subprocess.PIPE,
+            process = subprocess.Popen(self.base(source, bulk=True) + [command], stdin=subprocess.PIPE,
                                        stdout=subprocess.DEVNULL, stderr=errors)
             deadline = time.monotonic() + timeout
             try:
@@ -147,9 +152,9 @@ class SSH:
         # Its stdin remains open as a cancellation/disconnection signal.
         helper = Path(__file__).with_name('image_transfer.py').read_text()
         command = shlex.join(['python3', '-c', helper, image,
-                              json.dumps(self.base(destination)), str(timeout)])
+                              json.dumps(self.base(destination, bulk=True)), str(timeout)])
         with tempfile.TemporaryFile() as output, tempfile.TemporaryFile() as errors:
-            process = subprocess.Popen(self.base(source) + [command], stdin=subprocess.PIPE,
+            process = subprocess.Popen(self.base(source, bulk=True) + [command], stdin=subprocess.PIPE,
                                        stdout=output, stderr=errors)
             deadline = time.monotonic() + timeout
             offset = 0

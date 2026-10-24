@@ -8,6 +8,20 @@ import pytest
 from transport import SSH
 
 
+@pytest.mark.parametrize('bulk,interval,count', [(False, 5, 2), (True, 15, 12)])
+def test_ssh_liveness_uses_openssh_settings_without_disabling_host_verification(bulk, interval, count):
+    command = SSH().base(dict(target='worker.example', port=2222), bulk=bulk)
+    # Let OpenSSH resolve its first-value-wins option rules without connecting.
+    result = subprocess.run([command[0], '-G', '-F', '/dev/null', *command[1:]],
+                            capture_output=True, text=True, check=True)
+    options = dict(line.split(' ', 1) for line in result.stdout.splitlines())
+    assert options['serveraliveinterval'] == str(interval)
+    assert options['serveralivecountmax'] == str(count)
+    assert options['stricthostkeychecking'] == 'true'
+    assert options['batchmode'] == 'yes'
+    assert options['port'] == '2222'
+
+
 @pytest.mark.parametrize('calibration_present', [False, True])
 def test_case_collection_skips_container_only_calibration_link(tmp_path, calibration_present):
     import shlex
@@ -25,7 +39,7 @@ def test_case_collection_skips_container_only_calibration_link(tmp_path, calibra
     (suite / 'result.json').write_text('{"success": false}')
     (output / 'worker.log').write_text('completed')
     ssh = SSH()
-    ssh.base = lambda machine: ['bash', '-c']
+    ssh.base = lambda machine, **kwargs: ['bash', '-c']
     real_popen = subprocess.Popen
 
     def local_tar(argv, **kwargs):
@@ -154,7 +168,7 @@ else:
     ssh = SSH()
     def configure(mode='success'):
         monkeypatch.setenv('TRANSFER_TEST_MODE', mode)
-        ssh.base = lambda machine: (['bash', '-c'] if machine['role'] == 'source' else
+        ssh.base = lambda machine, **kwargs: (['bash', '-c'] if machine['role'] == 'source' else
                                    [sys.executable, str(script), str(marker), mode])
         return ssh
     return configure, marker
@@ -186,6 +200,44 @@ def test_controller_launches_only_producer_and_receives_json_progress(sdk_stream
     assert len(processes) == 2
     assert processes[1][0].args[:2] == ['bash', '-c']
     assert processes[1][1]['stdout'] != subprocess.PIPE
+
+
+def test_image_stream_uses_bulk_liveness_on_both_hops_and_rpc_liveness_for_probe(sdk_stream):
+    configure, _ = sdk_stream
+    ssh = configure()
+    original_base = ssh.base
+    connections = []
+
+    def base(machine, *, bulk=False):
+        connections.append((machine['role'], bulk))
+        return original_base(machine, bulk=bulk)
+
+    ssh.base = base
+    assert ssh.copy_image({'role': 'source'}, {'role': 'destination'}, SDK_ID) == SDK_ID
+    assert connections == [('destination', False), ('destination', True), ('source', True)]
+
+
+def test_readiness_stream_uses_bulk_liveness_and_keeps_asset_rpc_short(tmp_path):
+    import shlex
+    ssh = SSH()
+    connections = []
+
+    def base(machine, *, bulk=False):
+        connections.append((machine['role'], bulk))
+        return ['bash', '-c']
+
+    real_popen = subprocess.Popen
+    ssh.base = base
+    calls = []
+    ssh.call = lambda machine, method, **params: calls.append(method) or '/incoming'
+    with patch('transport.subprocess.Popen', side_effect=lambda command, **kwargs:
+               real_popen([sys.executable, '-c', 'pass'], **kwargs)) as launch:
+        ssh.copy_readiness({'role': 'source', 'repo': str(tmp_path)},
+                           {'role': 'destination'}, 'experiment', 'manifest')
+    assert connections == [('destination', True), ('source', True)]
+    assert calls == ['asset_destination', 'commit_assets']
+    remote = shlex.split(launch.call_args.args[0][-1])
+    assert remote[-4] == str(tmp_path / '.chimaera-orchestrator/experiments/experiment/export-assets')
 
 
 def test_producer_stops_when_control_connection_closes(sdk_stream):
@@ -354,7 +406,7 @@ else:
     monkeypatch.setenv('PATH', str(tmp_path) + os.pathsep + os.environ['PATH'])
     monkeypatch.setenv('LOAD_MARKER', str(marker))
     ssh = SSH()
-    ssh.base = lambda machine: ['bash', '-c']
+    ssh.base = lambda machine, **kwargs: ['bash', '-c']
     updates = []
     assert ssh.copy_image({}, {}, SDK_ID, progress=updates.append) == SDK_ID
     assert marker.read_text() == SDK_ID

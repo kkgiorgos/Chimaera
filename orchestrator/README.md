@@ -315,6 +315,14 @@ size is unknown until export finishes. Verification errors include Docker's load
 output, and streaming errors distinguish source export from destination load.
 Transfer failures are preparation failures with **Retry preparation**. Stop cancels active transfers;
 controller restarts recheck the destination cache and repeat incomplete transfers.
+Long image, readiness-asset, and result streams allow approximately three minutes
+of unanswered SSH keepalives so a busy import or congested link does not trigger
+the short worker-poll timeout. Worker polling retains its ten-second SSH liveness
+window. Transfer cancellation and overall deadlines remain enforced. After
+updating the controller, choose **Retry preparation** for an interrupted consumer;
+successfully loaded images are verified and reused.
+Source fingerprints use full Git object hashes, so identical uncommitted changes
+match across controller and worker repositories with different Git abbreviation settings.
 Transfers have a one-hour limit and require verified destination SSH host keys on
 the producer. The producer stops its export and destination connection when the
 controller cancels or disconnects. No image archive is retained; compressed bytes

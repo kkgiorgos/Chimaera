@@ -41,7 +41,9 @@ def source_identity(root):
     revision = run([*git, 'rev-parse', 'HEAD'], text=True).strip()
     paths = ['gem5', 'gem5-transport', 'ros', 'containers', 'middleware/prepare_rmw.py',
              'orchestrator/backend', 'orchestrator/kernel']
-    diff = run([*git, 'diff', '--binary', 'HEAD', '--', *paths])
+    # Git chooses abbreviated index hashes from each repository's object count
+    # and core.abbrev setting. Identical edits on two workers must hash alike.
+    diff = run([*git, 'diff', '--binary', '--full-index', 'HEAD', '--', *paths])
     extra = run([*git, 'ls-files', '--others', '--exclude-standard', '-z', '--', *paths])
     result = hashlib.sha256(revision.encode() + diff)
     for name in sorted(extra.decode().split('\0')):
