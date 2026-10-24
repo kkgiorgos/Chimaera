@@ -49,6 +49,9 @@ std::string wire_topic(const char * topic, const std::string & dds_type = {});
 std::string local_topic(const std::string & topic);
 void configure_writer(const char * topic, eprosima::fastdds::dds::DataWriterQos & qos);
 void configure_reader(const char * topic, eprosima::fastdds::dds::DataReaderQos & qos);
+// Explicit latest-state routes may replace superseded unfragmented best-effort
+// samples within an already-arrived RX batch. Reliable/grouped routes never do.
+bool coalesce_latest(uint32_t port);
 void endpoint_created(const char * topic, bool publisher);
 void endpoint_destroyed(const char * topic, bool publisher) noexcept;
 }  // namespace chimaera_dds

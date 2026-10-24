@@ -103,6 +103,14 @@ trace events. Routed DDS locator selection also sends each datagram once per
 distinct participant address and port: composed readers sharing that locator
 are served by DDS fanout rather than duplicate transport deliveries.
 
+Direct guest reception honors explicit latest-state routes (`coalesce: true`,
+best-effort, volatile, `keep_last`, depth 1) within each already-arrived RX batch.
+Only superseded complete, unfragmented user DATA samples for the same writer,
+reader and destination are skipped before DDS dispatch. Every arrival is still
+traced and every RX loan is returned. Reliable data, discovery/control metadata,
+fragments, grouped stereo and bulk routes retain FIFO delivery. Endpoint QoS
+must remain best-effort and volatile for an opted-in latest-state route.
+
 ## Collection and presentation
 
 Host processes write `chimaera-trace-host-PID.jsonl` in `trace_directory`. Guest

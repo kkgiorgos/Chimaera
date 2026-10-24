@@ -25,6 +25,7 @@
 #include <system_error>
 #include <thread>
 
+#include "latest_sample.hpp"
 #include "protocol.hpp"
 
 namespace chimaera_dds
@@ -77,6 +78,7 @@ class Transport final : public TransportInterface
     std::size_t tx_bytes{}, tx_records{};
     std::condition_variable tx_ready;
     std::thread writer;
+    uint64_t coalesced{};
     ~Lane()
     {
       if (cancel >= 0) ::close(cancel);
@@ -119,7 +121,7 @@ class Transport final : public TransportInterface
       // EAGAIN retains an already-pending, persistent cancellation notification.
     }
   }
-  void deliver(const uint8_t * bytes, std::size_t size, uint64_t arrived)
+  void deliver(const uint8_t * bytes, std::size_t size, uint64_t arrived, bool dispatch = true)
   {
     const auto destination = wire::locator(bytes + 28);
     std::shared_ptr<Channel> channel;
@@ -136,7 +138,7 @@ class Transport final : public TransportInterface
     // Distinct topic ports keep image processing off a control channel's lock.
     {
       std::lock_guard lock(channel->mutex);
-      if (channel->receiver) {
+      if (channel->receiver && dispatch) {
         FunctionalCopyScope middleware_copies;
         channel->receiver->OnDataReceived(
           bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
@@ -173,7 +175,15 @@ class Transport final : public TransportInterface
               (destination.address[0] && destination.address[0] != 2) ||
               lane_index(destination.port) != index)
               throw std::runtime_error("invalid direct DDS locator or lane");
-            deliver(bytes, size, arrived);
+          }
+          const auto keep = retain_latest(messages, coalesce_latest);
+          for (std::size_t i = 0; i < messages.size(); ++i) {
+            // Every arrival remains traced, including superseded best-effort
+            // state. Only DDS dispatch is skipped; loans are returned normally.
+            service.coalesced += !keep[i];
+            deliver(
+              reinterpret_cast<const uint8_t *>(messages[i].data()), messages[i].size(), arrived,
+              keep[i]);
           }
           // Batch owns every registered RX slot through all OnDataReceived
           // calls, then returns the complete group in one m5 operation.
@@ -496,6 +506,11 @@ public:
     if (reader_.joinable()) reader_.join();
     for (auto & service : lanes_)
       if (service.reader.joinable()) service.reader.join();
+    for (unsigned index = 0; index < lanes_.size(); ++index)
+      if (lanes_[index].coalesced)
+        std::fprintf(
+          stderr, "Chimaera DDS lane %u: coalesced %llu superseded state samples\n", index,
+          static_cast<unsigned long long>(lanes_[index].coalesced));
     for (auto & service : lanes_)
       if (service.writer.joinable()) service.writer.join();
     for (auto & service : lanes_) {

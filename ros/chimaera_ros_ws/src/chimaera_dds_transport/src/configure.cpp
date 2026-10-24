@@ -24,6 +24,7 @@ struct Route
   std::string type;
   bool publisher;
   uint32_t port{1};
+  bool latest{};
 };
 // Hash the canonical wire topic rather than its side-specific ROS alias. Both
 // peers compute the same locator, independent of JSON ordering or process ID.
@@ -112,9 +113,26 @@ struct Configuration
         if (!inserted && entry->second != identity)
           throw std::invalid_argument("DDS wire-topic locator collision: " + host);
       }
+      auto field = [](json_object * object, const char * key) {
+        return object ? json_object_object_get(object, key) : nullptr;
+      };
+      auto equals = [&](json_object * object, const char * key, const char * expected) {
+        const auto value = field(object, key);
+        return value && json_object_is_type(value, json_type_string) &&
+               std::strcmp(json_object_get_string(value), expected) == 0;
+      };
+      const auto qos = field(item, "qos"), coalesce = field(item, "coalesce");
+      const auto depth = field(qos, "depth");
+      const bool latest =
+        coalesce && json_object_is_type(coalesce, json_type_boolean) &&
+        json_object_get_boolean(coalesce) && !bulk && !field(item, "coalesce_group") &&
+        type != "sensor_msgs/msg/Image" && type != "sensor_msgs/msg/CompressedImage" &&
+        equals(qos, "reliability", "best_effort") && equals(qos, "durability", "volatile") &&
+        equals(qos, "history", "keep_last") && depth && json_object_is_type(depth, json_type_int) &&
+        json_object_get_int64(depth) == 1;
       if (
         name.empty() || name[0] != '/' || host.empty() || host[0] != '/' ||
-        !routes.emplace(name, Route{host, dds_type, publisher, port}).second)
+        !routes.emplace(name, Route{host, dds_type, publisher, port, latest}).second)
         throw std::invalid_argument("invalid or duplicate DDS route");
     }
   }
@@ -188,6 +206,11 @@ void configure_endpoint(const char * topic, bool publisher, Qos & qos)
   const bool graph = std::strcmp(topic, "ros_discovery_info") == 0;
   if (!graph && (route == configuration.routes.end() || route->second.publisher != publisher))
     return;
+  if (
+    configuration.m5ops && !graph && route->second.latest &&
+    (qos.reliability().kind != eprosima::fastdds::dds::BEST_EFFORT_RELIABILITY_QOS ||
+     qos.durability().kind != eprosima::fastdds::dds::VOLATILE_DURABILITY_QOS))
+    throw std::invalid_argument("Latest-state DDS route requires best-effort volatile endpoints");
   qos.endpoint().unicast_locator_list.push_back(
     wire::local(configuration.side, graph ? 1U : route->second.port));
 }
@@ -238,6 +261,18 @@ void configure_writer(const char * topic, eprosima::fastdds::dds::DataWriterQos 
 void configure_reader(const char * topic, eprosima::fastdds::dds::DataReaderQos & qos)
 {
   configure_endpoint(topic, false, qos);
+}
+bool coalesce_latest(uint32_t port)
+{
+  const auto & configuration = config();
+  if (!configuration.m5ops || configuration.side != 2) return false;
+  bool found = false;
+  for (const auto & [name, route] : configuration.routes) {
+    if (route.port != port || route.publisher) continue;
+    if (!route.latest) return false;
+    found = true;
+  }
+  return found;
 }
 void endpoint_created(const char * topic, bool publisher)
 {
