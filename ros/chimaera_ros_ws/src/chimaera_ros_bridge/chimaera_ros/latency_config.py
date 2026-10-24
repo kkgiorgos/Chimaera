@@ -18,7 +18,7 @@ DEFAULT = dict(version=1, name='Bridge latency sweep', modes=list(MODES),
     gem5_configs=[dict(HARDWARE, name='KVM')], single_boot=True,
     transport_backend='m5', dma_module='', m5_module='', middleware_transport='bridge',
     dma_module_options='buffer_mb=8 receive_slots=16 transmit_slots=4',
-    delivery_policy='latest', verify_payload=False, dds_shm_bytes=0)
+    delivery_policy='latest', verify_payload=False, dds_shm_bytes=0, trace=False)
 
 
 def number(value, name, low, high, integer=False):
@@ -72,6 +72,10 @@ def plan_sweep(value):
     config.update(value)
     if type(config['single_boot']) is not bool:
         raise ValueError('single_boot must be boolean')
+    if type(config['trace']) is not bool:
+        raise ValueError('trace must be boolean')
+    if config['trace'] and (config['modes'] != ['chimaera'] or config['middleware_transport'] != 'fastdds'):
+        raise ValueError('Transport tracing requires Chimaera Fast DDS cases only')
     if config['transport_backend'] in ('dma', 'm5ops') and config['single_boot']:
         raise ValueError('DMA/m5ops requires single_boot=false (fresh boots)')
     if config['middleware_transport'] not in ('bridge', 'fastdds'):
@@ -139,7 +143,7 @@ def plan_sweep(value):
             raise ValueError('Ball-catching clock traffic is limited to 10,000 Hz')
     base = {key: config[key] for key in ('duration', 'warmup', 'drain', 'physics_step_ns', 'reliability', 'depth', 'timeout', 'workload', 'ball_catching',
         'transport_backend', 'middleware_transport', 'dma_module', 'dma_module_options', 'm5_module',
-        'delivery_policy', 'verify_payload', 'dds_shm_bytes')}
+        'delivery_policy', 'verify_payload', 'dds_shm_bytes', 'trace')}
     cases = []
     for body, rate, repeat in itertools.product(config['payload_bytes'], config['rate_hz'], range(1, config['repeats'] + 1)):
         for mode in config['modes']:

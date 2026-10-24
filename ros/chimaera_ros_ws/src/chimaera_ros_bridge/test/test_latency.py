@@ -6,7 +6,7 @@ import tarfile
 import unittest
 from unittest.mock import patch
 
-from chimaera_ros.latency import UNSET, make_report, routes, stage_guest, statistics, summarize, validate
+from chimaera_ros.latency import UNSET, guest_session, make_report, routes, stage_guest, statistics, summarize, validate
 
 
 class LatencyAnalysisTest(unittest.TestCase):
@@ -100,6 +100,45 @@ class LatencyAnalysisTest(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 validate(dict(self.config, **changes))
 
+    def test_trace_requires_fastdds_and_configures_the_guest(self):
+        with self.assertRaisesRegex(ValueError, 'Fast DDS'):
+            validate(dict(self.config, trace=True))
+        config = dict(self.config, mode='chimaera', middleware_transport='fastdds', trace=True)
+        validate(config)
+        bridge = guest_session('timing', config)['bridge']
+        self.assertTrue(bridge['trace'])
+        self.assertTrue(bridge['trace_directory'] and bridge['trace_clock_file'])
+
+    def test_traced_synthetic_run_uses_robot_transport_boundaries_and_separate_drain(self):
+        config = dict(self.config, mode='chimaera', middleware_transport='fastdds', trace=True)
+        self.write(config=config)
+        (self.root / 'routes.json').write_text(json.dumps(routes()))
+        rows = []
+        for identity, published, sent, arrived in [('measurement', 1900000000, 1910000000, 2100000000),
+                                                  ('drain', 2100000000, 2110000000, 2200000000)]:
+            rows.append(dict(version=2, event='publish', id=identity, time_ns=published,
+                topic='/latency/h2g/host', side='host', boundary='rmw', process='host'))
+            for event, time, side in [('send', sent, 'host'), ('receive', arrived, 'guest')]:
+                rows.append(dict(version=2, event=event, id=identity, time_ns=time, topic=None,
+                    side=side, boundary='transport', process=side, receiver=side + ':1',
+                    fragment_first=1, fragment_count=1, fragment_total=1))
+        (self.root / 'chimaera-trace-test.jsonl').write_text(''.join(json.dumps(row)+'\n' for row in rows))
+        trace = summarize(self.root)['transport_latency']
+        self.assertEqual(trace['clock_resolution_ns'], 50000000)
+        self.assertEqual(trace['source_end_seconds'], 2.)
+        self.assertEqual(trace['end_seconds'], 2.5)
+        self.assertEqual(trace['streams'][0]['transport']['published'], 1)
+        self.assertEqual(trace['streams'][0]['latency']['mean_ms'], 190.)
+        self.assertTrue((self.root / 'transport_latency.json').is_file())
+        make_report(self.root)
+        self.assertIn('serialized_transport_v1', (self.root / 'transport-latency-report.csv').read_text())
+        self.assertIn('Serialized transport timing', (self.root / 'latency-report.html').read_text())
+
+    def test_traced_callback_latency_is_not_subtracted_from_an_untraced_baseline(self):
+        self.write(self.root / 'native')
+        self.write(self.root / 'measured', dict(self.config, mode='chimaera', trace=True))
+        self.assertEqual(make_report(self.root)['comparisons'], [])
+
     def test_route_configuration_preserves_data_and_reliable_telemetry(self):
         result = routes('best_effort', 5)
         self.assertEqual(result['version'], 1)
@@ -137,6 +176,7 @@ class LatencyAnalysisTest(unittest.TestCase):
             self.assertIn('opt/chimaera/latency/guest_start', archive.getnames())
             marker = json.load(archive.extractfile('opt/chimaera/latency/latency-runtime.json'))
             self.assertEqual(marker, dict(version=4, transport_protocol=3,
+                trace_transport_abi=0,
                 transport_backends=['m5'], dma_abi=None, dma_protocol=None, m5_abi=None,
                 endpoint_features=[],
                 cpu_types=['kvm', 'timing', 'o3'], workloads=['synthetic', 'ball_catching']))

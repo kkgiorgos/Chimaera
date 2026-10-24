@@ -13,6 +13,7 @@ from pathlib import Path
 import platform
 import signal
 import shlex
+import shutil
 import struct
 import subprocess
 import sys
@@ -27,7 +28,7 @@ from .latency_workloads import BALL_DEFAULT, ball_routes, image_age, traffic
 from .latency_budget import wall_budget
 from .latency_session import SweepSessions, ordered_cases, validate_bundle
 from .latency_startup import startup_status, log_tail
-from .dds import shared_memory_profile, udp_loopback_profile, require_middleware_overlay
+from .dds import shared_memory_profile, udp_loopback_profile, require_middleware_overlay, require_trace_overlay
 
 MODES = ('native_free', 'native_stepped', 'chimaera')
 UNSET = 2**64 - 1
@@ -118,10 +119,22 @@ def guest_session(cpu_type='kvm', config=None):
     if (config or {}).get('middleware_transport') == 'fastdds':
         result['guest']['domain_id'] = result['host']['domain_id']
         result['bridge']['middleware_transport'] = 'fastdds'
+        result['bridge']['trace'] = (config or {}).get('trace', False)
+        if result['bridge']['trace']:
+            # Required manifest fields describe host tracing. Guest traces use
+            # the gem5 clock/export library; the benchmark host is launched
+            # separately with its own per-case directory and logical clock.
+            result['bridge'].update(trace_directory='/tmp/chimaera-latency-trace',
+                                   trace_clock_file='/tmp/chimaera-latency-trace-clock.bin')
     return result
 
 
 def validate(config):
+    if type(config.get('trace', False)) is not bool:
+        raise ValueError('trace must be boolean')
+    if config.get('trace') and (config.get('mode') != 'chimaera' or
+                              config.get('middleware_transport') != 'fastdds'):
+        raise ValueError('Transport tracing requires a Chimaera Fast DDS run')
     if config.get('middleware_transport', 'bridge') not in ('bridge', 'fastdds'):
         raise ValueError('middleware_transport must be bridge or fastdds')
     shm = config.get('dds_shm_bytes', 0)
@@ -195,6 +208,21 @@ def stage_guest(output, package, bundle=None):
                     install_trees=[dict(source=str(package), destination='app')]))
     write_json(spec_dir / 'session.json', spec)
     result = stage(load(spec_dir / 'session.json'), output, package)
+    # Per-case tracing is enabled after staging. Its clock is loaded explicitly,
+    # so ldd alone cannot discover it when freezing the reusable runtime.
+    trace_abi = 0
+    clock = package / 'lib/libchimaera_gem5_clock_addr.so'
+    if clock.is_file():
+        shutil.copy2(clock, result / 'lib' / clock.name)
+        libraries_path = result / 'runtime-libraries.json'
+        libraries = json.loads(libraries_path.read_text())
+        libraries[clock.name] = dict(source=str(clock), sha256=hashlib.sha256(clock.read_bytes()).hexdigest())
+        write_json(libraries_path, libraries)
+        try:
+            require_trace_overlay()
+            trace_abi = 1
+        except ValueError:
+            pass  # The bundle remains usable for runs without transport tracing.
     # Staged session can reference the per-case route file injected at boot.
     staged = json.loads((result / 'session.json').read_text())
     staged['routes'] = '/tmp/chimaera-latency-routes.json'
@@ -203,6 +231,7 @@ def stage_guest(output, package, bundle=None):
     startup.write_text(startup.read_text().replace('run session.json --side guest',
         'run /tmp/chimaera-latency-session.json --side guest'))
     write_json(result / 'latency-runtime.json', dict(version=4, transport_protocol=3,
+        trace_transport_abi=trace_abi,
         transport_backends=metadata.get('transport_backends', ['m5']),
         dma_abi=metadata.get('dma_abi'), dma_protocol=metadata.get('dma_protocol'),
         m5_abi=metadata.get('m5_abi'),
@@ -227,6 +256,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     required = []
     if config.get('middleware_transport') == 'fastdds': required.append('fastdds_transport')
     if config.get('middleware_transport') == 'fastdds': require_middleware_overlay()
+    if config.get('trace'): require_trace_overlay()
     if config.get('delivery_policy') == 'lossless': required.append('lossless')
     if config.get('verify_payload'): required.append('image_integrity')
     if required:
@@ -252,7 +282,8 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
     base_env = environment if environment is not None else os.environ
     if config['mode'] == 'chimaera':
         if bundle:
-            validate_bundle(bundle, backend=config.get('transport_backend', 'm5'), required_features=required)
+            validate_bundle(bundle, backend=config.get('transport_backend', 'm5'), required_features=required,
+                            transport_trace=config.get('trace', False))
         if dma and not Path(config.get('dma_module', '')).is_file():
             raise ValueError('DMA cases require dma_module built for the exact guest kernel')
         if direct_m5 and not Path(config.get('m5_module', '')).is_file():
@@ -411,6 +442,7 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         commands = [(name, ['reuse-session', str(reuse.directory), 'START_CASE'] if name == 'gem5' else command)
                     for name, command in commands]
     env = dict(base_env, ROS_DOMAIN_ID='41', ROS_LOCALHOST_ONLY='1',
+               CHIMAERA_TRACE='0',
                ROS_LOG_DIR=str(output / 'ros-logs'),
                IGN_PARTITION='chimaera-latency-' + config['run_id'],
                IGN_GAZEBO_SYSTEM_PLUGIN_PATH=str(package / 'lib') + ':' + base_env.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
@@ -422,6 +454,11 @@ def run_case(output, config, package, gem5_root, image, kernel, bundle=None,
         env.update(CHIMAERA_DDS_SOCKET='/tmp/chimaera-dds-host.sock', CHIMAERA_DDS_SIDE='host',
                    CHIMAERA_DDS_ROUTES=str(output / 'routes.json'),
                    RMW_IMPLEMENTATION='rmw_fastrtps_cpp')
+        if config.get('trace'):
+            env.update(CHIMAERA_TRACE='1', CHIMAERA_TRACE_SIDE='host',
+                       CHIMAERA_TRACE_DIR=str(output),
+                       CHIMAERA_TRACE_ROUTES=str(output / 'routes.json'),
+                       CHIMAERA_TRACE_CLOCK_FILE=str(logical))
         if direct_m5:
             env['CHIMAERA_DDS_BACKEND'] = 'm5ops'
         commands = [(name, ['env', '-u', 'CHIMAERA_DDS_SOCKET', *command]
@@ -663,6 +700,16 @@ def summarize(directory):
         result['stereo_pairs'] = dict(published=len(published), received=len(complete),
             missing_at_drain=len(published - complete), latency=statistics(latencies),
             age=statistics(ages), callback_skew=statistics(skew))
+    if config.get('trace'):
+        from .tracing import summarize as transport_summary
+        # The same analyzer and boundaries as the real robot. The source window
+        # is warmup through measurement; arrivals are censored at the drain end.
+        trace = transport_summary(directory, directory / 'routes.json', config['warmup'],
+            config['warmup'] + config['duration'] + config['drain'],
+            clock_resolution_ns=config['interval_us'] * 1000,
+            source_end=config['warmup'] + config['duration'])
+        write_json(directory / 'transport_latency.json', trace)
+        result['transport_latency'] = trace
     return result
 
 
@@ -696,6 +743,8 @@ def make_report(root, write_outputs=True):
             if measured['config'].get('workload')=='ball_catching' and measured['config']['ball_catching'] != baseline['config'].get('ball_catching'):
                 continue
             if any(measured['config'].get(key) != baseline['config'].get(key) for key in ('rmw', 'hostname')):
+                continue
+            if measured['config'].get('trace', False) != baseline['config'].get('trace', False):
                 continue
             if measured['config'].get('delivery_policy', 'latest') != baseline['config'].get('delivery_policy', 'latest') or \
                measured['config'].get('verify_payload', False) != baseline['config'].get('verify_payload', False):
@@ -778,6 +827,37 @@ def make_report(root, write_outputs=True):
         difference_table = '<h2>Chimaera minus native baseline</h2><p>Differences of independent run summaries, in simulated milliseconds. Positive values indicate greater delay with Chimaera.</p><div class="scroll"><table><thead><tr>' + ''.join(
             '<th>' + title + '</th>' for title in ['Condition', 'Direction', 'Native control', 'Mean Δ ms', 'p95 Δ ms', 'p99 Δ ms']) + '</tr></thead><tbody>' + ''.join(differences) + '</tbody></table></div>'
         document = document.replace('</html>', difference_table + '</html>')
+    transport_rows = []
+    transport_fields = ['run_id', 'topic', 'direction', 'measurement', 'status', 'clock_resolution_ns',
+                        'published', 'received', 'missing_at_evaluation',
+                        'mean_ms', 'p95_ms', 'p99_ms', 'maximum_ms']
+    for run in runs:
+        trace = run.get('transport_latency', {})
+        for stream in trace.get('streams', []):
+            measured = stream.get('transport', {})
+            if measured.get('status', 'not_recorded') == 'not_recorded':
+                continue
+            transport_rows.append(dict(run_id=run['config']['run_id'], topic=stream['topic'],
+                direction=stream['direction'], clock_resolution_ns=trace.get('clock_resolution_ns'),
+                **{key: measured[key] for key in ('measurement', 'status', 'published', 'received', 'missing_at_evaluation')},
+                **{key: (measured.get('latency') or {}).get(key) for key in
+                   ('mean_ms', 'p95_ms', 'p99_ms', 'maximum_ms')}))
+    with (root / 'transport-latency-report.csv').open('w') as handle:
+        writer = csv.DictWriter(handle, transport_fields)
+        writer.writeheader()
+        writer.writerows(transport_rows)
+    if transport_rows:
+        columns = ['topic', 'direction', 'received', 'published', 'mean_ms', 'p95_ms', 'p99_ms']
+        body = ''.join('<tr>' + ''.join('<td>' + html.escape('—' if row[key] is None else str(row[key])) + '</td>'
+                       for key in columns) + '</tr>' for row in transport_rows)
+        section = ('<h2>Serialized transport timing</h2><p>Accepted serialized send to complete arrival '
+                   'before DDS delivery. Serialization, deserialization and executor waiting are excluded; '
+                   'transport queues, worker scheduling and fragment pacing are included. '
+                   'Match clock resolution and tracing settings when comparing runs. '
+                   'These measurements are separate from publish-to-callback above.</p><div class="scroll"><table><thead><tr>'
+                   + ''.join('<th>' + key + '</th>' for key in columns)
+                   + '</tr></thead><tbody>' + body + '</tbody></table></div>')
+        document = document.replace('</html>', section + '</html>')
     (root / 'latency-report.html').write_text(document)
     return report
 
@@ -830,6 +910,7 @@ def main():
         command.add_argument('--dma-module-options', default='buffer_mb=8 receive_slots=16 transmit_slots=4')
         command.add_argument('--delivery-policy', choices=('latest', 'lossless'), default='latest')
         command.add_argument('--verify-payload', action='store_true', help='Check every image byte (correctness runs)')
+        command.add_argument('--trace', action='store_true', help='Record serialized transport timing (Chimaera Fast DDS only)')
         command.add_argument('--dds-shm-bytes', type=int, default=0, help='Sized loopback DDS transport; 0 retains middleware defaults')
         command.add_argument('--cpu-type', choices=('kvm', 'timing', 'o3'),
                              nargs=None if action == 'run' else '+', default='kvm' if action == 'run' else ['kvm'])

@@ -11,7 +11,7 @@ HARDWARE = dict(cpu_type='kvm', num_cores=2, cpu_clock='3GHz', l1d_size='16KiB',
                 l1i_size='16KiB', l2_size='256KiB', l1_assoc=8, l2_assoc=16)
 
 
-def validate_bundle(bundle, backend='m5', required_features=()):
+def validate_bundle(bundle, backend='m5', required_features=(), *, transport_trace=False):
     if bundle is None:
         raise ValueError('Single-boot sweeps require a staged v4 --guest-bundle; rebuild and stage the runtime')
     try:
@@ -24,6 +24,9 @@ def validate_bundle(bundle, backend='m5', required_features=()):
                              'libchimaera_dds_transport.so'):
                     if 'opt/chimaera/latency/lib/' + name not in names:
                         raise ValueError('guest bundle lacks middleware library ' + name)
+            if transport_trace and (metadata.get('trace_transport_abi') != 1 or
+                    'opt/chimaera/latency/lib/libchimaera_gem5_clock_addr.so' not in archive.getnames()):
+                raise ValueError('guest bundle lacks transport tracing ABI 1 and its clock')
         if metadata.get('version') != 4 or metadata.get('transport_protocol') != 3:
             raise ValueError('outdated guest bundle')
         if backend == 'dma' and ('dma' not in metadata.get('transport_backends', []) or
@@ -39,6 +42,7 @@ def validate_bundle(bundle, backend='m5', required_features=()):
             + (' and DMA ABI 1 / protocol 2' if backend == 'dma' else '')
             + (' and direct m5ops ABI 1' if backend == 'm5ops' else '')
             + (' and endpoint features ' + ', '.join(required_features) if required_features else '')
+            + (' and transport tracing ABI 1' if transport_trace else '')
             + '; rebuild and stage the runtime') from error
 
 

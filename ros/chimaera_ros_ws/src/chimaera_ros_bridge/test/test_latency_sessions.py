@@ -196,6 +196,26 @@ class SessionTest(unittest.TestCase):
             self.assertEqual(startup_status(root)['phase'], 'cosimulation')
             self.assertEqual(log_tail(serial, 9), 'READ DMA\n')
 
+    def test_transport_trace_bundle_requires_new_runtime_and_explicit_clock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'runtime.tar.gz'
+            for abi, clock in [(None, False), (1, False), (1, True)]:
+                with tarfile.open(path, 'w:gz') as archive:
+                    data = json.dumps(dict(version=4, transport_protocol=3,
+                                           trace_transport_abi=abi)).encode()
+                    member = tarfile.TarInfo('opt/chimaera/latency/latency-runtime.json')
+                    member.size = len(data)
+                    archive.addfile(member, io.BytesIO(data))
+                    if clock:
+                        member = tarfile.TarInfo('opt/chimaera/latency/lib/libchimaera_gem5_clock_addr.so')
+                        member.size = 5
+                        archive.addfile(member, io.BytesIO(b'clock'))
+                if abi == 1 and clock:
+                    validate_bundle(path, transport_trace=True)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'transport tracing ABI 1'):
+                        validate_bundle(path, transport_trace=True)
+
 
 if __name__ == '__main__':
     unittest.main()
