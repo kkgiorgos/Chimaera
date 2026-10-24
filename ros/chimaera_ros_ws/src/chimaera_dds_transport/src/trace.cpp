@@ -6,16 +6,18 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <charconv>
 #include <chimaera_dds_transport/trace.hpp>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <map>
 #include <mutex>
 #include <set>
-#include <sstream>
 #include <stdexcept>
+#include <string_view>
 
 #include "rtps_trace.hpp"
 
@@ -99,12 +101,37 @@ State & state()
   static State value;
   return value;
 }
-std::string quoted(const char * text)
+void number(std::string & out, uint64_t value, int base = 10, bool pad = false)
 {
-  auto value = json_object_new_string(text);
-  std::string result = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
-  json_object_put(value);
-  return result;
+  char bytes[32];
+  const auto end = std::to_chars(bytes, bytes + sizeof(bytes), value, base).ptr;
+  if (pad && end == bytes + 1) out += '0';
+  out.append(bytes, end);
+}
+void quoted(std::string & out, std::string_view text)
+{
+  constexpr char hex[] = "0123456789abcdef";
+  out += '"';
+  for (const unsigned char byte : text) {
+    if (byte == '"' || byte == '\\') {
+      out += '\\';
+      out += char(byte);
+    } else if (byte < 0x20) {
+      out += "\\u00";
+      out += hex[byte >> 4];
+      out += hex[byte & 15];
+    } else {
+      out += char(byte);
+    }
+  }
+  out += '"';
+}
+void timestamp(std::string & out, uint64_t time)
+{
+  if (time == unset)
+    out += "null";
+  else
+    number(out, time);
 }
 void append(State & s, const std::string & bytes)
 {
@@ -159,10 +186,32 @@ uint64_t now()
 }
 std::string identity(const eprosima::fastrtps::rtps::SampleIdentity & sample)
 {
-  std::ostringstream out;
-  out << sample.writer_guid() << ':' << sample.sequence_number().high << ':'
-      << sample.sequence_number().low;
-  return out.str();
+  // Stream/locale formatting on every 1 kHz feedback packet can consume more
+  // modeled CPU than reception itself. Preserve Fast DDS's identity spelling
+  // with integer conversion and one bounded allocation instead.
+  std::string out;
+  out.reserve(80);
+  const auto & guid = sample.writer_guid();
+  if (guid == eprosima::fastrtps::rtps::c_Guid_Unknown) {
+    out += "|GUID UNKNOWN|";
+  } else {
+    for (unsigned i = 0; i < 12; ++i) {
+      if (i) out += '.';
+      number(out, guid.guidPrefix.value[i], 16, true);
+    }
+    out += '|';
+    for (unsigned i = 0; i < 4; ++i) {
+      if (i) out += '.';
+      number(out, guid.entityId.value[i], 16);
+    }
+  }
+  out += ':';
+  char high[16];
+  const auto end = std::to_chars(high, high + sizeof(high), sample.sequence_number().high).ptr;
+  out.append(high, end);
+  out += ':';
+  number(out, sample.sequence_number().low);
+  return out;
 }
 std::string next_identity()
 {
@@ -177,17 +226,24 @@ void record(
   if (!enabled(topic)) return;
   std::lock_guard lock(mutex);
   auto & s = state();
-  std::ostringstream row;
-  row << "{\"version\":2,\"event\":" << quoted(event) << ",\"topic\":" << quoted(topic)
-      << ",\"id\":" << quoted(id.c_str()) << ",\"side\":" << quoted(s.side.c_str())
-      << ",\"process\":" << quoted(std::to_string(getpid()).c_str())
-      << ",\"boundary\":" << quoted(boundary) << ",\"time_ns\":";
-  if (time == unset)
-    row << "null";
-  else
-    row << time;
-  row << "}\n";
-  append(s, row.str());
+  std::string row;
+  row.reserve(320 + id.size() + std::strlen(topic));
+  row += "{\"version\":2,\"event\":";
+  quoted(row, event);
+  row += ",\"topic\":";
+  quoted(row, topic);
+  row += ",\"id\":";
+  quoted(row, id);
+  row += ",\"side\":";
+  quoted(row, s.side);
+  row += ",\"process\":\"";
+  number(row, getpid());
+  row += "\",\"boundary\":";
+  quoted(row, boundary);
+  row += ",\"time_ns\":";
+  timestamp(row, time);
+  row += "}\n";
+  append(s, row);
 }
 void packet(
   const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port)
@@ -197,21 +253,32 @@ void packet(
   if (metadata.empty()) return;
   std::lock_guard lock(mutex);
   auto & s = state();
+  std::string row;
+  row.reserve(384 * metadata.size());
   for (const auto & part : metadata) {
-    std::ostringstream row;
-    row << "{\"version\":2,\"boundary\":\"transport\",\"topic\":null,\"event\":" << quoted(event)
-        << ",\"id\":" << quoted(part.id.c_str()) << ",\"side\":" << quoted(s.side.c_str())
-        << ",\"process\":" << quoted(std::to_string(getpid()).c_str()) << ",\"receiver\":"
-        << quoted((std::to_string(getpid()) + ":" + std::to_string(port)).c_str())
-        << ",\"fragment_first\":" << part.first << ",\"fragment_count\":" << part.count
-        << ",\"fragment_total\":" << part.total << ",\"time_ns\":";
-    if (time == unset)
-      row << "null";
-    else
-      row << time;
-    row << "}\n";
-    append(s, row.str());
+    row += "{\"version\":2,\"boundary\":\"transport\",\"topic\":null,\"event\":";
+    quoted(row, event);
+    row += ",\"id\":";
+    quoted(row, part.id);
+    row += ",\"side\":";
+    quoted(row, s.side);
+    row += ",\"process\":\"";
+    number(row, getpid());
+    row += "\",\"receiver\":\"";
+    number(row, getpid());
+    row += ':';
+    number(row, port);
+    row += "\",\"fragment_first\":";
+    number(row, part.first);
+    row += ",\"fragment_count\":";
+    number(row, part.count);
+    row += ",\"fragment_total\":";
+    number(row, part.total);
+    row += ",\"time_ns\":";
+    timestamp(row, time);
+    row += "}\n";
   }
+  append(s, row);
 }
 bool write(eprosima::fastdds::dds::DataWriter * writer, void * data, const char * topic)
 {

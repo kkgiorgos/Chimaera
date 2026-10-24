@@ -30,6 +30,10 @@ int main(int argc, char ** argv)
   setenv("CHIMAERA_TRACE_CLOCK_FILE", clock.c_str(), 1);
   chimaera_dds::trace::create_clock(clock);
   chimaera_dds::trace::set_clock(1000000);
+  const std::string escaped = "quote\" slash\\ newline\n tab\t control\x01";
+  chimaera_dds::trace::record(
+    "format", "/trace/test", escaped, chimaera_dds::trace::unset, escaped.c_str());
+  chimaera_dds::trace::record("format-large", "/trace/test", "large", UINT64_MAX - 1);
   if (
     !chimaera_dds::trace::enabled("/trace/test") ||
     chimaera_dds::trace::enabled("/trace/unselected"))
@@ -75,7 +79,15 @@ int main(int argc, char ** argv)
     auto get = [&](const char * name) { return json_object_object_get(row, name); };
     const std::string event = json_object_get_string(get("event"));
     const std::string id = json_object_get_string(get("id"));
-    if (event == "publish") {
+    if (event == "format") {
+      if (
+        id != escaped || std::string(json_object_get_string(get("boundary"))) != escaped ||
+        !json_object_is_type(get("time_ns"), json_type_null))
+        throw std::runtime_error("trace escaping or unset timestamp changed");
+    } else if (event == "format-large") {
+      if (json_object_get_uint64(get("time_ns")) != UINT64_MAX - 1)
+        throw std::runtime_error("trace timestamp overflow");
+    } else if (event == "publish") {
       publications.insert(id);
       if (json_object_get_int64(get("time_ns")) != 1000000)
         throw std::runtime_error("publication clock mismatch");

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 
 #include "rtps_trace.hpp"
@@ -38,6 +39,24 @@ std::vector<uint8_t> frame(
 int main()
 {
   try {
+    // Match the established Fast DDS spelling, including zero padding, entity
+    // hex digits, signed sequence high words and the unknown GUID sentinel.
+    using namespace eprosima::fastrtps::rtps;
+    for (bool unknown : {false, true}) {
+      SampleIdentity sample;
+      if (!unknown) {
+        for (unsigned i = 0; i < 12; ++i) sample.writer_guid().guidPrefix.value[i] = i * 23;
+        for (unsigned i = 0; i < 4; ++i) sample.writer_guid().entityId.value[i] = i * 83;
+      }
+      for (int32_t high : {-1, 0, INT32_MAX}) {
+        sample.sequence_number().high = high;
+        sample.sequence_number().low = UINT32_MAX;
+        std::ostringstream expected;
+        expected << sample.writer_guid() << ':' << high << ':' << sample.sequence_number().low;
+        require(
+          chimaera_dds::trace::identity(sample) == expected.str(), "identity spelling changed");
+      }
+    }
     std::string identity;
     for (bool little : {false, true}) {
       auto bytes = frame(false, little);

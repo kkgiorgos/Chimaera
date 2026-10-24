@@ -95,6 +95,14 @@ setting. Disabling tracing preserves the original RMW write path and bridge
 wire frames. Records stream to disk rather than accumulating an unbounded
 in-memory capture.
 
+Trace rows and DDS identities use locale-independent integer conversion rather
+than stream formatting. Packet metadata from one datagram is exported together;
+each row retains its original boundary timestamp, identity and fragment range.
+This reduces instrumentation work on modeled CPUs without sampling or dropping
+trace events. Routed DDS locator selection also sends each datagram once per
+distinct participant address and port: composed readers sharing that locator
+are served by DDS fanout rather than duplicate transport deliveries.
+
 ## Collection and presentation
 
 Host processes write `chimaera-trace-host-PID.jsonl` in `trace_directory`. Guest
