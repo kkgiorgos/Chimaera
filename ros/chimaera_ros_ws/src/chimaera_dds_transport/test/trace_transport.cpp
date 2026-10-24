@@ -44,6 +44,7 @@ int endpoint(const std::string & role, const fs::path & directory)
   const auto deadline = std::chrono::steady_clock::now() + 20s;
   unsigned callbacks = 0;
   if (role == "guest") {
+    unsigned second_callbacks = 0;
     auto subscription = node->create_subscription<sensor_msgs::msg::Image>(
       "/images", rclcpp::SensorDataQoS().keep_last(1),
       [&](sensor_msgs::msg::Image::ConstSharedPtr message) {
@@ -52,26 +53,36 @@ int endpoint(const std::string & role, const fs::path & directory)
           "tracing corrupted the image payload");
         ++callbacks;
       });
+    // Composed nodes share one DDS participant and transport locator. DDS must
+    // fan one datagram out to both readers, without duplicate transport sends.
+    auto second_subscription = node->create_subscription<sensor_msgs::msg::Image>(
+      "/images", rclcpp::SensorDataQoS().keep_last(1),
+      [&](sensor_msgs::msg::Image::ConstSharedPtr message) {
+        require(
+          message->data.size() == 2 * 1024 * 1024 && message->data.back() == 0xa5,
+          "second reader received a corrupt payload");
+        ++second_callbacks;
+      });
     std::ofstream(directory / "guest-ready") << '\n';
     while (!fs::exists(directory / "release") && std::chrono::steady_clock::now() < deadline)
       std::this_thread::sleep_for(1ms);
     require(fs::exists(directory / "release"), "parent did not release the executor");
-    while (!callbacks && std::chrono::steady_clock::now() < deadline) {
+    while ((!callbacks || !second_callbacks) && std::chrono::steady_clock::now() < deadline) {
       rclcpp::spin_some(node);
       std::this_thread::sleep_for(1ms);
     }
-    require(callbacks != 0, "DDS did not retain an image for the delayed executor");
+    require(callbacks && second_callbacks, "DDS did not serve both readers of the shared locator");
     std::ofstream(directory / "done") << callbacks << '\n';
   } else {
     auto publisher = node->create_publisher<sensor_msgs::msg::Image>(
       "/chimaera/source", rclcpp::SensorDataQoS().keep_last(1));
     auto serialized = node->create_generic_publisher(
       "/chimaera/source", "sensor_msgs/msg/Image", rclcpp::SensorDataQoS().keep_last(1));
-    while ((!publisher->get_subscription_count() || !serialized->get_subscription_count()) &&
+    while ((publisher->get_subscription_count() < 2 || serialized->get_subscription_count() < 2) &&
            std::chrono::steady_clock::now() < deadline)
       std::this_thread::sleep_for(1ms);
     require(
-      publisher->get_subscription_count() && serialized->get_subscription_count(),
+      publisher->get_subscription_count() == 2 && serialized->get_subscription_count() == 2,
       "trace test DDS discovery failed");
     sensor_msgs::msg::Image image;
     image.width = 1024;
@@ -102,6 +113,7 @@ struct Observations
     std::set<unsigned> fragments;
     std::set<int64_t> times;
     unsigned total{};
+    unsigned packets{};
   };
   std::map<std::string, Sample> samples;
   std::set<std::string> published, taken;
@@ -124,6 +136,7 @@ Observations read(const fs::path & directory, pid_t pid, const std::string & pac
       const auto first = json_object_get_int(get("fragment_first"));
       const auto count = json_object_get_int(get("fragment_count"));
       sample.total = json_object_get_int(get("fragment_total"));
+      sample.packets += count;
       for (int i = first; i < first + count; ++i) sample.fragments.insert(i);
       ++result.packets;
     } else if (event == "publish") {
@@ -203,6 +216,10 @@ int main(int argc, char ** argv)
       require(
         sent.samples.count(id) && received.samples.count(id) && sent.samples.at(id).total > 1,
         "large image did not traverse the fragmented transport path");
+      require(
+        sent.samples.at(id).packets == sent.samples.at(id).total &&
+          received.samples.at(id).packets == received.samples.at(id).total,
+        "shared readers caused duplicate transport sends or deliveries");
       require(
         sent.samples.at(id).times == std::set<int64_t>{1000000} &&
           received.samples.at(id).times == std::set<int64_t>{1000000},

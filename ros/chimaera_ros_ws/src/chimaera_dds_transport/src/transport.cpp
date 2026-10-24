@@ -11,10 +11,10 @@
 #endif
 
 #include <atomic>
-#include <chimaera_dds_transport/packet.hpp>
 #include <chimaera_dds_transport/functional_copy.hpp>
-#include <chimaera_dds_transport/transport.hpp>
+#include <chimaera_dds_transport/packet.hpp>
 #include <chimaera_dds_transport/trace.hpp>
+#include <chimaera_dds_transport/transport.hpp>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -143,8 +143,8 @@ class Transport final : public TransportInterface
           wire::locator(bytes + 8));
       }
     }
-    trace::packet("receive", bytes + wire::header_bytes, size - wire::header_bytes,
-                  arrived, destination.port);
+    trace::packet(
+      "receive", bytes + wire::header_bytes, size - wire::header_bytes, arrived, destination.port);
   }
 #ifdef CHIMAERA_DDS_HAS_M5OPS
   void read_lane(unsigned index)
@@ -630,22 +630,33 @@ public:
       auto & entry = *entries[index];
       if (!entry.transport_should_process) continue;
       bool selected = false;
+      bool added = false;
+      auto select = [&](const Locator & locator, auto & indices, std::size_t i) {
+        bool present = false;
+        selector.for_each([&](const Locator & previous) { present |= previous == locator; });
+        if (!present) {
+          indices.push_back(i);
+          added = true;
+        }
+        // A previously selected participant/port also serves this reader.
+        // Do not fall back to another locator and send the same RTPS datagram
+        // twice when multiple composed nodes subscribe to one routed topic.
+        selected = true;
+      };
       for (std::size_t i = 0; i < entry.unicast.size(); ++i) {
         if (IsLocatorSupported(entry.unicast[i])) {
-          entry.state.unicast.push_back(i);
-          selected = true;
+          select(entry.unicast[i], entry.state.unicast, i);
           break;
         }
       }
       if (!selected)
         for (std::size_t i = 0; i < entry.multicast.size(); ++i) {
           if (IsLocatorSupported(entry.multicast[i])) {
-            entry.state.multicast.push_back(i);
-            selected = true;
+            select(entry.multicast[i], entry.state.multicast, i);
             break;
           }
         }
-      if (selected) selector.select(index);
+      if (added) selector.select(index);
     }
   }
   bool is_local_locator(const Locator & locator) const override
