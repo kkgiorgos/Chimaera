@@ -207,13 +207,15 @@ def test_image_slots_rebuild_only_the_application_when_its_sources_change(tmp_pa
             tags[argv[-1]] = 'sha256:' + str(len(commands)).zfill(64)
         return subprocess.CompletedProcess(argv, 0, stdout='')
 
-    with patch('images.subprocess.run', side_effect=docker):
-        first = build(tmp_path, dict(sdk='simulator', application='old app'), 2)
+    artifacts = tmp_path / 'verified-simulator'
+    with patch('images.subprocess.run', side_effect=docker), \
+         patch('images.simulator_artifacts', return_value=artifacts):
+        first = build(tmp_path, dict(simulator='gem5', sdk='simulator', application='old app'), 2)
         commands.clear()
-        assert build(tmp_path, dict(sdk='simulator', application='old app'), 4) == first
+        assert build(tmp_path, dict(simulator='gem5', sdk='simulator', application='old app'), 4) == first
         assert not any('--load' in c or '--tag' in c for c in commands)
         commands.clear()
-        updated = build(tmp_path, dict(sdk='simulator', application='new app'), 4)
+        updated = build(tmp_path, dict(simulator='gem5', sdk='simulator', application='new app'), 4)
     builds = [c for c in commands if '--load' in c or '--tag' in c or c[:2] == ['docker', 'commit']]
     assert len(builds) == 1
     assert builds[0][-1] == APPLICATION

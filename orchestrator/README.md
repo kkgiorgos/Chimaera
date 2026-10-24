@@ -145,6 +145,23 @@ avoids a second BuildKit cache of application revisions. Application source
 changes replace only the application; dependency/simulator changes rebuild the affected base. Build sources
 and intermediate compilation files stay out of the final images.
 
+The producer also retains a verified simulator artifact checkpoint in
+`.chimaera-orchestrator/assets/simulator-cache/`. It contains gem5, libm5, the m5
+utility and Ramulator, with SHA-256 hashes and the source SDK identity. Its key
+covers gem5 sources, the compiler environment/profile and simulator build recipe.
+Bridge, middleware, application, dashboard and documentation changes do not
+invalidate it. SDK and dependency-base rebuilds import this checkpoint rather
+than compiling gem5 again. BuildKit pruning does not remove it; replacing the
+checkpoint keeps only the latest successful export. Missing or corrupt artifacts
+are recovered from a matching installed SDK, or rebuilt when that SDK is absent
+or its inputs changed. Changing build parallelism does not invalidate artifacts.
+
+After updating orchestration build code, redeploy the producer's supervisor so
+its preparation helper uses the new cache policy. A simulator source change
+still requires rebuilding the simulator once. Existing queued experiments retain
+their frozen source identity; queue a new experiment after aligning controller
+and worker sources instead of retrying an old experiment with changed code.
+
 Only the application image is streamed to consumers; it already includes the SDK
 and dependency layers. Images remain pinned by immutable IDs during a run. The
 producer separately streams the exact backing disk, kernel, bundle and readiness

@@ -3,18 +3,73 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
 
-from common import atomic_json, run
+from common import atomic_json, digest, run
 
 
 BUILDER = 'chimaera-orchestrator'
 SDK = 'chimaera:orchestrator-sdk'
 BASE = 'chimaera:orchestrator-base'
 APPLICATION = 'chimaera:orchestrator-app'
+SIMULATOR_FILES = ('gem5/build/X86/gem5.opt', 'gem5/util/m5/build/x86/out/m5',
+                   'gem5/util/m5/build/x86/out/libm5.a', 'ramulator2/libramulator.so')
+
+
+def simulator_artifacts(assets, key):
+    """Verify the persistent simulator checkpoint, independent of BuildKit GC."""
+    directory = assets / 'simulator-cache'
+    try:
+        manifest = json.loads((directory / 'manifest.json').read_text())
+        if manifest['key'] != key or not set(SIMULATOR_FILES).issubset(manifest['files']):
+            return None
+        actual = {str(p.relative_to(directory / 'artifacts'))
+                  for p in (directory / 'artifacts').rglob('*') if p.is_file()}
+        if actual != set(manifest['files']):
+            return None
+        for name, expected in manifest['files'].items():
+            if digest(directory / 'artifacts' / name) != expected:
+                return None
+    except (OSError, ValueError, KeyError):
+        return None
+    return directory / 'artifacts'
+
+
+def save_simulator(assets, key, sdk):
+    """Retain installed binaries only; never preserve SDK source/build trees."""
+    assets.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='simulator-export-', dir=assets) as temporary:
+        staging = Path(temporary)
+        artifacts = staging / 'artifacts'
+        artifacts.mkdir()
+        container = run(['docker', 'create', sdk], text=True).strip()
+        try:
+            for name in ('gem5', 'ramulator2'):
+                subprocess.run(['docker', 'cp', container + ':/opt/chimaera/' + name,
+                                str(artifacts / name)], check=True)
+        finally:
+            subprocess.run(['docker', 'rm', container], check=True, stdout=subprocess.DEVNULL)
+        if any(not (artifacts / name).is_file() for name in SIMULATOR_FILES):
+            raise ValueError('SDK is missing simulator artifacts')
+        files = {str(p.relative_to(artifacts)): digest(p)
+                 for p in artifacts.rglob('*') if p.is_file()}
+        atomic_json(staging / 'manifest.json', dict(key=key, sdk=sdk, files=files))
+        # A failed export leaves the previous checkpoint usable. Only one
+        # preparation may run on a worker, so publication needs no reader lock.
+        destination = assets / 'simulator-cache'
+        previous = assets / 'simulator-cache-old'
+        if previous.exists():
+            shutil.rmtree(previous)
+        if destination.exists():
+            destination.rename(previous)
+        staging.rename(destination)
+        if previous.exists():
+            shutil.rmtree(previous)
+    return destination / 'artifacts'
 
 
 def application_image(root, base, tag, jobs):
@@ -82,8 +137,12 @@ def build(root, builds, jobs):
         atomic_json(marker, current)
         return image
 
+    artifacts = simulator_artifacts(assets, builds['simulator'])
+    reuse = ['--gem5-artifacts', str(artifacts)] if artifacts else []
     sdk = ensure(SDK, builds['sdk'], [sys.executable, str(root / 'containers/build.py'),
-        '--tag', SDK, '--builder', BUILDER, '--jobs', str(jobs)])
+        '--tag', SDK, '--builder', BUILDER, '--jobs', str(jobs), *reuse])
+    if artifacts is None:
+        artifacts = save_simulator(assets, builds['simulator'], sdk)
     dockerfile = str(root / 'containers/ball-catching/Dockerfile')
     base_key = hashlib.sha256((sdk + Path(dockerfile).read_text()).encode()).hexdigest()
     # The isolated builder cannot resolve daemon-local tags. Build the base in
@@ -105,6 +164,8 @@ def build(root, builds, jobs):
             '--build-arg', 'BASE_IMAGE=' + profile['base_image'],
             '--build-arg', 'STACK_PROFILE=jammy-humble-fortress',
             '--build-arg', 'ROS_DISTRO=' + profile['ros_distro'],
+            '--build-arg', 'GEM5_STAGE=gem5-prebuilt',
+            '--build-context', 'gem5-artifacts=' + str(artifacts),
             '--build-arg', 'BUILD_JOBS=' + str(jobs), '-t', BASE, str(root)])
     key = hashlib.sha256((builds['application'] + base).encode()).hexdigest()
     application = ensure(APPLICATION, key, lambda: application_image(root, base, APPLICATION, jobs))

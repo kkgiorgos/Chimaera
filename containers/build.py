@@ -49,12 +49,16 @@ def main():
     cli.add_argument('--print-command', action='store_true')
     cli.add_argument('--prebuilt-gem5', type=Path,
                      help='Reuse compatible built gem5/libm5/Ramulator artifacts instead of compiling gem5')
+    cli.add_argument('--gem5-artifacts', type=Path,
+                     help='Reuse an exported gem5/libm5/Ramulator artifact directory')
     args = cli.parse_args()
     try:
         profile_path = directory / 'profiles' / (args.profile + '.json')
         if args.jobs < 1 or profile_path.parent != directory / 'profiles':
             raise ValueError('invalid jobs or profile')
         profile = json.loads(profile_path.read_text())
+        if args.prebuilt_gem5 and args.gem5_artifacts:
+            raise ValueError('choose either --prebuilt-gem5 or --gem5-artifacts')
         command = ['docker', 'buildx', 'build', '--load', '--progress', 'plain',
                    '--provenance=false', '--platform', profile['platform'],
                    '--file', str(directory / 'Dockerfile'), '--tag', args.tag or 'chimaera:' + args.profile,
@@ -68,11 +72,12 @@ def main():
         if args.builder:
             command += ['--builder', args.builder]
         with tempfile.TemporaryDirectory(prefix='chimaera-gem5-artifacts-') as temporary:
-            if args.prebuilt_gem5:
+            if args.prebuilt_gem5 or args.gem5_artifacts:
                 if not args.print_command:
-                    stage_gem5(args.prebuilt_gem5, Path(temporary))
+                    if args.prebuilt_gem5:
+                        stage_gem5(args.prebuilt_gem5, Path(temporary))
                 command += ['--build-arg', 'GEM5_STAGE=gem5-prebuilt',
-                            '--build-context', 'gem5-artifacts=' + temporary]
+                            '--build-context', 'gem5-artifacts=' + str(args.gem5_artifacts or temporary)]
             command.append(str(directory.parent))
             print(shlex.join(command), flush=True)
             if not args.print_command:

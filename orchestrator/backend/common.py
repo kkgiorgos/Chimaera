@@ -93,6 +93,16 @@ def content_identity(root, paths):
 
 
 def build_identities(root):
+    # Runtime/bridge changes must not invalidate the expensive simulator build.
+    # Hash only the Docker stages that establish its compiler and build recipe.
+    dockerfile = Path(root) / 'containers/Dockerfile'
+    prefix = dockerfile.read_text().split('\nFROM dependencies AS gem5-prebuilt')[0] if dockerfile.exists() else ''
+    recipe = '\n'.join(line for line in prefix.splitlines()
+                       if line.strip() and not line.lstrip().startswith('#'))
+    simulator = hashlib.sha256((recipe + content_identity(root, [
+        'containers/Dockerfile.dockerignore', 'containers/profiles',
+        'containers/scripts/install-build-env.py', 'containers/scripts/compile-gem5.sh',
+        'gem5'])).encode()).hexdigest()
     sdk = content_identity(root, ['containers/Dockerfile', 'containers/Dockerfile.dockerignore',
         'containers/build.py', 'containers/profiles', 'containers/scripts', 'gem5',
         'gem5-transport', 'ros/chimaera_ros_ws/src', 'middleware/prepare_rmw.py'])
@@ -100,7 +110,7 @@ def build_identities(root):
         'orchestrator/backend/images.py',
         'containers/ball-catching/Dockerfile.dockerignore', 'ros/ball_catching_ws/src',
         'ros/franka_ws/src/franka_description'])
-    return dict(sdk=sdk, application=hashlib.sha256((sdk + app).encode()).hexdigest())
+    return dict(simulator=simulator, sdk=sdk, application=hashlib.sha256((sdk + app).encode()).hexdigest())
 
 
 def atomic_json(path, value):
