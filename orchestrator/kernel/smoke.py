@@ -97,6 +97,8 @@ def main():
     parser.add_argument('--module', required=True)
     parser.add_argument('--backend', choices=('dma', 'm5ops'), default='dma')
     parser.add_argument('--expected-release')
+    parser.add_argument('--export-stress', action='store_true',
+                        help='Exercise concurrent address-mode file exports on both KVM cores')
     args = parser.parse_args()
     configure_ticks()
     processor = SimpleProcessor(cpu_type=CPUTypes.KVM, isa=ISA.X86, num_cores=2)
@@ -115,10 +117,37 @@ def main():
     proof = output / 'driver-probe.json'
     proof.unlink(missing_ok=True)
     script = output / 'check-driver.sh'
-    script.write_text(driver_probe(args.backend, args.expected_release))
+    content = driver_probe(args.backend, args.expected_release)
+    files = ['/tmp/check-driver.sh=' + str(script), '/tmp/chimaera-driver.ko=' + args.module]
+    if args.export_stress:
+        content += '''python3 - <<'PY'
+import ctypes, multiprocessing, os
+barrier = multiprocessing.Barrier(2)
+def export(cpu):
+    os.sched_setaffinity(0, {cpu})
+    library = ctypes.CDLL('/tmp/export-clock.so')
+    write = library.chimaera_gem5_write_file
+    write.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_char_p]
+    write.restype = ctypes.c_uint64
+    name = ('export-stress-%d.txt' % cpu).encode()
+    barrier.wait(timeout=30)
+    for index in range(512):
+        data = ('%d:%d\\n' % (cpu, index)).encode()
+        assert write(data, len(data), 0 if index == 0 else offset, name) == len(data)
+        offset = (0 if index == 0 else offset) + len(data)
+children = [multiprocessing.Process(target=export, args=(cpu,)) for cpu in (0, 1)]
+for child in children: child.start()
+for child in children:
+    child.join(60)
+    assert child.exitcode == 0, child.exitcode
+PY
+'''
+        files.append('/tmp/export-clock.so=/opt/chimaera/ros/lib/libchimaera_gem5_clock_addr.so')
+        for cpu in (0, 1):
+            (output / f'export-stress-{cpu}.txt').unlink(missing_ok=True)
+    script.write_text(content)
     script.chmod(0o755)
-    boot = guest_start_script('/tmp/check-driver.sh', [
-        '/tmp/check-driver.sh=' + str(script), '/tmp/chimaera-driver.ko=' + args.module])
+    boot = guest_start_script('/tmp/check-driver.sh', files)
     board.set_kernel_disk_workload(kernel=KernelResource(local_path=args.kernel),
         disk_image=DiskImageResource(local_path=args.image),
         kernel_args=['earlyprintk=ttyS0', 'console=ttyS0', 'lpj=7999923',
@@ -145,6 +174,12 @@ def main():
         raise RuntimeError('Guest kernel/driver ABI probe did not export valid proof; inspect guest serial') from error
     if not isinstance(probe, dict) or probe.get('backend') != args.backend:
         raise RuntimeError('Guest kernel/driver ABI probe exported invalid backend proof; inspect guest serial')
+    if args.export_stress:
+        for cpu in (0, 1):
+            expected = ''.join(f'{cpu}:{index}\n' for index in range(512))
+            if (output / f'export-stress-{cpu}.txt').read_text() != expected:
+                raise RuntimeError('Concurrent KVM file exports lost or corrupted records')
+        probe['concurrent_exports'] = 1024
     (output / 'result.json').write_text(json.dumps(dict(probe, status='passed', cause=cause, code=code)) + '\n')
 
 

@@ -1152,9 +1152,11 @@ BaseKvmCPU::doMMIOAccess(Addr paddr, void *data, int size, bool write)
         std::unique_ptr<PCStateBase> pc(tc->pcState().clone());
         stutterPC(*pc);
         tc->pcState(*pc);
-        // We currently assume that there is no need to migrate to a
-        // different event queue when doing local accesses. Currently, they
-        // are only used for m5ops, so it should be a valid assumption.
+        // m5ops can touch simulator-global state, including simout's file
+        // registry. Guest processes on separate KVM event queues can export
+        // files concurrently, even when they use different output names.
+        // Serialize local accesses just like other device MMIO accesses.
+        EventQueue::ScopedMigration migrate(deviceEventQueue());
         const Cycles ipr_delay = mmio_req->localAccessor(tc, pkt);
         threadContextDirty = true;
         delete pkt;
