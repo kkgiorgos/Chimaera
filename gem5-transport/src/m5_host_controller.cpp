@@ -68,15 +68,25 @@ void M5HostController::submit(Message data, std::string_view key) {
     const auto selected = lane(data);
     s.outgoing[selected].submit(std::move(data), key);
 }
-bool M5HostController::try_submit(Message data) {
+bool M5HostController::try_submit(Message data, std::string_view key) {
     auto& s = *impl_;
     if (s.stopped) throw std::runtime_error("m5ops host stopped");
     if (!s.failure.empty()) throw std::runtime_error(s.failure);
     if (data.size() > CHM5_MAX_BYTES) throw std::length_error("m5ops mailbox frame exceeds 32 MiB");
     auto& queue = s.outgoing[lane(data)];
-    if (queue.size() >= s.pendingLimit || data.size() > ingress_bytes - queue.bytes())
+    auto records = queue.size();
+    auto bytes = queue.bytes();
+    if (!key.empty()) {
+        for (const auto& entry : queue.entries()) {
+            if (entry.key == key) {
+                --records;
+                bytes -= entry.data.size();
+            }
+        }
+    }
+    if (records >= s.pendingLimit || data.size() > ingress_bytes - bytes)
         return false;
-    queue.submit(std::move(data));
+    queue.submit(std::move(data), key);
     return true;
 }
 std::optional<Message> M5HostController::take() {

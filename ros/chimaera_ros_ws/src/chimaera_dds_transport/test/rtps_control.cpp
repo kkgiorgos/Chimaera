@@ -38,6 +38,9 @@ int main()
         require(
           !key.empty() && key == chimaera_dds::repeated_control_key(next),
           "equivalent control state did not share a key");
+        require(
+          key == chimaera_dds::pending_control_key(next),
+          "credit handoff lost the discovery retry key");
         next.data()[wire::header_bytes + 24] = 1;
         require(key != chimaera_dds::repeated_control_key(next), "reader identity was ignored");
         next = frame(kind, 2, little);

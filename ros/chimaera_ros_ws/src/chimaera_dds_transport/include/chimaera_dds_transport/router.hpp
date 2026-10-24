@@ -11,6 +11,10 @@
 
 namespace chimaera_dds
 {
+// Local queue metadata for semantically identical discovery retries. Carry it
+// across a credit-based handoff; never attach it to application DATA/reliability.
+std::string pending_control_key(const Packet & packet);
+
 // One router per simulator side owns local client sockets. Only the simulation
 // coordinator moves packets between take() and receive() at causal boundaries.
 class Router

@@ -16,6 +16,8 @@
 
 namespace chimaera_dds
 {
+std::string pending_control_key(const Packet & packet) { return repeated_control_key(packet); }
+
 struct Router::Impl
 {
   static constexpr std::size_t service_byte_budget = 256 * 1024;

@@ -32,7 +32,8 @@ class BackpressureController {
 public:
     virtual ~BackpressureController() = default;
     // False retains the caller's ownership and changes no outgoing queue.
-    virtual bool try_submit(Message data) = 0;
+    // A key has the same pending replacement semantics as DataController::submit.
+    virtual bool try_submit(Message data, std::string_view coalescing_key = {}) = 0;
     // The receiver gets an explicit shared view and must treat its bytes as
     // immutable. Refusal retains the original storage in this controller.
     virtual std::size_t transfer_received(

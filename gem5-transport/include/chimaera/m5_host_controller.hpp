@@ -12,7 +12,7 @@ public:
         std::string g2h = "/tmp/chimaera_dma_g2h", std::size_t pending_messages = 8192);
     ~M5HostController() override;
     void submit(Message data, std::string_view key = {}) override;
-    bool try_submit(Message data) override;
+    bool try_submit(Message data, std::string_view coalescing_key = {}) override;
     std::optional<Message> take() override;
     std::size_t transfer_received(
         const std::function<bool(Message)>& receiver) override;

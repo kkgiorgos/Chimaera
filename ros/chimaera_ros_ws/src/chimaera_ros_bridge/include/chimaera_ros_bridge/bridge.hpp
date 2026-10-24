@@ -326,7 +326,8 @@ public:
         router_->transfer_outgoing([this, credits](chimaera_dds::Packet packet) {
           auto bytes = chimaera::Message::adopt(
             reinterpret_cast<std::byte *>(packet.data()), packet.size(), packet.owner());
-          if (!credits->try_submit(std::move(bytes))) return false;
+          if (!credits->try_submit(std::move(bytes), chimaera_dds::pending_control_key(packet)))
+            return false;
           ++transmitted_;
           return true;
         });

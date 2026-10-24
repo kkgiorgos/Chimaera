@@ -402,6 +402,33 @@ void recoverable_outgoing_credits_are_independent() {
     peer.finish();
 }
 
+void keyed_outgoing_retries_keep_their_credits() {
+    Directory directory;
+    const auto& base = directory.path;
+    Gem5TimingController timing(base + "/time", 2s);
+    M5HostController host(timing, base + "/h2g", base + "/g2h", 1);
+    Rings rings(base);
+    TimingPeer peer(base + "/time");
+    std::string key = "discovery-heartbeat";
+    expect(host.try_submit(frame(false, 1), key));
+    key.assign("different-state"); // The controller owns its key, not this view.
+    expect(!host.try_submit(frame(false, 2), key));
+    expect(!host.try_submit(frame(false, 2)));
+    for (unsigned count = 2; count <= 100; ++count)
+        expect(host.try_submit(frame(false, count), "discovery-heartbeat"));
+    // Independent lanes and application-style FIFO retain their own credit.
+    expect(host.try_submit(frame(true, 1), "discovery-heartbeat"));
+    expect(!host.try_submit(frame(true, 2)));
+    peer.start({ingress([&] {
+        expect(read(*rings.input[0]) == frame(false, 100));
+        expect(read(*rings.input[1]) == frame(true, 1));
+        expect(!read(*rings.input[0]) && !read(*rings.input[1]));
+    }), step(0), egress(), quit()});
+    expect(host.step(2us).ok());
+    expect(host.stop().state == ControllerState::stopped);
+    peer.finish();
+}
+
 void shared_receive_view_survives_refusal_and_controller_destruction() {
     Directory directory;
     const auto& base = directory.path;
@@ -517,6 +544,7 @@ int main() {
     four_image_burst_exceeds_old_shared_byte_limit();
     capacity_pressure_retains_records_and_other_lane_progress();
     recoverable_outgoing_credits_are_independent();
+    keyed_outgoing_retries_keep_their_credits();
     shared_receive_view_survives_refusal_and_controller_destruction();
     auto bad = frame(false, 1);
     bad[48] ^= std::byte{1};
