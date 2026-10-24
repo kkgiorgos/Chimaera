@@ -72,8 +72,10 @@ inline std::optional<LatestSample> latest_sample(const uint8_t * frame, std::siz
 }
 
 template <class Batch, class Eligible>
-std::vector<bool> retain_latest(const Batch & batch, Eligible eligible)
+std::vector<bool> retain_latest(
+  const Batch & batch, Eligible eligible, std::vector<bool> * candidates = nullptr)
 {
+  if (candidates) candidates->assign(batch.size(), false);
   std::vector<bool> keep(batch.size(), true);
   std::map<std::array<uint8_t, 52>, std::pair<uint64_t, std::size_t>> latest;
   for (std::size_t i = 0; i < batch.size(); ++i) {
@@ -81,6 +83,7 @@ std::vector<bool> retain_latest(const Batch & batch, Eligible eligible)
     if (batch[i].size() < wire::header_bytes || !eligible(wire::read32(frame + 28))) continue;
     const auto sample = latest_sample(frame, batch[i].size());
     if (!sample) continue;
+    if (candidates) (*candidates)[i] = true;
     auto [entry, inserted] = latest.emplace(sample->flow, std::make_pair(sample->sequence, i));
     if (!inserted) {
       if (sample->sequence > entry->second.first) {

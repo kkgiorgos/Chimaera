@@ -34,6 +34,16 @@ int main(int argc, char ** argv)
   chimaera_dds::trace::record(
     "format", "/trace/test", escaped, chimaera_dds::trace::unset, escaped.c_str());
   chimaera_dds::trace::record("format-large", "/trace/test", "large", UINT64_MAX - 1);
+  uint8_t packet[48]{};
+  std::memcpy(packet, "RTPS", 4);
+  packet[20] = 0x15;
+  packet[21] = 5;
+  packet[22] = 24;
+  packet[26] = 16;
+  packet[35] = 3;
+  packet[40] = 7;
+  const chimaera_dds::trace::ReceiveInfo receive{8, false, true, true};
+  chimaera_dds::trace::packet("receive", packet, sizeof(packet), 1000000, 3, &receive);
   if (
     !chimaera_dds::trace::enabled("/trace/test") ||
     chimaera_dds::trace::enabled("/trace/unselected"))
@@ -87,6 +97,13 @@ int main(int argc, char ** argv)
     } else if (event == "format-large") {
       if (json_object_get_uint64(get("time_ns")) != UINT64_MAX - 1)
         throw std::runtime_error("trace timestamp overflow");
+    } else if (event == "receive") {
+      if (
+        json_object_get_int(get("rx_batch_size")) != 8 ||
+        json_object_get_boolean(get("dds_dispatch")) ||
+        !json_object_get_boolean(get("latest_route")) ||
+        !json_object_get_boolean(get("latest_candidate")))
+        throw std::runtime_error("receive coalescing diagnostics changed");
     } else if (event == "publish") {
       publications.insert(id);
       if (json_object_get_int64(get("time_ns")) != 1000000)

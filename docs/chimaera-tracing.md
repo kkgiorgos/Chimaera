@@ -110,6 +110,9 @@ reader and destination are skipped before DDS dispatch. Every arrival is still
 traced and every RX loan is returned. Reliable data, discovery/control metadata,
 fragments, grouped stereo and bulk routes retain FIFO delivery. Endpoint QoS
 must remain best-effort and volatile for an opted-in latest-state route.
+Direct receive rows also carry `rx_batch_size`, `dds_dispatch`, `latest_route`
+and `latest_candidate`, exposing the batching and dispatch decision without
+changing transport arrival or application take timestamps.
 
 ## Collection and presentation
 

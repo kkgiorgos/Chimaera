@@ -246,7 +246,8 @@ void record(
   append(s, row);
 }
 void packet(
-  const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port)
+  const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port,
+  const ReceiveInfo * receive)
 {
   if (!active()) return;
   const auto metadata = parts(bytes, size);
@@ -276,6 +277,16 @@ void packet(
     number(row, part.total);
     row += ",\"time_ns\":";
     timestamp(row, time);
+    if (receive) {
+      row += ",\"rx_batch_size\":";
+      number(row, receive->batch_size);
+      row += ",\"dds_dispatch\":";
+      row += receive->dispatched ? "true" : "false";
+      row += ",\"latest_route\":";
+      row += receive->eligible ? "true" : "false";
+      row += ",\"latest_candidate\":";
+      row += receive->candidate ? "true" : "false";
+    }
     row += "}\n";
   }
   append(s, row);

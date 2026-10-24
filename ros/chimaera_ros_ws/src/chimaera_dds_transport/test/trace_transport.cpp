@@ -16,8 +16,15 @@
 #include <set>
 #include <thread>
 
+#include "latest_sample.hpp"
+#include "rtps_trace.hpp"
+
 using namespace std::chrono_literals;
 namespace fs = std::filesystem;
+std::size_t payload_bytes()
+{
+  return std::getenv("CHIMAERA_TRACE_TEST_SMALL") ? 32 : 2 * 1024 * 1024;
+}
 void require(bool value, const char * reason)
 {
   if (!value) throw std::runtime_error(reason);
@@ -49,7 +56,7 @@ int endpoint(const std::string & role, const fs::path & directory)
       "/images", rclcpp::SensorDataQoS().keep_last(1),
       [&](sensor_msgs::msg::Image::ConstSharedPtr message) {
         require(
-          message->data.size() == 2 * 1024 * 1024 && message->data.back() == 0xa5,
+          message->data.size() == payload_bytes() && message->data.back() == 0xa5,
           "tracing corrupted the image payload");
         ++callbacks;
       });
@@ -59,7 +66,7 @@ int endpoint(const std::string & role, const fs::path & directory)
       "/images", rclcpp::SensorDataQoS().keep_last(1),
       [&](sensor_msgs::msg::Image::ConstSharedPtr message) {
         require(
-          message->data.size() == 2 * 1024 * 1024 && message->data.back() == 0xa5,
+          message->data.size() == payload_bytes() && message->data.back() == 0xa5,
           "second reader received a corrupt payload");
         ++second_callbacks;
       });
@@ -89,7 +96,7 @@ int endpoint(const std::string & role, const fs::path & directory)
     image.height = 2048;
     image.encoding = "mono8";
     image.step = 1024;
-    image.data.assign(2 * 1024 * 1024, 0xa5);
+    image.data.assign(payload_bytes(), 0xa5);
     for (unsigned sequence = 1; sequence <= 2; ++sequence) {
       image.header.stamp.sec = sequence;
       publisher->publish(image);
@@ -153,6 +160,8 @@ int main(int argc, char ** argv)
 {
   try {
     if (argc == 3) return endpoint(argv[1], argv[2]);
+    const bool small = argc == 2;
+    if (small) setenv("CHIMAERA_TRACE_TEST_SMALL", "1", 1);
     fs::create_directories(TEST_OUTPUT);
     auto pattern = (fs::path(TEST_OUTPUT) / "run-XXXXXX").string();
     require(mkdtemp(pattern.data()) != nullptr, "cannot create trace validation directory");
@@ -175,9 +184,18 @@ int main(int argc, char ** argv)
     chimaera_dds::Router incoming((sockets / "guest").string(), 2);
     int host_status = -1, guest_status = -1;
     bool released = false;
+    std::map<std::string, chimaera_dds::Packet> captured;
     const auto deadline = std::chrono::steady_clock::now() + 25s;
     while (std::chrono::steady_clock::now() < deadline) {
-      while (auto packet = outgoing.take()) incoming.receive(std::move(*packet));
+      while (auto packet = outgoing.take()) {
+        if (small && packet->size() >= chimaera_dds::wire::header_bytes) {
+          const auto parts = chimaera_dds::trace::parts(
+            packet->data() + chimaera_dds::wire::header_bytes,
+            packet->size() - chimaera_dds::wire::header_bytes);
+          for (const auto & part : parts) captured[part.id] = *packet;
+        }
+        incoming.receive(std::move(*packet));
+      }
       while (auto packet = incoming.take()) outgoing.receive(std::move(*packet));
       if (!released && fs::exists(directory / "published")) {
         const auto received = read(directory, guest, "receive");
@@ -214,7 +232,8 @@ int main(int argc, char ** argv)
     require(sent.published.size() == 3, "typed/serialized source and transport identities differ");
     for (const auto & id : sent.published) {
       require(
-        sent.samples.count(id) && received.samples.count(id) && sent.samples.at(id).total > 1,
+        sent.samples.count(id) && received.samples.count(id) &&
+          (small ? sent.samples.at(id).total == 1 : sent.samples.at(id).total > 1),
         "large image did not traverse the fragmented transport path");
       require(
         sent.samples.at(id).packets == sent.samples.at(id).total &&
@@ -224,6 +243,14 @@ int main(int argc, char ** argv)
         sent.samples.at(id).times == std::set<int64_t>{1000000} &&
           received.samples.at(id).times == std::set<int64_t>{1000000},
         "transport boundary was contaminated by executor waiting");
+      if (small) {
+        const auto & packet = captured.at(id);
+        if (!chimaera_dds::latest_sample(packet.data(), packet.size())) {
+          std::ofstream raw(directory / "unrecognized-data.bin", std::ios::binary);
+          raw.write(reinterpret_cast<const char *>(packet.data()), packet.size());
+          throw std::runtime_error("real small DDS DATA not coalescible: " + directory.string());
+        }
+      }
     }
     require(!received.taken.empty(), "no delayed RMW take recorded");
     std::cout << "3 typed/serialized fragmented images arrived before any executor take; "

@@ -121,7 +121,9 @@ class Transport final : public TransportInterface
       // EAGAIN retains an already-pending, persistent cancellation notification.
     }
   }
-  void deliver(const uint8_t * bytes, std::size_t size, uint64_t arrived, bool dispatch = true)
+  void deliver(
+    const uint8_t * bytes, std::size_t size, uint64_t arrived,
+    const trace::ReceiveInfo * receive = nullptr)
   {
     const auto destination = wire::locator(bytes + 28);
     std::shared_ptr<Channel> channel;
@@ -138,7 +140,7 @@ class Transport final : public TransportInterface
     // Distinct topic ports keep image processing off a control channel's lock.
     {
       std::lock_guard lock(channel->mutex);
-      if (channel->receiver && dispatch) {
+      if (channel->receiver && (!receive || receive->dispatched)) {
         FunctionalCopyScope middleware_copies;
         channel->receiver->OnDataReceived(
           bytes + wire::header_bytes, uint32_t(size - wire::header_bytes), channel->locator,
@@ -146,7 +148,8 @@ class Transport final : public TransportInterface
       }
     }
     trace::packet(
-      "receive", bytes + wire::header_bytes, size - wire::header_bytes, arrived, destination.port);
+      "receive", bytes + wire::header_bytes, size - wire::header_bytes, arrived, destination.port,
+      receive);
   }
 #ifdef CHIMAERA_DDS_HAS_M5OPS
   void read_lane(unsigned index)
@@ -176,14 +179,17 @@ class Transport final : public TransportInterface
               lane_index(destination.port) != index)
               throw std::runtime_error("invalid direct DDS locator or lane");
           }
-          const auto keep = retain_latest(messages, coalesce_latest);
+          std::vector<bool> candidates;
+          const auto keep = retain_latest(messages, coalesce_latest, &candidates);
           for (std::size_t i = 0; i < messages.size(); ++i) {
             // Every arrival remains traced, including superseded best-effort
             // state. Only DDS dispatch is skipped; loans are returned normally.
             service.coalesced += !keep[i];
-            deliver(
-              reinterpret_cast<const uint8_t *>(messages[i].data()), messages[i].size(), arrived,
-              keep[i]);
+            const auto * bytes = reinterpret_cast<const uint8_t *>(messages[i].data());
+            const trace::ReceiveInfo info{
+              uint32_t(messages.size()), keep[i], coalesce_latest(wire::read32(bytes + 28)),
+              candidates[i]};
+            deliver(bytes, messages[i].size(), arrived, &info);
           }
           // Batch owns every registered RX slot through all OnDataReceived
           // calls, then returns the complete group in one m5 operation.

@@ -22,8 +22,14 @@ bool write(eprosima::fastdds::dds::DataWriter * writer, void * data, const char 
 void take(const char * topic, const eprosima::fastrtps::rtps::SampleIdentity & sample);
 // The timestamp is captured at transport entry/arrival, before DDS delivery or
 // trace formatting. Export after the measured operation using the borrowed data.
+struct ReceiveInfo
+{
+  uint32_t batch_size{};
+  bool dispatched{true}, eligible{}, candidate{};
+};
 void packet(
-  const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port);
+  const char * event, const uint8_t * bytes, std::size_t size, uint64_t time, uint32_t port,
+  const ReceiveInfo * receive = nullptr);
 // Coordinator owns this process-shared logical clock; participants only read it.
 void create_clock(const std::string & path);
 void set_clock(uint64_t nanoseconds);

@@ -1,0 +1,13 @@
+{
+  "first_ready_sim_seconds": 0.3065,
+  "last_control_time": 0.7645,
+  "last_feedback_age_ms": 6.999999999999895,
+  "commands": 148,
+  "coalesced_receive_records": 294,
+  "latest_receive_records": 730,
+  "scope": "KVM readiness and command continuity diagnostic; detailed Timing readiness and catch outcome not qualified",
+  "source_base": "27c374150e7a222a7e75530602b7c8139cbbcf08",
+  "guest_dso_sha256": "90c34a6d1a71dfd836fefc22190533fb3d559881d7cbcbc65a4d1bc645556567",
+  "evidence_sha256": "61d8aa862c9d29c9e5a2ddbf589335f2fbf8224bbfa8ece96834f4d3be99b4af",
+  "max_command_gap_after_readiness_ms": 17.000000000000014
+}
