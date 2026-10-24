@@ -1,0 +1,106 @@
+{
+  "fix_commits": [
+    "7d6e3b5",
+    "dd5a5a8"
+  ],
+  "tests": {
+    "host_transport": 9,
+    "dds": 15,
+    "bridge": 19,
+    "passed": 43
+  },
+  "before": {
+    "experiment": "cce9067f68a44858b9155c6dad3ac867",
+    "checkpoint_readiness_cpu": "detailed",
+    "received_joint_samples": 549,
+    "joint_transport_age_ms_first": 43.823358,
+    "joint_transport_age_ms_max": 227.314713,
+    "commands": 6,
+    "last_command_seconds": 0.076638634,
+    "host_control_mailbox_observed_written": 23487,
+    "host_control_mailbox_observed_contents": "Mostly builtin RTPS HEARTBEAT and discovery DATA; reverse ring repeated ACKNACKs"
+  },
+  "overnight": {
+    "experiment": "52c15e35701e4bfbb5de0b3045db219e",
+    "source_revision": "8b1899f",
+    "readiness_cpu": "kvm",
+    "ready_sim_seconds": 0.5645
+  },
+  "kvm_checkpoint": {
+    "completed": true,
+    "ready_sim_seconds": 0.3465,
+    "commands": 69,
+    "checkpoint": {
+      "version": 2,
+      "transport_backend": "m5ops",
+      "hardware": {
+        "cpu_type": "timing",
+        "num_cores": 2,
+        "cpu_clock": "3GHz",
+        "l1d_size": "16KiB",
+        "l1i_size": "16KiB",
+        "l1_assoc": 8,
+        "l2_size": "256KiB",
+        "l2_assoc": 16
+      },
+      "boundary_tick": 12495500000000,
+      "saved_tick": 12500514797509,
+      "readiness_cpu": "kvm",
+      "time_origin_ns": 12145000000,
+      "aggressor_enabled": false
+    }
+  },
+  "timing_restore": {
+    "passed": true,
+    "cpu_type": "BaseTimingSimpleCPU",
+    "cpu_count": 2,
+    "commands": 15,
+    "reconnection": {
+      "intervals": 147,
+      "simulation_seconds": 0.0735,
+      "wall_seconds": 293.866
+    },
+    "fresh_records": {
+      "control_timing": 15,
+      "control": 2,
+      "perception": 1
+    },
+    "control_feedback_ages_ms": [
+      5.047526999999996,
+      1.255204999999926
+    ],
+    "fresh_perception": [
+      {
+        "capture_time": 0.3965,
+        "receive_time": 0.398298409,
+        "processing_simulation_seconds": 0.030757459,
+        "image_conversion_simulation_seconds": 5.193e-06,
+        "detection_simulation_seconds": 0.03074821,
+        "budget_drops": 0.0,
+        "stale_inputs": 0.0,
+        "status": "no_detection",
+        "timing_clock": "gem5 simulation",
+        "completed_time": 0.429061024
+      }
+    ],
+    "scope": "Stopped after readiness/reconnection and continuing effort traffic; catch and complete evaluation not qualified.",
+    "joint_transport_age_ms": {
+      "samples": 78,
+      "min": 0.008821,
+      "max": 12.844881,
+      "last": 0.031652
+    }
+  },
+  "dds_library_sha256": "59dcc72e3fe74d5205de3650173541a0968368847f5fb884677e114be64cdfdb",
+  "host_bridge_sha256": "c3510a3a104f8efcd515433ed4f13fb8597d5d3a32cb8ceb830bad6b7a1dd147",
+  "production_images": {
+    "build_inputs": {
+      "simulator": "f567834ecad9222e5e35386a8bff85765cf8a68daa6f42b8d02b4b4480ee53df",
+      "sdk": "44ce795fc1871575c939c9e44841e5b084c37d88a8cf809bc0497ab9075f8303",
+      "application": "91e2c394ad3327f38a5b597c780d9cef95f7525561e5bcd1526d2eab5ca9d042"
+    },
+    "sdk": "sha256:3681d4700329e172f0a34e527670405e0e4da0d442ed6650c54709fb6670ffb1",
+    "base": "sha256:b47189421ff1f876e500238c57ea2e68a3a1578c7f0bd40cf0f8885f30295646",
+    "application": "sha256:4a5419f479425d4c99a6813f68dc8208fba1acd87fcc5b4ae869fa90b6559abb"
+  }
+}
