@@ -1,0 +1,336 @@
+{
+  "source_revision": "ab41aaebd5e3e216259c33d5e7c4de594b9b634e",
+  "native_ctest_targets": {
+    "dds": 9,
+    "bridge_and_benchmark": 19,
+    "best_effort_benchmark_retry": "Passed isolated rerun after one missing right-camera sample"
+  },
+  "python_workflows": {
+    "passed": 303,
+    "skipped": 2
+  },
+  "final_focused_checks": {
+    "passed": 42,
+    "subset": true
+  },
+  "guest_validation": {
+    "wall_seconds": 65.96955659199739,
+    "purpose": "KVM clock and real m5ops transport tracing integration; not a detailed-CPU performance qualification",
+    "streams": [
+      {
+        "status": "recorded",
+        "measurement": "serialized_transport_v1",
+        "boundary": "transport",
+        "published": 3,
+        "received": 3,
+        "missing_at_evaluation": 0,
+        "without_send_observation": 0,
+        "receive_observations": 3,
+        "send_observations": 3,
+        "duplicate_fragments": 0,
+        "fanout_completions": 0,
+        "invalid_clock_events": 0,
+        "negative_latency": 0,
+        "latency": {
+          "samples": 3,
+          "minimum_ms": 0.387283,
+          "median_ms": 0.417667,
+          "mean_ms": 0.5249333333333334,
+          "maximum_ms": 0.76985,
+          "p95_ms": 0.76985,
+          "p99_ms": 0.76985
+        },
+        "time_trace": [
+          {
+            "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:4",
+            "publish_seconds": 0.1,
+            "receive_seconds": 0.10076985,
+            "latency_ms": 0.76985
+          },
+          {
+            "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:5",
+            "publish_seconds": 0.1335,
+            "receive_seconds": 0.133917667,
+            "latency_ms": 0.417667
+          },
+          {
+            "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:6",
+            "publish_seconds": 0.167,
+            "receive_seconds": 0.167387283,
+            "latency_ms": 0.387283
+          }
+        ],
+        "time_trace_stride": 1,
+        "scope": "First accepted serialized transport send entry to complete sample arrival before DDS delivery. Includes transport queues, transport-worker scheduling and fragment pacing; excludes source serialization, DDS receive processing, deserialization, executor waiting and application callbacks.",
+        "topic": "/latency/h2g/host",
+        "direction": "host_to_guest",
+        "transport": {
+          "status": "recorded",
+          "measurement": "serialized_transport_v1",
+          "boundary": "transport",
+          "published": 3,
+          "received": 3,
+          "missing_at_evaluation": 0,
+          "without_send_observation": 0,
+          "receive_observations": 3,
+          "send_observations": 3,
+          "duplicate_fragments": 0,
+          "fanout_completions": 0,
+          "invalid_clock_events": 0,
+          "negative_latency": 0,
+          "latency": {
+            "samples": 3,
+            "minimum_ms": 0.387283,
+            "median_ms": 0.417667,
+            "mean_ms": 0.5249333333333334,
+            "maximum_ms": 0.76985,
+            "p95_ms": 0.76985,
+            "p99_ms": 0.76985
+          },
+          "time_trace": [
+            {
+              "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:4",
+              "publish_seconds": 0.1,
+              "receive_seconds": 0.10076985,
+              "latency_ms": 0.76985
+            },
+            {
+              "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:5",
+              "publish_seconds": 0.1335,
+              "receive_seconds": 0.133917667,
+              "latency_ms": 0.417667
+            },
+            {
+              "id": "01.0f.7f.01.51.00.b3.4d.00.00.00.00|0.0.12.3:0:6",
+              "publish_seconds": 0.167,
+              "receive_seconds": 0.167387283,
+              "latency_ms": 0.387283
+            }
+          ],
+          "time_trace_stride": 1,
+          "scope": "First accepted serialized transport send entry to complete sample arrival before DDS delivery. Includes transport queues, transport-worker scheduling and fragment pacing; excludes source serialization, DDS receive processing, deserialization, executor waiting and application callbacks."
+        },
+        "delivery": {
+          "boundary": "rmw",
+          "status": "recorded",
+          "published": 3,
+          "received": 3,
+          "missing_at_evaluation": 0,
+          "duplicates": 0,
+          "invalid_clock_events": 0,
+          "negative_latency": 0,
+          "unmatched_receipt_identities": 0,
+          "latency": {
+            "samples": 3,
+            "minimum_ms": 1.985484,
+            "median_ms": 2.869003,
+            "mean_ms": 2.6668353333333332,
+            "maximum_ms": 3.146019,
+            "p95_ms": 3.146019,
+            "p99_ms": 3.146019
+          },
+          "time_trace": [
+            {
+              "publish_seconds": 0.1,
+              "receive_seconds": 0.103146019,
+              "latency_ms": 3.146019
+            },
+            {
+              "publish_seconds": 0.1335,
+              "receive_seconds": 0.136369003,
+              "latency_ms": 2.869003
+            },
+            {
+              "publish_seconds": 0.167,
+              "receive_seconds": 0.168985484,
+              "latency_ms": 1.985484
+            }
+          ],
+          "time_trace_stride": 1
+        },
+        "serialization_and_send": {
+          "samples": 3,
+          "minimum_ms": 0.0,
+          "median_ms": 0.0,
+          "mean_ms": 0.0,
+          "maximum_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.0
+        },
+        "receive_to_take": {
+          "samples": 3,
+          "minimum_ms": 1.598201,
+          "median_ms": 2.376169,
+          "mean_ms": 2.141902,
+          "maximum_ms": 2.451336,
+          "p95_ms": 2.451336,
+          "p99_ms": 2.451336
+        }
+      },
+      {
+        "status": "recorded",
+        "measurement": "serialized_transport_v1",
+        "boundary": "transport",
+        "published": 3,
+        "received": 3,
+        "missing_at_evaluation": 0,
+        "without_send_observation": 0,
+        "receive_observations": 3,
+        "send_observations": 3,
+        "duplicate_fragments": 0,
+        "fanout_completions": 0,
+        "invalid_clock_events": 0,
+        "negative_latency": 0,
+        "latency": {
+          "samples": 3,
+          "minimum_ms": 0.100463,
+          "median_ms": 0.410347,
+          "mean_ms": 0.3108413333333333,
+          "maximum_ms": 0.421714,
+          "p95_ms": 0.421714,
+          "p99_ms": 0.421714
+        },
+        "time_trace": [
+          {
+            "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:4",
+            "publish_seconds": 0.101899537,
+            "receive_seconds": 0.102,
+            "latency_ms": 0.100463
+          },
+          {
+            "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:5",
+            "publish_seconds": 0.135089653,
+            "receive_seconds": 0.1355,
+            "latency_ms": 0.410347
+          },
+          {
+            "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:6",
+            "publish_seconds": 0.167078286,
+            "receive_seconds": 0.1675,
+            "latency_ms": 0.421714
+          }
+        ],
+        "time_trace_stride": 1,
+        "scope": "First accepted serialized transport send entry to complete sample arrival before DDS delivery. Includes transport queues, transport-worker scheduling and fragment pacing; excludes source serialization, DDS receive processing, deserialization, executor waiting and application callbacks.",
+        "topic": "/latency/g2h/host",
+        "direction": "guest_to_host",
+        "transport": {
+          "status": "recorded",
+          "measurement": "serialized_transport_v1",
+          "boundary": "transport",
+          "published": 3,
+          "received": 3,
+          "missing_at_evaluation": 0,
+          "without_send_observation": 0,
+          "receive_observations": 3,
+          "send_observations": 3,
+          "duplicate_fragments": 0,
+          "fanout_completions": 0,
+          "invalid_clock_events": 0,
+          "negative_latency": 0,
+          "latency": {
+            "samples": 3,
+            "minimum_ms": 0.100463,
+            "median_ms": 0.410347,
+            "mean_ms": 0.3108413333333333,
+            "maximum_ms": 0.421714,
+            "p95_ms": 0.421714,
+            "p99_ms": 0.421714
+          },
+          "time_trace": [
+            {
+              "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:4",
+              "publish_seconds": 0.101899537,
+              "receive_seconds": 0.102,
+              "latency_ms": 0.100463
+            },
+            {
+              "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:5",
+              "publish_seconds": 0.135089653,
+              "receive_seconds": 0.1355,
+              "latency_ms": 0.410347
+            },
+            {
+              "id": "01.0f.7f.01.7e.00.16.50.00.00.00.00|0.0.12.3:0:6",
+              "publish_seconds": 0.167078286,
+              "receive_seconds": 0.1675,
+              "latency_ms": 0.421714
+            }
+          ],
+          "time_trace_stride": 1,
+          "scope": "First accepted serialized transport send entry to complete sample arrival before DDS delivery. Includes transport queues, transport-worker scheduling and fragment pacing; excludes source serialization, DDS receive processing, deserialization, executor waiting and application callbacks."
+        },
+        "delivery": {
+          "boundary": "rmw",
+          "status": "recorded",
+          "published": 3,
+          "received": 3,
+          "missing_at_evaluation": 0,
+          "duplicates": 0,
+          "invalid_clock_events": 0,
+          "negative_latency": 0,
+          "unmatched_receipt_identities": 0,
+          "latency": {
+            "samples": 3,
+            "minimum_ms": 0.638765,
+            "median_ms": 0.742318,
+            "mean_ms": 1.0421603333333334,
+            "maximum_ms": 1.745398,
+            "p95_ms": 1.745398,
+            "p99_ms": 1.745398
+          },
+          "time_trace": [
+            {
+              "publish_seconds": 0.101361235,
+              "receive_seconds": 0.102,
+              "latency_ms": 0.638765
+            },
+            {
+              "publish_seconds": 0.133754602,
+              "receive_seconds": 0.1355,
+              "latency_ms": 1.745398
+            },
+            {
+              "publish_seconds": 0.166757682,
+              "receive_seconds": 0.1675,
+              "latency_ms": 0.742318
+            }
+          ],
+          "time_trace_stride": 1
+        },
+        "serialization_and_send": {
+          "samples": 3,
+          "minimum_ms": 0.320604,
+          "median_ms": 0.538302,
+          "mean_ms": 0.7313189999999999,
+          "maximum_ms": 1.335051,
+          "p95_ms": 1.335051,
+          "p99_ms": 1.335051
+        },
+        "receive_to_take": {
+          "samples": 3,
+          "minimum_ms": 0.0,
+          "median_ms": 0.0,
+          "mean_ms": 0.0,
+          "maximum_ms": 0.0,
+          "p95_ms": 0.0,
+          "p99_ms": 0.0
+        }
+      }
+    ]
+  },
+  "evidence_sha256": "994e7919a4ccf406c3124e908265a6d22c4df17cd4ed2bea073397ae63e3c5cc",
+  "runtime_library_sha256": "761a773067fb5b73f444902320d268537c5e7329ad8605f12382216f0e692158",
+  "source_identity": {
+    "revision": "ab41aaebd5e3e216259c33d5e7c4de594b9b634e",
+    "fingerprint": "c8179421a08430635895ac7c4a68c748c7588240255ceb898b92eb5b1430c10e"
+  },
+  "browser_validation": {
+    "synthetic": true,
+    "transport_ms": 1.0,
+    "delivery_ms": 30.0,
+    "legacy_delivery_ms": 42.0,
+    "legacy_transport": null,
+    "legacy_transport_plot_points": 0
+  }
+}
