@@ -1,0 +1,955 @@
+{
+  "observed_utc": "2026-10-24T07:46:14.602822+00:00",
+  "machines": [
+    {
+      "id": "pop-os",
+      "online": true,
+      "error": null,
+      "workers": 1,
+      "cpus": 4,
+      "memory": "12g",
+      "build_jobs": 4
+    },
+    {
+      "id": "ubuntu-george",
+      "online": true,
+      "error": null,
+      "workers": 1,
+      "cpus": 4,
+      "memory": "12g",
+      "build_jobs": 4
+    }
+  ],
+  "experiments": [
+    {
+      "id": "52c15e35701e4bfbb5de0b3045db219e",
+      "name": "Memory contention",
+      "status": "partial",
+      "remote_cleaned": true,
+      "source_identity": {
+        "revision": "8b1899f79f751cb90a4a5fc6b5466b9f4e4095e1",
+        "fingerprint": "62db1b947807b2ab458683bd7ccd90f3fd202b45ee82effd4e6e5758de36dee4"
+      },
+      "config": {
+        "version": 1,
+        "fixed": {
+          "duration": 1.5,
+          "warmup": 0,
+          "physics_step": 0.0005,
+          "joint_hz": 1000,
+          "camera_position": [
+            -2,
+            0,
+            2
+          ],
+          "camera_width": 480,
+          "camera_height": 360,
+          "image_age_periods": 2,
+          "guest_dds_shm_bytes": 67108864,
+          "cup_radius": 0.12,
+          "cup_depth": 0.14,
+          "interval_us": 500,
+          "poll_us": 100,
+          "startup_timeout_s": 900,
+          "wall_timeout_s": 43200,
+          "image_diagnostics": false,
+          "pressure_warmup": 0,
+          "transport_backend": "m5ops",
+          "middleware_transport": "fastdds",
+          "m5_module": "",
+          "dma_module": "",
+          "robot_execution": "composed",
+          "middleware_copy_mode": "functional",
+          "readiness_checkpoint": true,
+          "checkpoint_readiness_cpu": "kvm"
+        },
+        "hardware": {
+          "cpu_type": "timing",
+          "num_cores": 2,
+          "cpu_clock": "3GHz",
+          "l1d_size": "16KiB",
+          "l1i_size": "16KiB",
+          "l1_assoc": 8,
+          "l2_size": "256KiB",
+          "l2_assoc": 16
+        },
+        "ramulator_config": "gem5/ext/ramulator2/configs/lpddr5-6400-orin.json",
+        "throws": [
+          {
+            "name": "loft-3",
+            "launch_position": [
+              1.8,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              2
+            ],
+            "launch_speed": 3
+          },
+          {
+            "name": "loft-5",
+            "launch_position": [
+              4.36,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              1
+            ],
+            "launch_speed": 5
+          }
+        ],
+        "rates": [
+          {
+            "name": "camera_30",
+            "camera_hz": 30,
+            "planner_hz": 30,
+            "plan_interval": 0.06,
+            "control_hz": 250
+          }
+        ],
+        "patterns": [
+          "random",
+          "stride",
+          "stream"
+        ],
+        "pressure": [
+          0,
+          0.9
+        ],
+        "aggressor": {
+          "read_percent": 80,
+          "stride": 4096,
+          "max_pending": 512,
+          "window": 268435456,
+          "seed": 1,
+          "backpressure": true,
+          "duty_percent": 100,
+          "period": 12000
+        },
+        "calibration": {
+          "warmup_ns": 100000,
+          "duration_ns": 1000000
+        }
+      },
+      "preparations": {
+        "ubuntu-george": {
+          "status": "ready",
+          "phase": "Ready",
+          "error": null,
+          "progress": {
+            "phase": "Prepared inputs ready",
+            "elapsed_seconds": 4128.162101507187
+          },
+          "collected": true
+        },
+        "pop-os": {
+          "status": "ready",
+          "phase": "Ready",
+          "error": null,
+          "progress": {
+            "phase": "Prepared inputs ready",
+            "elapsed_seconds": 53.04999136924744
+          },
+          "collected": true
+        }
+      },
+      "provenance": {
+        "application_image_id": "sha256:251defb6f00baa4811daca482fdcb0bd8f9cc81abbe67cbe7598989f3ba9f322",
+        "build_inputs": {
+          "sdk": "4cea09ec2745d8ff1a3666559704d789ba75415fb737781e08d13a5dc5df15f4",
+          "application": "b19d7fe1e74ab972e7fc199cae759ba62b626a11559790499db593956b42c93d"
+        },
+        "sdk_image_id": "sha256:9765d70e06f6fd55956476aa8c959f3c2a0097fcc50246042c62ec410eb1d4fd",
+        "disk_sha256": "ef78d754cc9ece60e7eea50d4b056d1826278bd9ed49fc1648b14df6ead3b9a4",
+        "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+        "checkpoint_index_sha256": "5c855d9e61906353fde8cf43d34462615b0cc5e4f2fe3f85a05229bdeb6cb512"
+      },
+      "cases": [
+        {
+          "id": "case-000",
+          "status": "stopped",
+          "attempts": [
+            {
+              "id": "1c76ce8e243f4084b62236a97ef9607b",
+              "machine": "ubuntu-george",
+              "status": "failed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-000",
+                "status": "running",
+                "cpu_type": "timing",
+                "phase": "Initializing detailed simulation",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/1c76ce8e243f4084b62236a97ef9607b/suite/case-000-attempt-001",
+                "readiness": {
+                  "arm": true,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 240,
+                "last_command_age_ms": 0.16528999999998462
+              },
+              "exit_code": 2,
+              "oom": false,
+              "collected": true
+            },
+            {
+              "id": "fa6af66c0bd444b1906a24406675ae1a",
+              "machine": "pop-os",
+              "status": "stopped",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-000",
+                "status": "running",
+                "cpu_type": "timing",
+                "phase": "Initializing detailed simulation",
+                "attempt": "/home/kkgiorgos/University/Diploma/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/fa6af66c0bd444b1906a24406675ae1a/suite/case-000-attempt-001",
+                "readiness": {
+                  "arm": true,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 132,
+                "last_command_age_ms": -0.03874700000006115
+              },
+              "exit_code": null,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-001",
+          "status": "completed",
+          "attempts": [
+            {
+              "id": "3f4e01e4fbc64714bf1196bcf11aac2c",
+              "machine": "ubuntu-george",
+              "status": "completed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-001",
+                "status": "complete",
+                "cpu_type": "timing",
+                "phase": "Task scored",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/3f4e01e4fbc64714bf1196bcf11aac2c/suite/case-001-attempt-001",
+                "simulated_seconds": 1.5005,
+                "completed_exchanges": 3001,
+                "wall_seconds": 14702.22871429,
+                "average_speed": 0.00010205935638462566,
+                "last_update_age_seconds": 5.1547651290893555,
+                "readiness": {
+                  "arm": true,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 573,
+                "last_command_age_ms": 0.10324399999994682,
+                "throw_seconds": 0.08050000000000002,
+                "duration_seconds": 1.5,
+                "throw_percent": 5.366666666666667,
+                "outcome": "MISS"
+              },
+              "exit_code": 0,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-002",
+          "status": "completed",
+          "attempts": [
+            {
+              "id": "b373b73ca3554d6d9e17103a6b15fff9",
+              "machine": "ubuntu-george",
+              "status": "completed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-002",
+                "status": "complete",
+                "cpu_type": "timing",
+                "phase": "Task scored",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b373b73ca3554d6d9e17103a6b15fff9/suite/case-002-attempt-001",
+                "simulated_seconds": 1.5005,
+                "completed_exchanges": 3001,
+                "wall_seconds": 10132.721803433,
+                "average_speed": 0.00014808459455500155,
+                "last_update_age_seconds": 7.843340873718262,
+                "readiness": {
+                  "arm": true,
+                  "perception": true,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 395,
+                "last_command_age_ms": 0.2046280000000955,
+                "throw_seconds": 0.7865,
+                "duration_seconds": 1.5,
+                "throw_percent": 52.43333333333333,
+                "outcome": "MISS"
+              },
+              "exit_code": 0,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-003",
+          "status": "completed",
+          "attempts": [
+            {
+              "id": "ee150440b2994b928220a478f3996954",
+              "machine": "ubuntu-george",
+              "status": "completed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-003",
+                "status": "complete",
+                "cpu_type": "timing",
+                "phase": "Task scored",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/ee150440b2994b928220a478f3996954/suite/case-003-attempt-001",
+                "simulated_seconds": 1.5005,
+                "completed_exchanges": 3001,
+                "wall_seconds": 10874.981868417,
+                "average_speed": 0.00013797724153984432,
+                "last_update_age_seconds": 5.543303489685059,
+                "readiness": {
+                  "arm": true,
+                  "perception": true,
+                  "warmup_elapsed": 0.15149999999999997,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 569,
+                "last_command_age_ms": 0.08676399999973938,
+                "throw_seconds": 0.08250000000000002,
+                "duration_seconds": 1.5,
+                "throw_percent": 5.500000000000001,
+                "outcome": "MISS"
+              },
+              "exit_code": 0,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-004",
+          "status": "failed",
+          "attempts": [
+            {
+              "id": "b0be885928cb48e79df9da788fbe2e06",
+              "machine": "ubuntu-george",
+              "status": "failed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-004",
+                "status": "running",
+                "cpu_type": "timing",
+                "phase": "Initializing detailed simulation",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b0be885928cb48e79df9da788fbe2e06/suite/case-004-attempt-001",
+                "readiness": {
+                  "arm": true,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 238,
+                "last_command_age_ms": 0.13844400000007084
+              },
+              "exit_code": 2,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-005",
+          "status": "completed",
+          "attempts": [
+            {
+              "id": "f82ef9c128024587ba2d5cc6685e6258",
+              "machine": "ubuntu-george",
+              "status": "completed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-005",
+                "status": "complete",
+                "cpu_type": "timing",
+                "phase": "Task scored",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/f82ef9c128024587ba2d5cc6685e6258/suite/case-005-attempt-001",
+                "simulated_seconds": 1.5005,
+                "completed_exchanges": 3001,
+                "wall_seconds": 14412.639128504,
+                "average_speed": 0.0001041100097366934,
+                "last_update_age_seconds": 6.265396595001221,
+                "readiness": {
+                  "arm": false,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 393,
+                "last_command_age_ms": 0.18986300000012335,
+                "throw_seconds": 0.7855,
+                "duration_seconds": 1.5,
+                "throw_percent": 52.36666666666667,
+                "outcome": "MISS"
+              },
+              "exit_code": 0,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-006",
+          "status": "failed",
+          "attempts": [
+            {
+              "id": "def291b8b4544d3c945171cf7c459b56",
+              "machine": "ubuntu-george",
+              "status": "failed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-006",
+                "status": "infrastructure_failure",
+                "cpu_type": "timing",
+                "phase": "Co-simulation component failed",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/def291b8b4544d3c945171cf7c459b56/suite/case-006-attempt-001",
+                "readiness": {
+                  "arm": true,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 238,
+                "last_command_age_ms": 0.12565300000000335,
+                "reason": "[gazebo_host_bridge-4] Host bridge: Restored DDS did not reconnect fresh control and stereo traffic",
+                "host_running_after_guest_failure": false
+              },
+              "exit_code": 2,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        },
+        {
+          "id": "case-007",
+          "status": "completed",
+          "attempts": [
+            {
+              "id": "de1b9b076f4e49d3b8e9fe2b1eea741d",
+              "machine": "ubuntu-george",
+              "status": "completed",
+              "cpus": 2,
+              "memory": "3g",
+              "progress": {
+                "case": "case-007",
+                "status": "complete",
+                "cpu_type": "timing",
+                "phase": "Task scored",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/de1b9b076f4e49d3b8e9fe2b1eea741d/suite/case-007-attempt-001",
+                "simulated_seconds": 1.5005,
+                "completed_exchanges": 3001,
+                "wall_seconds": 10299.760950889,
+                "average_speed": 0.00014568299275630157,
+                "last_update_age_seconds": 7.214090585708618,
+                "readiness": {
+                  "arm": false,
+                  "perception": false,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 396,
+                "last_command_age_ms": 0.2958379999999927,
+                "throw_seconds": 0.7955,
+                "duration_seconds": 1.5,
+                "throw_percent": 53.03333333333333,
+                "outcome": "MISS"
+              },
+              "exit_code": 0,
+              "oom": false,
+              "collected": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "8c9827cc62294e1fba2dc47570915232",
+      "name": "Memory contention \u2014 perception recovery 2026-10-24",
+      "status": "partial",
+      "remote_cleaned": true,
+      "source_identity": {
+        "revision": "bd1a8f65cd9da618f9b7095ee433f2846143a7ca",
+        "fingerprint": "632c7289ae03463de9acc4e343bdde113306240beee7816730846188abadcb5f"
+      },
+      "config": {
+        "version": 1,
+        "fixed": {
+          "duration": 1.5,
+          "warmup": 0,
+          "physics_step": 0.0005,
+          "joint_hz": 1000,
+          "camera_position": [
+            -2,
+            0,
+            2
+          ],
+          "camera_width": 480,
+          "camera_height": 360,
+          "image_age_periods": 2,
+          "guest_dds_shm_bytes": 67108864,
+          "cup_radius": 0.12,
+          "cup_depth": 0.14,
+          "interval_us": 500,
+          "poll_us": 100,
+          "startup_timeout_s": 900,
+          "wall_timeout_s": 43200,
+          "image_diagnostics": false,
+          "pressure_warmup": 0,
+          "transport_backend": "m5ops",
+          "middleware_transport": "fastdds",
+          "m5_module": "",
+          "dma_module": "",
+          "robot_execution": "composed",
+          "middleware_copy_mode": "functional",
+          "readiness_checkpoint": true,
+          "checkpoint_readiness_cpu": "kvm"
+        },
+        "hardware": {
+          "cpu_type": "timing",
+          "num_cores": 2,
+          "cpu_clock": "3GHz",
+          "l1d_size": "16KiB",
+          "l1i_size": "16KiB",
+          "l1_assoc": 8,
+          "l2_size": "256KiB",
+          "l2_assoc": 16
+        },
+        "ramulator_config": "gem5/ext/ramulator2/configs/lpddr5-6400-orin.json",
+        "throws": [
+          {
+            "name": "loft-3",
+            "launch_position": [
+              1.8,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              2
+            ],
+            "launch_speed": 3
+          },
+          {
+            "name": "loft-5",
+            "launch_position": [
+              4.36,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              1
+            ],
+            "launch_speed": 5
+          }
+        ],
+        "rates": [
+          {
+            "name": "camera_30",
+            "camera_hz": 30,
+            "planner_hz": 30,
+            "plan_interval": 0.06,
+            "control_hz": 250
+          }
+        ],
+        "patterns": [
+          "random",
+          "stride",
+          "stream"
+        ],
+        "pressure": [
+          0,
+          0.9
+        ],
+        "aggressor": {
+          "read_percent": 80,
+          "stride": 4096,
+          "max_pending": 512,
+          "window": 268435456,
+          "seed": 1,
+          "backpressure": true,
+          "duty_percent": 100,
+          "period": 12000
+        },
+        "calibration": {
+          "warmup_ns": 100000,
+          "duration_ns": 1000000
+        }
+      },
+      "preparations": {
+        "ubuntu-george": {
+          "status": "stopped",
+          "phase": "Waiting for arm readiness",
+          "error": null,
+          "progress": {
+            "case": "case-003",
+            "status": "pending",
+            "cpu_type": "kvm",
+            "phase": "Waiting for arm readiness",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/8c9827cc62294e1fba2dc47570915232/inputs/prepared/checkpoints/4cbd9300d5c40c7fde76bb7b0bcfbc3f040bfe7075c47ff881c3d471425d4e1d",
+            "simulated_seconds": 0.1095,
+            "completed_exchanges": 219,
+            "wall_seconds": 22.411685572,
+            "average_speed": 0.0048858440231199585,
+            "last_update_age_seconds": 49.40192651748657,
+            "readiness": {
+              "arm": false,
+              "perception": true,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 11,
+            "last_command_age_ms": 0.5729089999999964,
+            "checkpoint_current": 1,
+            "checkpoint_total": 1,
+            "elapsed_seconds": 318.5622806549072
+          },
+          "collected": true
+        }
+      },
+      "provenance": {
+        "application_image_id": null,
+        "build_inputs": null,
+        "sdk_image_id": null,
+        "disk_sha256": null,
+        "kernel_sha256": null,
+        "checkpoint_index_sha256": null
+      },
+      "cases": [
+        {
+          "id": "case-000",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-001",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-002",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-003",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-004",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-005",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-006",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-007",
+          "status": "queued",
+          "attempts": []
+        }
+      ]
+    },
+    {
+      "id": "07da5b4d9a374221875f24dc2edc7c17",
+      "name": "Memory contention \u2014 perception recovery v2",
+      "status": "running",
+      "remote_cleaned": null,
+      "source_identity": {
+        "revision": "bd1a8f65cd9da618f9b7095ee433f2846143a7ca",
+        "fingerprint": "a2affbb8a47ce66e69a801afc0d46070da495aca35fe3c286b36daeb2b5645f9"
+      },
+      "config": {
+        "version": 1,
+        "fixed": {
+          "duration": 1.5,
+          "warmup": 0,
+          "physics_step": 0.0005,
+          "joint_hz": 1000,
+          "camera_position": [
+            -2,
+            0,
+            2
+          ],
+          "camera_width": 480,
+          "camera_height": 360,
+          "image_age_periods": 2,
+          "guest_dds_shm_bytes": 67108864,
+          "cup_radius": 0.12,
+          "cup_depth": 0.14,
+          "interval_us": 500,
+          "poll_us": 100,
+          "startup_timeout_s": 900,
+          "wall_timeout_s": 43200,
+          "image_diagnostics": false,
+          "pressure_warmup": 0,
+          "transport_backend": "m5ops",
+          "middleware_transport": "fastdds",
+          "m5_module": "",
+          "dma_module": "",
+          "robot_execution": "composed",
+          "middleware_copy_mode": "functional",
+          "readiness_checkpoint": true,
+          "checkpoint_readiness_cpu": "kvm"
+        },
+        "hardware": {
+          "cpu_type": "timing",
+          "num_cores": 2,
+          "cpu_clock": "3GHz",
+          "l1d_size": "16KiB",
+          "l1i_size": "16KiB",
+          "l1_assoc": 8,
+          "l2_size": "256KiB",
+          "l2_assoc": 16
+        },
+        "ramulator_config": "gem5/ext/ramulator2/configs/lpddr5-6400-orin.json",
+        "throws": [
+          {
+            "name": "loft-3",
+            "launch_position": [
+              1.8,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              2
+            ],
+            "launch_speed": 3
+          },
+          {
+            "name": "loft-5",
+            "launch_position": [
+              4.36,
+              0.04,
+              3
+            ],
+            "launch_direction": [
+              -1,
+              0,
+              1
+            ],
+            "launch_speed": 5
+          }
+        ],
+        "rates": [
+          {
+            "name": "camera_30",
+            "camera_hz": 30,
+            "planner_hz": 30,
+            "plan_interval": 0.06,
+            "control_hz": 250
+          }
+        ],
+        "patterns": [
+          "random",
+          "stride",
+          "stream"
+        ],
+        "pressure": [
+          0,
+          0.9
+        ],
+        "aggressor": {
+          "read_percent": 80,
+          "stride": 4096,
+          "max_pending": 512,
+          "window": 268435456,
+          "seed": 1,
+          "backpressure": true,
+          "duty_percent": 100,
+          "period": 12000
+        },
+        "calibration": {
+          "warmup_ns": 100000,
+          "duration_ns": 1000000
+        }
+      },
+      "preparations": {
+        "ubuntu-george": {
+          "status": "ready",
+          "phase": "Ready",
+          "error": null,
+          "progress": {
+            "phase": "Prepared inputs ready",
+            "elapsed_seconds": 369.8155755996704
+          },
+          "collected": true
+        },
+        "pop-os": {
+          "status": "ready",
+          "phase": "Ready",
+          "error": null,
+          "progress": {
+            "phase": "Prepared inputs ready",
+            "elapsed_seconds": 50.383002281188965
+          },
+          "collected": true
+        }
+      },
+      "provenance": {
+        "application_image_id": "sha256:d5a0abdd6279fc631280ad266f91742be0fecf6c6f3f438b86f012670559e0fc",
+        "build_inputs": {
+          "sdk": "4cea09ec2745d8ff1a3666559704d789ba75415fb737781e08d13a5dc5df15f4",
+          "application": "432fec6a82d15cc2d6c1b9c7e7a6d0cac8cb07149c3fffb6193b1ceb7350ee2c"
+        },
+        "sdk_image_id": "sha256:9765d70e06f6fd55956476aa8c959f3c2a0097fcc50246042c62ec410eb1d4fd",
+        "disk_sha256": "ef78d754cc9ece60e7eea50d4b056d1826278bd9ed49fc1648b14df6ead3b9a4",
+        "kernel_sha256": "ad1371a0ef614c4e9d6df4764852ab9ca04b304d8db11975adfe09e47db52b04",
+        "checkpoint_index_sha256": "7bd7fc88e531338f61ef6ce2e6e152c4a722d0125db55d7784e43898f1847052"
+      },
+      "cases": [
+        {
+          "id": "case-000",
+          "status": "running",
+          "attempts": [
+            {
+              "id": "974df57c48a5480ca34eaa537b3f2f96",
+              "machine": "ubuntu-george",
+              "status": "running",
+              "cpus": 4,
+              "memory": "12g",
+              "progress": {
+                "case": "case-000",
+                "status": "running",
+                "cpu_type": "timing",
+                "phase": "Ball launched",
+                "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/07da5b4d9a374221875f24dc2edc7c17/attempts/974df57c48a5480ca34eaa537b3f2f96/suite/case-000-attempt-001",
+                "simulated_seconds": 0.0575,
+                "completed_exchanges": 115,
+                "wall_seconds": 288.434392474,
+                "average_speed": 0.00019935209357942,
+                "last_update_age_seconds": 1.0181927680969238,
+                "readiness": {
+                  "arm": true,
+                  "perception": true,
+                  "warmup_elapsed": 0.05049999999999999,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 23,
+                "last_command_age_ms": 0.2664970000000322,
+                "throw_seconds": 0,
+                "duration_seconds": 1.5,
+                "throw_percent": 0.0
+              },
+              "exit_code": null,
+              "oom": null,
+              "collected": null
+            }
+          ]
+        },
+        {
+          "id": "case-001",
+          "status": "running",
+          "attempts": [
+            {
+              "id": "ea8b86429c8346beaa9902fa539add18",
+              "machine": "pop-os",
+              "status": "running",
+              "cpus": 4,
+              "memory": "12g",
+              "progress": {
+                "case": "case-001",
+                "status": "running",
+                "cpu_type": "timing",
+                "phase": "Ball launched",
+                "attempt": "/home/kkgiorgos/University/Diploma/Chimaera/.chimaera-orchestrator/experiments/07da5b4d9a374221875f24dc2edc7c17/attempts/ea8b86429c8346beaa9902fa539add18/suite/case-001-attempt-001",
+                "simulated_seconds": 0.008,
+                "completed_exchanges": 16,
+                "wall_seconds": 66.285584979,
+                "average_speed": 0.00012068989060795778,
+                "last_update_age_seconds": 2.0101401805877686,
+                "readiness": {
+                  "arm": true,
+                  "perception": true,
+                  "warmup_elapsed": 0.0,
+                  "warmup_required": 0.0
+                },
+                "delivered_commands": 11,
+                "last_command_age_ms": 0.2638420000000141,
+                "throw_seconds": 0,
+                "duration_seconds": 1.5,
+                "throw_percent": 0.0
+              },
+              "exit_code": null,
+              "oom": null,
+              "collected": null
+            }
+          ]
+        },
+        {
+          "id": "case-002",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-003",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-004",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-005",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-006",
+          "status": "queued",
+          "attempts": []
+        },
+        {
+          "id": "case-007",
+          "status": "queued",
+          "attempts": []
+        }
+      ]
+    }
+  ]
+}

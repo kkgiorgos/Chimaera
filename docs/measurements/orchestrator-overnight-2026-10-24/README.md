@@ -8,6 +8,9 @@ running. This is a snapshot of an ongoing experiment, not its final outcome.
 No runtime code, deployment, active case, or experiment setting was changed during
 this investigation. No new simulation was started.
 
+Subsequent fixes and deployment validation are recorded separately in
+[Pop!_OS recovery](RECOVERY.md) and [perception recovery](PERCEPTION-RECOVERY.md).
+
 ## Evidence and reproduction
 
 - [Snapshot and frozen configuration](snapshot.json).
