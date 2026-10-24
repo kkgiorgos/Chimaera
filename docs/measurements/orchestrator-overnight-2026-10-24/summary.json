@@ -1,0 +1,1045 @@
+{
+  "snapshot_utc": "2026-10-24T06:18:05.165496+00:00",
+  "experiment_id": "52c15e35701e4bfbb5de0b3045db219e",
+  "saved_application_seconds": 0.6016139994709988,
+  "freshness_budget_ms": 66.66666666666667,
+  "cases": [
+    {
+      "case": "case-000",
+      "status": "failed",
+      "attempt": "1c76ce8e243f4084b62236a97ef9607b",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": null,
+      "reconnect": null,
+      "post_save_perception": {
+        "expired_processing": 23
+      },
+      "perception_counts": {
+        "expired_processing": 23
+      },
+      "tracked": 0,
+      "plans": [],
+      "capture_to_pair": {
+        "samples": 23,
+        "minimum_ms": 35.23800700000002,
+        "median_ms": 50.129906000000005,
+        "maximum_ms": 65.47428500000008
+      },
+      "capture_to_completion": {
+        "samples": 23,
+        "minimum_ms": 73.475481,
+        "median_ms": 89.38645299999992,
+        "maximum_ms": 105.38494900000006
+      },
+      "detection": {
+        "samples": 23,
+        "minimum_ms": 38.18396800000001,
+        "median_ms": 38.565539,
+        "maximum_ms": 41.859726
+      },
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 120,
+        "copyBytes": 62212200,
+        "fillCalls": 62,
+        "fillBytes": 32140786,
+        "faults": 0
+      },
+      "telemetry": null,
+      "launch_validation": null
+    },
+    {
+      "case": "case-001",
+      "status": "completed",
+      "attempt": "3f4e01e4fbc64714bf1196bcf11aac2c",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": {
+        "success": false,
+        "reason": "outside_cup_at_deadline",
+        "launch_time": 1.42,
+        "result_time": 2.92,
+        "duration": 1.5,
+        "contained_duration": 0,
+        "flight_end_time": 2.92,
+        "flight_end_kind": "duration_elapsed"
+      },
+      "reconnect": {
+        "intervals": 1635,
+        "simulation_seconds": 0.8175,
+        "wall_seconds": 3900.09
+      },
+      "post_save_perception": {
+        "expired_processing": 62,
+        "no_detection": 1
+      },
+      "perception_counts": {
+        "expired_processing": 39
+      },
+      "tracked": 0,
+      "plans": [],
+      "capture_to_pair": {
+        "samples": 39,
+        "minimum_ms": 34.78496000000008,
+        "median_ms": 48.71380000000003,
+        "maximum_ms": 65.88303900000002
+      },
+      "capture_to_completion": {
+        "samples": 39,
+        "minimum_ms": 69.32044599999986,
+        "median_ms": 84.60374900000022,
+        "maximum_ms": 100.51997000000013
+      },
+      "detection": {
+        "samples": 39,
+        "minimum_ms": 34.156137,
+        "median_ms": 34.48147,
+        "maximum_ms": 42.589858
+      },
+      "rmw_streams": [
+        {
+          "topic": "/stereo/left/image_raw",
+          "direction": "host_to_guest",
+          "published": 45,
+          "received": 43,
+          "missing_at_evaluation": 2,
+          "latency": {
+            "samples": 43,
+            "minimum_ms": 34.584161,
+            "median_ms": 50.064546,
+            "mean_ms": 50.72303011627907,
+            "maximum_ms": 68.373898,
+            "p95_ms": 67.005678,
+            "p99_ms": 68.373898
+          }
+        },
+        {
+          "topic": "/stereo/right/image_raw",
+          "direction": "host_to_guest",
+          "published": 45,
+          "received": 43,
+          "missing_at_evaluation": 2,
+          "latency": {
+            "samples": 43,
+            "minimum_ms": 34.733111,
+            "median_ms": 50.197773,
+            "mean_ms": 50.874450255813954,
+            "maximum_ms": 68.543387,
+            "p95_ms": 67.124478,
+            "p99_ms": 68.543387
+          }
+        },
+        {
+          "topic": "/robot/joint_states",
+          "direction": "host_to_guest",
+          "published": 1501,
+          "received": 1497,
+          "missing_at_evaluation": 4,
+          "latency": {
+            "samples": 1497,
+            "minimum_ms": 0.270517,
+            "median_ms": 0.755142,
+            "mean_ms": 0.8884860033400134,
+            "maximum_ms": 5.557727,
+            "p95_ms": 1.983305,
+            "p99_ms": 3.428826
+          }
+        },
+        {
+          "topic": "/robot/effort_command",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.079128,
+            "median_ms": 0.289731,
+            "mean_ms": 0.3555470213333333,
+            "maximum_ms": 2.781364,
+            "p95_ms": 0.574278,
+            "p99_ms": 1.120298
+          }
+        },
+        {
+          "topic": "/robot/ready",
+          "direction": "guest_to_host",
+          "published": 36,
+          "received": 36,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 36,
+            "minimum_ms": 0.048878,
+            "median_ms": 0.23226,
+            "mean_ms": 0.25037405555555553,
+            "maximum_ms": 0.523034,
+            "p95_ms": 0.508005,
+            "p99_ms": 0.523034
+          }
+        },
+        {
+          "topic": "/robot/perception_ready",
+          "direction": "guest_to_host",
+          "published": 14,
+          "received": 14,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 14,
+            "minimum_ms": 0.162131,
+            "median_ms": 0.3481805,
+            "mean_ms": 0.3587057857142857,
+            "maximum_ms": 0.629653,
+            "p95_ms": 0.629653,
+            "p99_ms": 0.629653
+          }
+        },
+        {
+          "topic": "/benchmark/perception",
+          "direction": "guest_to_host",
+          "published": 41,
+          "received": 41,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 41,
+            "minimum_ms": 0.139256,
+            "median_ms": 0.452827,
+            "mean_ms": 0.4265069268292683,
+            "maximum_ms": 0.639239,
+            "p95_ms": 0.626003,
+            "p99_ms": 0.639239
+          }
+        },
+        {
+          "topic": "/benchmark/interception",
+          "direction": "guest_to_host",
+          "published": 0,
+          "received": 0,
+          "missing_at_evaluation": 0,
+          "latency": null
+        },
+        {
+          "topic": "/benchmark/control",
+          "direction": "guest_to_host",
+          "published": 36,
+          "received": 36,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 36,
+            "minimum_ms": 0.096237,
+            "median_ms": 0.1894345,
+            "mean_ms": 0.2906685,
+            "maximum_ms": 0.589205,
+            "p95_ms": 0.581775,
+            "p99_ms": 0.589205
+          }
+        },
+        {
+          "topic": "/benchmark/control_timing",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.058003,
+            "median_ms": 0.456544,
+            "mean_ms": 0.35608017333333336,
+            "maximum_ms": 1.229222,
+            "p95_ms": 0.567473,
+            "p99_ms": 0.594664
+          }
+        }
+      ],
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 178,
+        "copyBytes": 92281500,
+        "fillCalls": 88,
+        "fillBytes": 45619112,
+        "faults": 0
+      },
+      "telemetry": {
+        "clock": "gem5 simulation",
+        "records": {
+          "perception": 79,
+          "interception": 0,
+          "control": 65,
+          "control_timing": 622
+        },
+        "sequence_gaps": 0,
+        "scope": "Received completed updates; in-flight records at shutdown are excluded",
+        "instrumentation": "Per-update clock reads and small reliable ROS records; serialization/export follows the measured computation",
+        "coverage": {
+          "status": "no_missing_delivered_control_timings",
+          "delivered_command_stamps": 375,
+          "matched_control_timings": 375,
+          "missing_control_timings": 0,
+          "first_missing_command_time": null,
+          "last_missing_command_time": null,
+          "streams": {
+            "perception": {
+              "completed_records": 41,
+              "last_completion_time": 2.897392105,
+              "tail_seconds": 0.02260789499999971
+            },
+            "interception": {
+              "completed_records": 0,
+              "last_completion_time": null,
+              "tail_seconds": null
+            },
+            "control": {
+              "completed_records": 36,
+              "last_completion_time": 2.913615268,
+              "tail_seconds": 0.006384731999999893
+            },
+            "control_timing": {
+              "completed_records": 375,
+              "last_completion_time": 2.9173328840000003,
+              "tail_seconds": 0.002667115999999581
+            }
+          },
+          "scope": "Matches independently received effort commands; does not prove delivery of every generated record"
+        }
+      },
+      "launch_validation": {
+        "valid": true,
+        "launch_time": 1.42,
+        "checked_at": 1.4205,
+        "reason": "ballistic_launch_verified",
+        "expected_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999746
+        ],
+        "observed_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999748
+        ],
+        "expected_position_m": [
+          1.7986583592135,
+          0.04,
+          3.0026759240730003
+        ],
+        "observed_position_m": [
+          1.7986583592135,
+          0.04,
+          3.002675924073
+        ]
+      }
+    },
+    {
+      "case": "case-002",
+      "status": "completed",
+      "attempt": "b373b73ca3554d6d9e17103a6b15fff9",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": {
+        "success": false,
+        "reason": "outside_cup_at_deadline",
+        "launch_time": 0.714,
+        "result_time": 2.214,
+        "duration": 1.5,
+        "contained_duration": 0,
+        "flight_end_time": 2.214,
+        "flight_end_kind": "duration_elapsed"
+      },
+      "reconnect": {
+        "intervals": 223,
+        "simulation_seconds": 0.1115,
+        "wall_seconds": 552.061
+      },
+      "post_save_perception": {
+        "no_detection": 3,
+        "detected": 6,
+        "expired_processing": 37
+      },
+      "perception_counts": {
+        "detected": 6,
+        "expired_processing": 37,
+        "no_detection": 1
+      },
+      "tracked": 2,
+      "plans": [
+        {
+          "time": 0.947904707,
+          "capture_time": 0.8585,
+          "status": "planning_deadline_missed",
+          "inverse_solutions": 0.0,
+          "inverse_calls": 13.0,
+          "inverse_iterations": 455.0,
+          "planning_budget_seconds": 0.03333333333333333,
+          "planning_simulation_seconds": 0.027438430000000003,
+          "timing_clock": "gem5 simulation",
+          "completed_time": 0.97553073
+        }
+      ],
+      "capture_to_pair": {
+        "samples": 44,
+        "minimum_ms": 18.53401499999996,
+        "median_ms": 44.79806899999994,
+        "maximum_ms": 55.05662400000011
+      },
+      "capture_to_completion": {
+        "samples": 44,
+        "minimum_ms": 50.270692000000004,
+        "median_ms": 76.40351950000002,
+        "maximum_ms": 87.15185100000001
+      },
+      "detection": {
+        "samples": 44,
+        "minimum_ms": 30.830839,
+        "median_ms": 31.187531,
+        "maximum_ms": 38.326615000000004
+      },
+      "rmw_streams": [
+        {
+          "topic": "/stereo/left/image_raw",
+          "direction": "host_to_guest",
+          "published": 46,
+          "received": 45,
+          "missing_at_evaluation": 1,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 18.354831,
+            "median_ms": 44.277846,
+            "mean_ms": 42.21235277777778,
+            "maximum_ms": 54.852676,
+            "p95_ms": 53.174526,
+            "p99_ms": 54.852676
+          }
+        },
+        {
+          "topic": "/stereo/right/image_raw",
+          "direction": "host_to_guest",
+          "published": 46,
+          "received": 45,
+          "missing_at_evaluation": 1,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 18.482917,
+            "median_ms": 44.420686,
+            "mean_ms": 42.3518576,
+            "maximum_ms": 55.001978,
+            "p95_ms": 53.331531,
+            "p99_ms": 55.001978
+          }
+        },
+        {
+          "topic": "/robot/joint_states",
+          "direction": "host_to_guest",
+          "published": 1501,
+          "received": 1499,
+          "missing_at_evaluation": 2,
+          "latency": {
+            "samples": 1499,
+            "minimum_ms": 0.190834,
+            "median_ms": 0.298349,
+            "mean_ms": 0.4241879146097398,
+            "maximum_ms": 4.660914,
+            "p95_ms": 0.885871,
+            "p99_ms": 1.80931
+          }
+        },
+        {
+          "topic": "/robot/effort_command",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.072101,
+            "median_ms": 0.206552,
+            "mean_ms": 0.21835737866666666,
+            "maximum_ms": 2.06215,
+            "p95_ms": 0.520429,
+            "p99_ms": 0.684502
+          }
+        },
+        {
+          "topic": "/robot/ready",
+          "direction": "guest_to_host",
+          "published": 36,
+          "received": 36,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 36,
+            "minimum_ms": 0.04706,
+            "median_ms": 0.1642215,
+            "mean_ms": 0.1834321111111111,
+            "maximum_ms": 0.524288,
+            "p95_ms": 0.390807,
+            "p99_ms": 0.524288
+          }
+        },
+        {
+          "topic": "/robot/perception_ready",
+          "direction": "guest_to_host",
+          "published": 15,
+          "received": 15,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 15,
+            "minimum_ms": 0.104104,
+            "median_ms": 0.454328,
+            "mean_ms": 0.4042536,
+            "maximum_ms": 0.603218,
+            "p95_ms": 0.603218,
+            "p99_ms": 0.603218
+          }
+        },
+        {
+          "topic": "/benchmark/perception",
+          "direction": "guest_to_host",
+          "published": 45,
+          "received": 45,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 0.133673,
+            "median_ms": 0.352595,
+            "mean_ms": 0.3736468888888889,
+            "maximum_ms": 0.616038,
+            "p95_ms": 0.604038,
+            "p99_ms": 0.616038
+          }
+        },
+        {
+          "topic": "/benchmark/interception",
+          "direction": "guest_to_host",
+          "published": 1,
+          "received": 1,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 1,
+            "minimum_ms": 0.361603,
+            "median_ms": 0.361603,
+            "mean_ms": 0.361603,
+            "maximum_ms": 0.361603,
+            "p95_ms": 0.361603,
+            "p99_ms": 0.361603
+          }
+        },
+        {
+          "topic": "/benchmark/control",
+          "direction": "guest_to_host",
+          "published": 36,
+          "received": 36,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 36,
+            "minimum_ms": 0.055514,
+            "median_ms": 0.19450450000000002,
+            "mean_ms": 0.23479580555555554,
+            "maximum_ms": 0.582453,
+            "p95_ms": 0.566503,
+            "p99_ms": 0.582453
+          }
+        },
+        {
+          "topic": "/benchmark/control_timing",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.049982,
+            "median_ms": 0.310218,
+            "mean_ms": 0.37004545333333333,
+            "maximum_ms": 1.198823,
+            "p95_ms": 0.54079,
+            "p99_ms": 0.582326
+          }
+        }
+      ],
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 182,
+        "copyBytes": 94355240,
+        "fillCalls": 90,
+        "fillBytes": 46655910,
+        "faults": 0
+      },
+      "telemetry": {
+        "clock": "gem5 simulation",
+        "records": {
+          "perception": 62,
+          "interception": 1,
+          "control": 48,
+          "control_timing": 444
+        },
+        "sequence_gaps": 0,
+        "scope": "Received completed updates; in-flight records at shutdown are excluded",
+        "instrumentation": "Per-update clock reads and small reliable ROS records; serialization/export follows the measured computation",
+        "coverage": {
+          "status": "no_missing_delivered_control_timings",
+          "delivered_command_stamps": 375,
+          "matched_control_timings": 375,
+          "missing_control_timings": 0,
+          "first_missing_command_time": null,
+          "last_missing_command_time": null,
+          "streams": {
+            "perception": {
+              "completed_records": 45,
+              "last_completion_time": 2.211233027,
+              "tail_seconds": 0.0027669729999999504
+            },
+            "interception": {
+              "completed_records": 1,
+              "last_completion_time": 0.97553073,
+              "tail_seconds": 1.23846927
+            },
+            "control": {
+              "completed_records": 36,
+              "last_completion_time": 2.202200969,
+              "tail_seconds": 0.011799030999999793
+            },
+            "control_timing": {
+              "completed_records": 375,
+              "last_completion_time": 2.2132959050000003,
+              "tail_seconds": 0.0007040949999996826
+            }
+          },
+          "scope": "Matches independently received effort commands; does not prove delivery of every generated record"
+        }
+      },
+      "launch_validation": {
+        "valid": true,
+        "launch_time": 0.714,
+        "checked_at": 0.7145,
+        "reason": "ballistic_launch_verified",
+        "expected_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999747
+        ],
+        "observed_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999748
+        ],
+        "expected_position_m": [
+          1.7986583592135001,
+          0.04,
+          3.002675924073
+        ],
+        "observed_position_m": [
+          1.7986583592135,
+          0.04,
+          3.002675924073
+        ]
+      }
+    },
+    {
+      "case": "case-003",
+      "status": "completed",
+      "attempt": "ee150440b2994b928220a478f3996954",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": {
+        "success": false,
+        "reason": "outside_cup_at_deadline",
+        "launch_time": 1.418,
+        "result_time": 2.918,
+        "duration": 1.5,
+        "contained_duration": 0,
+        "flight_end_time": 2.918,
+        "flight_end_kind": "duration_elapsed"
+      },
+      "reconnect": {
+        "intervals": 1631,
+        "simulation_seconds": 0.8155,
+        "wall_seconds": 4019.01
+      },
+      "post_save_perception": {
+        "expired_processing": 44,
+        "no_detection": 15,
+        "detected": 9
+      },
+      "perception_counts": {
+        "detected": 9,
+        "expired_processing": 23,
+        "no_detection": 12
+      },
+      "tracked": 2,
+      "plans": [
+        {
+          "time": 1.642921125,
+          "capture_time": 1.5514999999999999,
+          "status": "no_feasible_intercept",
+          "inverse_solutions": 1.0,
+          "inverse_calls": 13.0,
+          "inverse_iterations": 425.0,
+          "planning_budget_seconds": 0.03333333333333333,
+          "planning_simulation_seconds": 0.026316674,
+          "timing_clock": "gem5 simulation",
+          "completed_time": 1.669423053
+        }
+      ],
+      "capture_to_pair": {
+        "samples": 44,
+        "minimum_ms": 24.41345900000025,
+        "median_ms": 37.08087449999997,
+        "maximum_ms": 58.511745999999974
+      },
+      "capture_to_completion": {
+        "samples": 44,
+        "minimum_ms": 56.54141099999998,
+        "median_ms": 68.06906649999989,
+        "maximum_ms": 90.41766299999998
+      },
+      "detection": {
+        "samples": 44,
+        "minimum_ms": 30.810897,
+        "median_ms": 31.025566000000005,
+        "maximum_ms": 37.873061
+      },
+      "rmw_streams": [
+        {
+          "topic": "/stereo/left/image_raw",
+          "direction": "host_to_guest",
+          "published": 46,
+          "received": 45,
+          "missing_at_evaluation": 1,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 24.239114,
+            "median_ms": 36.303807,
+            "mean_ms": 38.4336526,
+            "maximum_ms": 58.362206,
+            "p95_ms": 56.15945,
+            "p99_ms": 58.362206
+          }
+        },
+        {
+          "topic": "/stereo/right/image_raw",
+          "direction": "host_to_guest",
+          "published": 46,
+          "received": 45,
+          "missing_at_evaluation": 1,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 24.369281,
+            "median_ms": 36.440256,
+            "mean_ms": 38.56194204444444,
+            "maximum_ms": 58.465938,
+            "p95_ms": 56.346502,
+            "p99_ms": 58.465938
+          }
+        },
+        {
+          "topic": "/robot/joint_states",
+          "direction": "host_to_guest",
+          "published": 1501,
+          "received": 1499,
+          "missing_at_evaluation": 2,
+          "latency": {
+            "samples": 1499,
+            "minimum_ms": 0.194741,
+            "median_ms": 0.300913,
+            "mean_ms": 0.4201150093395597,
+            "maximum_ms": 3.993601,
+            "p95_ms": 1.183833,
+            "p99_ms": 1.679473
+          }
+        },
+        {
+          "topic": "/robot/effort_command",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.071493,
+            "median_ms": 0.22836,
+            "mean_ms": 0.23579199733333334,
+            "maximum_ms": 1.13975,
+            "p95_ms": 0.502342,
+            "p99_ms": 0.636837
+          }
+        },
+        {
+          "topic": "/robot/ready",
+          "direction": "guest_to_host",
+          "published": 35,
+          "received": 35,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 35,
+            "minimum_ms": 0.045939,
+            "median_ms": 0.183388,
+            "mean_ms": 0.2047546857142857,
+            "maximum_ms": 0.538997,
+            "p95_ms": 0.526577,
+            "p99_ms": 0.538997
+          }
+        },
+        {
+          "topic": "/robot/perception_ready",
+          "direction": "guest_to_host",
+          "published": 14,
+          "received": 14,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 14,
+            "minimum_ms": 0.161812,
+            "median_ms": 0.3166315,
+            "mean_ms": 0.3275117142857143,
+            "maximum_ms": 0.565087,
+            "p95_ms": 0.565087,
+            "p99_ms": 0.565087
+          }
+        },
+        {
+          "topic": "/benchmark/perception",
+          "direction": "guest_to_host",
+          "published": 45,
+          "received": 45,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 45,
+            "minimum_ms": 0.131474,
+            "median_ms": 0.344355,
+            "mean_ms": 0.34078277777777777,
+            "maximum_ms": 0.563426,
+            "p95_ms": 0.551834,
+            "p99_ms": 0.563426
+          }
+        },
+        {
+          "topic": "/benchmark/interception",
+          "direction": "guest_to_host",
+          "published": 1,
+          "received": 1,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 1,
+            "minimum_ms": 0.498874,
+            "median_ms": 0.498874,
+            "mean_ms": 0.498874,
+            "maximum_ms": 0.498874,
+            "p95_ms": 0.498874,
+            "p99_ms": 0.498874
+          }
+        },
+        {
+          "topic": "/benchmark/control",
+          "direction": "guest_to_host",
+          "published": 35,
+          "received": 35,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 35,
+            "minimum_ms": 0.082261,
+            "median_ms": 0.211981,
+            "mean_ms": 0.25714502857142857,
+            "maximum_ms": 0.579558,
+            "p95_ms": 0.578131,
+            "p99_ms": 0.579558
+          }
+        },
+        {
+          "topic": "/benchmark/control_timing",
+          "direction": "guest_to_host",
+          "published": 375,
+          "received": 375,
+          "missing_at_evaluation": 0,
+          "latency": {
+            "samples": 375,
+            "minimum_ms": 0.046867,
+            "median_ms": 0.309479,
+            "mean_ms": 0.3226284506666667,
+            "maximum_ms": 1.218567,
+            "p95_ms": 0.545454,
+            "p99_ms": 0.547627
+          }
+        }
+      ],
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 182,
+        "copyBytes": 94355240,
+        "fillCalls": 90,
+        "fillBytes": 46655910,
+        "faults": 0
+      },
+      "telemetry": {
+        "clock": "gem5 simulation",
+        "records": {
+          "perception": 84,
+          "interception": 1,
+          "control": 64,
+          "control_timing": 618
+        },
+        "sequence_gaps": 0,
+        "scope": "Received completed updates; in-flight records at shutdown are excluded",
+        "instrumentation": "Per-update clock reads and small reliable ROS records; serialization/export follows the measured computation",
+        "coverage": {
+          "status": "no_missing_delivered_control_timings",
+          "delivered_command_stamps": 375,
+          "matched_control_timings": 375,
+          "missing_control_timings": 0,
+          "first_missing_command_time": null,
+          "last_missing_command_time": null,
+          "streams": {
+            "perception": {
+              "completed_records": 45,
+              "last_completion_time": 2.897440512,
+              "tail_seconds": 0.02055948799999996
+            },
+            "interception": {
+              "completed_records": 1,
+              "last_completion_time": 1.669423053,
+              "tail_seconds": 1.248576947
+            },
+            "control": {
+              "completed_records": 35,
+              "last_completion_time": 2.8939445690000003,
+              "tail_seconds": 0.02405543099999985
+            },
+            "control_timing": {
+              "completed_records": 375,
+              "last_completion_time": 2.9173883810000003,
+              "tail_seconds": 0.0006116189999998412
+            }
+          },
+          "scope": "Matches independently received effort commands; does not prove delivery of every generated record"
+        }
+      },
+      "launch_validation": {
+        "valid": true,
+        "launch_time": 1.418,
+        "checked_at": 1.4185,
+        "reason": "ballistic_launch_verified",
+        "expected_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999746
+        ],
+        "observed_velocity_mps": [
+          -1.3416407864998738,
+          0,
+          2.673471572999748
+        ],
+        "expected_position_m": [
+          1.7986583592135,
+          0.04,
+          3.0026759240730003
+        ],
+        "observed_position_m": [
+          1.7986583592135,
+          0.04,
+          3.002675924073
+        ]
+      }
+    },
+    {
+      "case": "case-004",
+      "status": "failed",
+      "attempt": "b0be885928cb48e79df9da788fbe2e06",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": null,
+      "reconnect": null,
+      "post_save_perception": {
+        "expired_processing": 23
+      },
+      "perception_counts": {
+        "expired_processing": 23
+      },
+      "tracked": 0,
+      "plans": [],
+      "capture_to_pair": {
+        "samples": 23,
+        "minimum_ms": 34.813466000000126,
+        "median_ms": 49.784199000000086,
+        "maximum_ms": 64.90099400000004
+      },
+      "capture_to_completion": {
+        "samples": 23,
+        "minimum_ms": 73.20844400000026,
+        "median_ms": 88.34797800000027,
+        "maximum_ms": 103.36907400000005
+      },
+      "detection": {
+        "samples": 23,
+        "minimum_ms": 38.366219,
+        "median_ms": 38.563259,
+        "maximum_ms": 39.656138
+      },
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 118,
+        "copyBytes": 61175400,
+        "fillCalls": 60,
+        "fillBytes": 31103988,
+        "faults": 0
+      },
+      "telemetry": null,
+      "launch_validation": null
+    },
+    {
+      "case": "case-005",
+      "status": "running",
+      "attempt": "f82ef9c128024587ba2d5cc6685e6258",
+      "machine": "ubuntu-george",
+      "collected": false
+    },
+    {
+      "case": "case-006",
+      "status": "failed",
+      "attempt": "def291b8b4544d3c945171cf7c459b56",
+      "machine": "ubuntu-george",
+      "collected": true,
+      "result": null,
+      "reconnect": null,
+      "post_save_perception": {
+        "expired_processing": 22
+      },
+      "perception_counts": {
+        "expired_processing": 22
+      },
+      "tracked": 0,
+      "plans": [],
+      "capture_to_pair": {
+        "samples": 22,
+        "minimum_ms": 34.833259000000005,
+        "median_ms": 49.147624,
+        "maximum_ms": 64.99090000000018
+      },
+      "capture_to_completion": {
+        "samples": 22,
+        "minimum_ms": 73.40544500000001,
+        "median_ms": 88.09159550000012,
+        "maximum_ms": 103.59312300000023
+      },
+      "detection": {
+        "samples": 22,
+        "minimum_ms": 38.38243800000001,
+        "median_ms": 38.564826,
+        "maximum_ms": 39.715955
+      },
+      "trajectory_publications": 0,
+      "functional_copy_counters_last_dump": {
+        "copyCalls": 118,
+        "copyBytes": 61175400,
+        "fillCalls": 60,
+        "fillBytes": 31103988,
+        "faults": 0
+      },
+      "telemetry": null,
+      "launch_validation": null
+    },
+    {
+      "case": "case-007",
+      "status": "running",
+      "attempt": "de1b9b076f4e49d3b8e9fe2b1eea741d",
+      "machine": "ubuntu-george",
+      "collected": false
+    }
+  ]
+}

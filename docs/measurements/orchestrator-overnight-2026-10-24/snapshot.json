@@ -1,0 +1,826 @@
+{
+  "snapshot_unix": 1792822685.1654956,
+  "experiment_id": "52c15e35701e4bfbb5de0b3045db219e",
+  "name": "Memory contention",
+  "status": "running",
+  "created": 1792795183.066389,
+  "source_identity": {
+    "revision": "8b1899f79f751cb90a4a5fc6b5466b9f4e4095e1",
+    "fingerprint": "62db1b947807b2ab458683bd7ccd90f3fd202b45ee82effd4e6e5758de36dee4"
+  },
+  "config": {
+    "version": 1,
+    "fixed": {
+      "duration": 1.5,
+      "warmup": 0,
+      "physics_step": 0.0005,
+      "joint_hz": 1000,
+      "camera_position": [
+        -2,
+        0,
+        2
+      ],
+      "camera_width": 480,
+      "camera_height": 360,
+      "image_age_periods": 2,
+      "guest_dds_shm_bytes": 67108864,
+      "cup_radius": 0.12,
+      "cup_depth": 0.14,
+      "interval_us": 500,
+      "poll_us": 100,
+      "startup_timeout_s": 900,
+      "wall_timeout_s": 43200,
+      "image_diagnostics": false,
+      "pressure_warmup": 0,
+      "transport_backend": "m5ops",
+      "middleware_transport": "fastdds",
+      "m5_module": "",
+      "dma_module": "",
+      "robot_execution": "composed",
+      "middleware_copy_mode": "functional",
+      "readiness_checkpoint": true,
+      "checkpoint_readiness_cpu": "kvm"
+    },
+    "hardware": {
+      "cpu_type": "timing",
+      "num_cores": 2,
+      "cpu_clock": "3GHz",
+      "l1d_size": "16KiB",
+      "l1i_size": "16KiB",
+      "l1_assoc": 8,
+      "l2_size": "256KiB",
+      "l2_assoc": 16
+    },
+    "ramulator_config": "gem5/ext/ramulator2/configs/lpddr5-6400-orin.json",
+    "throws": [
+      {
+        "name": "loft-3",
+        "launch_position": [
+          1.8,
+          0.04,
+          3
+        ],
+        "launch_direction": [
+          -1,
+          0,
+          2
+        ],
+        "launch_speed": 3
+      },
+      {
+        "name": "loft-5",
+        "launch_position": [
+          4.36,
+          0.04,
+          3
+        ],
+        "launch_direction": [
+          -1,
+          0,
+          1
+        ],
+        "launch_speed": 5
+      }
+    ],
+    "rates": [
+      {
+        "name": "camera_30",
+        "camera_hz": 30,
+        "planner_hz": 30,
+        "plan_interval": 0.06,
+        "control_hz": 250
+      }
+    ],
+    "patterns": [
+      "random",
+      "stride",
+      "stream"
+    ],
+    "pressure": [
+      0,
+      0.9
+    ],
+    "aggressor": {
+      "read_percent": 80,
+      "stride": 4096,
+      "max_pending": 512,
+      "window": 268435456,
+      "seed": 1,
+      "backpressure": true,
+      "duty_percent": 100,
+      "period": 12000
+    },
+    "calibration": {
+      "warmup_ns": 100000,
+      "duration_ns": 1000000
+    }
+  },
+  "checkpoint": {
+    "version": 2,
+    "transport_backend": "m5ops",
+    "hardware": {
+      "cpu_type": "timing",
+      "num_cores": 2,
+      "cpu_clock": "3GHz",
+      "l1d_size": "16KiB",
+      "l1i_size": "16KiB",
+      "l1_assoc": 8,
+      "l2_size": "256KiB",
+      "l2_assoc": 16
+    },
+    "boundary_tick": 11583753895020,
+    "saved_tick": 11589367894471,
+    "readiness_cpu": "kvm",
+    "time_origin_ns": 10987753895,
+    "aggressor_enabled": false
+  },
+  "cases": [
+    {
+      "id": "case-000",
+      "point": {
+        "id": "case-000",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-3 \u00b7 camera_30 \u00b7 baseline",
+        "throw": {
+          "name": "loft-3",
+          "launch_position": [
+            1.8,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            2
+          ],
+          "launch_speed": 3
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "none",
+        "pressure": 0,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "failed",
+      "attempts": [
+        {
+          "id": "1c76ce8e243f4084b62236a97ef9607b",
+          "machine": "ubuntu-george",
+          "started": 1792799317.2946372,
+          "status": "failed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-000",
+            "status": "running",
+            "cpu_type": "timing",
+            "phase": "Initializing detailed simulation",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/1c76ce8e243f4084b62236a97ef9607b/suite/case-000-attempt-001",
+            "readiness": {
+              "arm": true,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 240,
+            "last_command_age_ms": 0.16528999999998462
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/1c76ce8e243f4084b62236a97ef9607b",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 4910221361,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.57 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792804065.834347,
+          "exit_code": 2,
+          "oom": false,
+          "failure_notified": true,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-001",
+      "point": {
+        "id": "case-001",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-3 \u00b7 camera_30 \u00b7 random 90%",
+        "throw": {
+          "name": "loft-3",
+          "launch_position": [
+            1.8,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            2
+          ],
+          "launch_speed": 3
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "random",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "completed",
+      "attempts": [
+        {
+          "id": "3f4e01e4fbc64714bf1196bcf11aac2c",
+          "machine": "ubuntu-george",
+          "started": 1792799317.2979476,
+          "status": "completed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-001",
+            "status": "complete",
+            "cpu_type": "timing",
+            "phase": "Task scored",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/3f4e01e4fbc64714bf1196bcf11aac2c/suite/case-001-attempt-001",
+            "simulated_seconds": 1.5005,
+            "completed_exchanges": 3001,
+            "wall_seconds": 14702.22871429,
+            "average_speed": 0.00010205935638462566,
+            "last_update_age_seconds": 5.1547651290893555,
+            "readiness": {
+              "arm": true,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 573,
+            "last_command_age_ms": 0.10324399999994682,
+            "throw_seconds": 0.08050000000000002,
+            "duration_seconds": 1.5,
+            "throw_percent": 5.366666666666667,
+            "outcome": "MISS"
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/3f4e01e4fbc64714bf1196bcf11aac2c",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 4803920920,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.47 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792818208.0828824,
+          "exit_code": 0,
+          "oom": false,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-002",
+      "point": {
+        "id": "case-002",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-3 \u00b7 camera_30 \u00b7 stride 90%",
+        "throw": {
+          "name": "loft-3",
+          "launch_position": [
+            1.8,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            2
+          ],
+          "launch_speed": 3
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "stride",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "completed",
+      "attempts": [
+        {
+          "id": "b373b73ca3554d6d9e17103a6b15fff9",
+          "machine": "ubuntu-george",
+          "started": 1792799317.3024032,
+          "status": "completed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-002",
+            "status": "complete",
+            "cpu_type": "timing",
+            "phase": "Task scored",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b373b73ca3554d6d9e17103a6b15fff9/suite/case-002-attempt-001",
+            "simulated_seconds": 1.5005,
+            "completed_exchanges": 3001,
+            "wall_seconds": 10132.721803433,
+            "average_speed": 0.00014808459455500155,
+            "last_update_age_seconds": 7.843340873718262,
+            "readiness": {
+              "arm": true,
+              "perception": true,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 395,
+            "last_command_age_ms": 0.2046280000000955,
+            "throw_seconds": 0.7865,
+            "duration_seconds": 1.5,
+            "throw_percent": 52.43333333333333,
+            "outcome": "MISS"
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b373b73ca3554d6d9e17103a6b15fff9",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 4879082848,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.54 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792810292.727802,
+          "exit_code": 0,
+          "oom": false,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-003",
+      "point": {
+        "id": "case-003",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-3 \u00b7 camera_30 \u00b7 stream 90%",
+        "throw": {
+          "name": "loft-3",
+          "launch_position": [
+            1.8,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            2
+          ],
+          "launch_speed": 3
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "stream",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "completed",
+      "attempts": [
+        {
+          "id": "ee150440b2994b928220a478f3996954",
+          "machine": "ubuntu-george",
+          "started": 1792799317.3045852,
+          "status": "completed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-003",
+            "status": "complete",
+            "cpu_type": "timing",
+            "phase": "Task scored",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/ee150440b2994b928220a478f3996954/suite/case-003-attempt-001",
+            "simulated_seconds": 1.5005,
+            "completed_exchanges": 3001,
+            "wall_seconds": 10874.981868417,
+            "average_speed": 0.00013797724153984432,
+            "last_update_age_seconds": 5.543303489685059,
+            "readiness": {
+              "arm": true,
+              "perception": true,
+              "warmup_elapsed": 0.15149999999999997,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 569,
+            "last_command_age_ms": 0.08676399999973938,
+            "throw_seconds": 0.08250000000000002,
+            "duration_seconds": 1.5,
+            "throw_percent": 5.500000000000001,
+            "outcome": "MISS"
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/ee150440b2994b928220a478f3996954",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 4831838208,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.50 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792814499.7675264,
+          "exit_code": 0,
+          "oom": false,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-004",
+      "point": {
+        "id": "case-004",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-5 \u00b7 camera_30 \u00b7 baseline",
+        "throw": {
+          "name": "loft-5",
+          "launch_position": [
+            4.36,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            1
+          ],
+          "launch_speed": 5
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "none",
+        "pressure": 0,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "failed",
+      "attempts": [
+        {
+          "id": "b0be885928cb48e79df9da788fbe2e06",
+          "machine": "ubuntu-george",
+          "started": 1792804068.2689624,
+          "status": "failed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-004",
+            "status": "running",
+            "cpu_type": "timing",
+            "phase": "Initializing detailed simulation",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b0be885928cb48e79df9da788fbe2e06/suite/case-004-attempt-001",
+            "readiness": {
+              "arm": true,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 238,
+            "last_command_age_ms": 0.13844400000007084
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b0be885928cb48e79df9da788fbe2e06",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 5288178483,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.92 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792808751.123529,
+          "exit_code": 2,
+          "oom": false,
+          "failure_notified": true,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-005",
+      "point": {
+        "id": "case-005",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-5 \u00b7 camera_30 \u00b7 random 90%",
+        "throw": {
+          "name": "loft-5",
+          "launch_position": [
+            4.36,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            1
+          ],
+          "launch_speed": 5
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "random",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "running",
+      "attempts": [
+        {
+          "id": "f82ef9c128024587ba2d5cc6685e6258",
+          "machine": "ubuntu-george",
+          "started": 1792808753.488928,
+          "status": "running",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-005",
+            "status": "running",
+            "cpu_type": "timing",
+            "phase": "Ball launched",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/f82ef9c128024587ba2d5cc6685e6258/suite/case-005-attempt-001",
+            "simulated_seconds": 1.3785,
+            "completed_exchanges": 2757,
+            "wall_seconds": 13214.031766654,
+            "average_speed": 0.00010432092372281756,
+            "last_update_age_seconds": 2.099886417388916,
+            "readiness": {
+              "arm": false,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 362,
+            "last_command_age_ms": 0.2996600000000349,
+            "throw_seconds": 0.6635000000000001,
+            "duration_seconds": 1.5,
+            "throw_percent": 44.23333333333334
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/f82ef9c128024587ba2d5cc6685e6258",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 5192615460,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.84 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true
+        }
+      ],
+      "eta_seconds": 8018.525624088552,
+      "eta_basis": "Throw progress; excludes finalization"
+    },
+    {
+      "id": "case-006",
+      "point": {
+        "id": "case-006",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-5 \u00b7 camera_30 \u00b7 stride 90%",
+        "throw": {
+          "name": "loft-5",
+          "launch_position": [
+            4.36,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            1
+          ],
+          "launch_speed": 5
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "stride",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "failed",
+      "attempts": [
+        {
+          "id": "def291b8b4544d3c945171cf7c459b56",
+          "machine": "ubuntu-george",
+          "started": 1792810295.12109,
+          "status": "failed",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-006",
+            "status": "infrastructure_failure",
+            "cpu_type": "timing",
+            "phase": "Co-simulation component failed",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/def291b8b4544d3c945171cf7c459b56/suite/case-006-attempt-001",
+            "readiness": {
+              "arm": true,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 238,
+            "last_command_age_ms": 0.12565300000000335,
+            "reason": "[gazebo_host_bridge-4] Host bridge: Restored DDS did not reconnect fresh control and stereo traffic",
+            "host_running_after_guest_failure": false
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/def291b8b4544d3c945171cf7c459b56",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 5224827715,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.87 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true,
+          "finished": 1792815002.7677794,
+          "exit_code": 2,
+          "oom": false,
+          "failure_notified": true,
+          "collected": true,
+          "collection_status": "completed",
+          "remote_released": true
+        }
+      ],
+      "eta_seconds": null,
+      "eta_basis": "Insufficient data"
+    },
+    {
+      "id": "case-007",
+      "point": {
+        "id": "case-007",
+        "cpu_type": "timing",
+        "ramulator_sha256": "672af95b1aac3bbe2468fe60bb19a81982d41062499dc11b1cc1e0fe6aa657b1",
+        "label": "TIMING \u00b7 loft-5 \u00b7 camera_30 \u00b7 stream 90%",
+        "throw": {
+          "name": "loft-5",
+          "launch_position": [
+            4.36,
+            0.04,
+            3
+          ],
+          "launch_direction": [
+            -1,
+            0,
+            1
+          ],
+          "launch_speed": 5
+        },
+        "rates": {
+          "name": "camera_30",
+          "camera_hz": 30,
+          "planner_hz": 30,
+          "plan_interval": 0.06,
+          "control_hz": 250
+        },
+        "pattern": "stream",
+        "pressure": 0.9,
+        "status": "pending",
+        "trials": [],
+        "expected_throws": 1
+      },
+      "status": "running",
+      "attempts": [
+        {
+          "id": "de1b9b076f4e49d3b8e9fe2b1eea741d",
+          "machine": "ubuntu-george",
+          "started": 1792814502.1203446,
+          "status": "running",
+          "cpus": 2,
+          "memory": "3g",
+          "progress": {
+            "case": "case-007",
+            "status": "running",
+            "cpu_type": "timing",
+            "phase": "Ball launched",
+            "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/de1b9b076f4e49d3b8e9fe2b1eea741d/suite/case-007-attempt-001",
+            "simulated_seconds": 1.1025,
+            "completed_exchanges": 2205,
+            "wall_seconds": 7476.771163044,
+            "average_speed": 0.0001474566996846727,
+            "last_update_age_seconds": 2.045210599899292,
+            "readiness": {
+              "arm": false,
+              "perception": false,
+              "warmup_elapsed": 0.0,
+              "warmup_required": 0.0
+            },
+            "delivered_commands": 296,
+            "last_command_age_ms": -0.14930400000001676,
+            "throw_seconds": 0.3975000000000001,
+            "duration_seconds": 1.5,
+            "throw_percent": 26.500000000000004
+          },
+          "remote_output": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/de1b9b076f4e49d3b8e9fe2b1eea741d",
+          "memory_budget_bytes": 3221225472,
+          "memory_peak_bytes": 5317169512,
+          "start_notified": true,
+          "memory_warning": "RAM budget exceeded: observed 4.95 GiB against 3.00 GiB configured. Worker may continue above budget; increase RAM per worker or reduce worker count for future runs.",
+          "memory_warning_notified": true
+        }
+      ],
+      "eta_seconds": 7476.771163044,
+      "eta_basis": "Throw progress; excludes finalization"
+    }
+  ],
+  "preparations": {
+    "ubuntu-george": {
+      "status": "ready",
+      "collected": true,
+      "task": "52c15e35701e4bfbb5de0b3045db219e-prepare",
+      "started": 1792795188.7443914,
+      "phase": "Ready",
+      "progress": {
+        "phase": "Prepared inputs ready",
+        "elapsed_seconds": 4128.162101507187
+      },
+      "error": null,
+      "collection_status": "completed"
+    },
+    "pop-os": {
+      "status": "failed",
+      "phase": "Image transfer failed",
+      "error": "Direct image transfer failed: Timeout, server ubuntu-george not responding.\r\n",
+      "transfer": {
+        "phase": "Streaming",
+        "image_id": null,
+        "bytes_sent": 1673003008,
+        "elapsed_seconds": 60.09993092995137,
+        "bytes_per_second": 27837020.47760995,
+        "eta_seconds": 160.44556394803178,
+        "eta_basis": "Estimated image size and observed export/network throughput; excludes loading and verification",
+        "updated": 1792799378.6262972,
+        "image_kind": "Application",
+        "image_index": 1,
+        "image_count": 2,
+        "source": "ubuntu-george"
+      }
+    }
+  },
+  "machines": [
+    {
+      "id": "pop-os",
+      "name": "pop-os",
+      "workers": 4,
+      "cpus": 2,
+      "memory": "3g"
+    },
+    {
+      "id": "ubuntu-george",
+      "name": "ubuntu-george",
+      "workers": 4,
+      "cpus": 2,
+      "memory": "3g"
+    }
+  ],
+  "evidence_sha256": "e2ebaf9dee6953ebf54cb082cf52f0725f4b153dba39f887bb298256d659d755"
+}

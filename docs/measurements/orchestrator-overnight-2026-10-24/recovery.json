@@ -1,0 +1,267 @@
+{
+  "time": 1792824171.7616127,
+  "source_identity": {
+    "revision": "8b1899f79f751cb90a4a5fc6b5466b9f4e4095e1",
+    "fingerprint": "2eddb5b81c57474c3af2c948e6679b756bdd2bc060d4eb2a9810263ead36210f"
+  },
+  "machines": [
+    {
+      "id": "pop-os",
+      "online": true,
+      "error": null
+    },
+    {
+      "id": "ubuntu-george",
+      "online": true,
+      "error": null
+    }
+  ],
+  "pop_preparation": {
+    "status": "ready",
+    "phase": "Ready",
+    "sdk_image_id": "sha256:9765d70e06f6fd55956476aa8c959f3c2a0097fcc50246042c62ec410eb1d4fd",
+    "application_image_id": "sha256:fcc9de735568fc2a0ed1ff6a4e5fb470b50079baa43f9e400d85a4dffb76632a",
+    "collected": true,
+    "task": "52c15e35701e4bfbb5de0b3045db219e-prepare",
+    "started": 1792823759.3119054,
+    "progress": {
+      "phase": "Prepared inputs ready",
+      "elapsed_seconds": 53.04999136924744
+    },
+    "error": null,
+    "collection_status": "completed"
+  },
+  "cases": [
+    {
+      "id": "case-000",
+      "status": "running",
+      "attempt": "fa6af66c0bd444b1906a24406675ae1a",
+      "machine": "pop-os",
+      "progress": {
+        "case": "case-000",
+        "status": "running",
+        "cpu_type": "timing",
+        "phase": "Initializing detailed simulation",
+        "attempt": "/home/kkgiorgos/University/Diploma/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/fa6af66c0bd444b1906a24406675ae1a/suite/case-000-attempt-001",
+        "readiness": {
+          "arm": true,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 3,
+        "last_command_age_ms": 0.14430900000006464
+      }
+    },
+    {
+      "id": "case-001",
+      "status": "completed",
+      "attempt": "3f4e01e4fbc64714bf1196bcf11aac2c",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-001",
+        "status": "complete",
+        "cpu_type": "timing",
+        "phase": "Task scored",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/3f4e01e4fbc64714bf1196bcf11aac2c/suite/case-001-attempt-001",
+        "simulated_seconds": 1.5005,
+        "completed_exchanges": 3001,
+        "wall_seconds": 14702.22871429,
+        "average_speed": 0.00010205935638462566,
+        "last_update_age_seconds": 5.1547651290893555,
+        "readiness": {
+          "arm": true,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 573,
+        "last_command_age_ms": 0.10324399999994682,
+        "throw_seconds": 0.08050000000000002,
+        "duration_seconds": 1.5,
+        "throw_percent": 5.366666666666667,
+        "outcome": "MISS"
+      }
+    },
+    {
+      "id": "case-002",
+      "status": "completed",
+      "attempt": "b373b73ca3554d6d9e17103a6b15fff9",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-002",
+        "status": "complete",
+        "cpu_type": "timing",
+        "phase": "Task scored",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b373b73ca3554d6d9e17103a6b15fff9/suite/case-002-attempt-001",
+        "simulated_seconds": 1.5005,
+        "completed_exchanges": 3001,
+        "wall_seconds": 10132.721803433,
+        "average_speed": 0.00014808459455500155,
+        "last_update_age_seconds": 7.843340873718262,
+        "readiness": {
+          "arm": true,
+          "perception": true,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 395,
+        "last_command_age_ms": 0.2046280000000955,
+        "throw_seconds": 0.7865,
+        "duration_seconds": 1.5,
+        "throw_percent": 52.43333333333333,
+        "outcome": "MISS"
+      }
+    },
+    {
+      "id": "case-003",
+      "status": "completed",
+      "attempt": "ee150440b2994b928220a478f3996954",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-003",
+        "status": "complete",
+        "cpu_type": "timing",
+        "phase": "Task scored",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/ee150440b2994b928220a478f3996954/suite/case-003-attempt-001",
+        "simulated_seconds": 1.5005,
+        "completed_exchanges": 3001,
+        "wall_seconds": 10874.981868417,
+        "average_speed": 0.00013797724153984432,
+        "last_update_age_seconds": 5.543303489685059,
+        "readiness": {
+          "arm": true,
+          "perception": true,
+          "warmup_elapsed": 0.15149999999999997,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 569,
+        "last_command_age_ms": 0.08676399999973938,
+        "throw_seconds": 0.08250000000000002,
+        "duration_seconds": 1.5,
+        "throw_percent": 5.500000000000001,
+        "outcome": "MISS"
+      }
+    },
+    {
+      "id": "case-004",
+      "status": "failed",
+      "attempt": "b0be885928cb48e79df9da788fbe2e06",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-004",
+        "status": "running",
+        "cpu_type": "timing",
+        "phase": "Initializing detailed simulation",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/b0be885928cb48e79df9da788fbe2e06/suite/case-004-attempt-001",
+        "readiness": {
+          "arm": true,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 238,
+        "last_command_age_ms": 0.13844400000007084
+      }
+    },
+    {
+      "id": "case-005",
+      "status": "completed",
+      "attempt": "f82ef9c128024587ba2d5cc6685e6258",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-005",
+        "status": "complete",
+        "cpu_type": "timing",
+        "phase": "Task scored",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/f82ef9c128024587ba2d5cc6685e6258/suite/case-005-attempt-001",
+        "simulated_seconds": 1.5005,
+        "completed_exchanges": 3001,
+        "wall_seconds": 14412.639128504,
+        "average_speed": 0.0001041100097366934,
+        "last_update_age_seconds": 6.265396595001221,
+        "readiness": {
+          "arm": false,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 393,
+        "last_command_age_ms": 0.18986300000012335,
+        "throw_seconds": 0.7855,
+        "duration_seconds": 1.5,
+        "throw_percent": 52.36666666666667,
+        "outcome": "MISS"
+      }
+    },
+    {
+      "id": "case-006",
+      "status": "failed",
+      "attempt": "def291b8b4544d3c945171cf7c459b56",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-006",
+        "status": "infrastructure_failure",
+        "cpu_type": "timing",
+        "phase": "Co-simulation component failed",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/def291b8b4544d3c945171cf7c459b56/suite/case-006-attempt-001",
+        "readiness": {
+          "arm": true,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 238,
+        "last_command_age_ms": 0.12565300000000335,
+        "reason": "[gazebo_host_bridge-4] Host bridge: Restored DDS did not reconnect fresh control and stereo traffic",
+        "host_running_after_guest_failure": false
+      }
+    },
+    {
+      "id": "case-007",
+      "status": "running",
+      "attempt": "de1b9b076f4e49d3b8e9fe2b1eea741d",
+      "machine": "ubuntu-george",
+      "progress": {
+        "case": "case-007",
+        "status": "running",
+        "cpu_type": "timing",
+        "phase": "Ball launched",
+        "attempt": "/home/kkgiorgos/Chimaera/.chimaera-orchestrator/experiments/52c15e35701e4bfbb5de0b3045db219e/attempts/de1b9b076f4e49d3b8e9fe2b1eea741d/suite/case-007-attempt-001",
+        "simulated_seconds": 1.3135000000000001,
+        "completed_exchanges": 2627,
+        "wall_seconds": 8965.939310831,
+        "average_speed": 0.00014649887250667323,
+        "last_update_age_seconds": 1.543163776397705,
+        "readiness": {
+          "arm": false,
+          "perception": false,
+          "warmup_elapsed": 0.0,
+          "warmup_required": 0.0
+        },
+        "delivered_commands": 349,
+        "last_command_age_ms": 0.0842020000000332,
+        "throw_seconds": 0.6085000000000002,
+        "duration_seconds": 1.5,
+        "throw_percent": 40.56666666666668
+      }
+    }
+  ],
+  "bulk_ssh": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=8",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=12",
+    "-p",
+    "22",
+    "--",
+    "worker"
+  ]
+}
