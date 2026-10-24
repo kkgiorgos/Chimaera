@@ -151,7 +151,7 @@ public:
             guestRecords_ << msg->data << '\n';
             guestRecords_.flush();
           }
-          if (reconnectAfterNs_ >= 0 && !liveCamera_ && stream == "perception") {
+          if (reconnectAfterNs_ >= 0 && stream == "perception") {
             std::unique_ptr<json_object, decltype(&json_object_put)> root(
               json_tokener_parse(msg->data.c_str()), json_object_put);
             json_object * record = nullptr, * capture = nullptr, * status = nullptr;
@@ -161,9 +161,11 @@ public:
               const bool expired = json_object_object_get_ex(record, "status", &status) &&
                 json_object_is_type(status, json_type_string) &&
                 std::string(json_object_get_string(status)) == "expired_processing";
-              if (std::isfinite(time) && time * 1e9 > reconnectAfterNs_ && !expired) {
+              if (std::isfinite(time) && time * 1e9 > reconnectAfterNs_) {
                 std::lock_guard<std::mutex> lock(mutex_);
-                liveCamera_ = true;
+                ++newStereoRecords_;
+                if (expired) ++expiredStereoRecords_;
+                else liveCamera_ = true;
               }
             }
           }
@@ -280,6 +282,19 @@ public:
       loggedCameras_ = cameras_;
     }
     const bool readyToLaunch = readySince_ >= 0 && now - readySince_ + 1e-8 >= warmup_;
+    if (reconnectAfterNs_ >= 0 && !reconnected_ && now - lastReconnectStatus_ >= .05) {
+      const auto path = output_ + "/checkpoint-reconnect-status.json";
+      std::ofstream status(path + ".tmp");
+      status << std::boolalpha << "{\"live_control\":" << liveControl_
+             << ",\"arm_ready\":" << ready_ << ",\"perception_ready\":" << cameras_
+             << ",\"live_camera\":" << liveCamera_
+             << ",\"new_stereo_records\":" << newStereoRecords_
+             << ",\"expired_stereo_records\":" << expiredStereoRecords_ << "}\n";
+      status.close();
+      if (!status) throw std::runtime_error("Cannot save checkpoint readiness diagnostics");
+      std::filesystem::rename(path + ".tmp", path);
+      lastReconnectStatus_ = now;
+    }
     if (reconnectAfterNs_ >= 0 && !reconnected_ && readyToLaunch && liveControl_ && liveCamera_) {
       std::ofstream marker(output_ + "/checkpoint-reconnected");
       marker << '\n'; marker.flush();
@@ -483,6 +498,8 @@ private:
   bool checkpointGate_{false};
   int64_t reconnectAfterNs_{-1};
   bool liveControl_{false}, liveCamera_{false}, reconnected_{false};
+  uint64_t newStereoRecords_{}, expiredStereoRecords_{};
+  double lastReconnectStatus_{-1};
   std::set<std::string> checkpointRecordReaders_;
   mutable std::mutex mutex_;
   std::unique_ptr<CommandReplay> commandReplay_;

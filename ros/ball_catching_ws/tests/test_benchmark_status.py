@@ -66,6 +66,25 @@ def test_simulator_assertion_is_reported_before_the_cascading_bridge_disconnect(
     assert benchmark_status.host_failure(log) == failure
 
 
+def test_restore_failure_distinguishes_expired_perception_from_missing_transport(tmp_path):
+    import json
+    log = tmp_path / 'launch.log'
+    failure = ('[gazebo_host_bridge-4] Host bridge: '
+               'Restored DDS did not reconnect fresh control and stereo traffic')
+    log.write_text(failure + '\n')
+    assert benchmark_status.host_failure(log) == failure
+    diagnostics = tmp_path / 'checkpoint-reconnect-status.json'
+    diagnostics.write_text(json.dumps(dict(live_control=True, arm_ready=True,
+        perception_ready=False, live_camera=False, new_stereo_records=23, expired_stereo_records=23)))
+    result = benchmark_status.host_failure(log)
+    assert 'Restored application did not reach readiness' in result
+    assert 'live_control=true' in result
+    assert 'received 23 stereo records, 23 expired during processing' in result
+    for incomplete in ('{"live_control":', '{}', '[]'):
+        diagnostics.write_text(incomplete)
+        assert benchmark_status.host_failure(log) == failure
+
+
 def test_checkpoint_bridge_failure_stops_a_host_that_has_not_exited(tmp_path, monkeypatch):
     import types
     scene = types.ModuleType('ball_catching_sim.scene')

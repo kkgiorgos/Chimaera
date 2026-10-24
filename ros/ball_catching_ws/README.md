@@ -164,6 +164,13 @@ for 50 simulated ms by default, then reset statistics immediately before throwin
 Ball position/direction/speed remain independent host-side launch settings.
 Guests read gem5 time directly; `/clock` is absent from both the host/guest
 routes and the benchmark's Gazebo-to-ROS bridge. Native runs retain ROS simulation time.
+Camera, ball-state, geometry, and planner feedback subscriptions retain the latest
+sample. Perception skips queued stereo pairs when their remaining freshness
+budget is smaller than its measured processing cost; the configured image-age
+limit still applies after detection and estimation. Perception readiness requires
+completed fresh work. During checkpoint reconnection,
+`checkpoint-reconnect-status.json` distinguishes missing control traffic from
+received stereo pairs that expire during processing.
 Rebuild gem5, transport, `chimaera_ros_bridge` and `ball_catching_sim`, then prepare
 a new experiment and checkpoints after updating.
 See [the experiment protocol](../../docs/ball-catching-memory-contention.md)

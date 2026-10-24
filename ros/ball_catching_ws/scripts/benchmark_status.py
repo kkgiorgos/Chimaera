@@ -35,11 +35,25 @@ def guest_failure(path):
 
 
 def host_failure(path):
-    return explicit_failure(path, (
+    error = explicit_failure(path, (
         r'^\[[^\r\n]+\] Host bridge: .*\bsocket timeout\b[^\r\n]*\r?$',
         r'^\[[^\r\n]+\] .*Assertion .+ failed\.\r?$',
         r'^\[[^\r\n]+\] .*\b(?:panic|fatal): .+\r?$',
         r'^\[[^\r\n]+\] Host bridge: .+\r?$'))
+    if error and 'Restored DDS did not reconnect fresh control and stereo traffic' in error:
+        try:
+            status = json.loads((Path(path).parent / 'checkpoint-reconnect-status.json').read_text())
+            if not isinstance(status, dict):
+                return error
+            flags = ', '.join(f'{key}={str(status[key]).lower()}' for key in
+                              ('live_control', 'arm_ready', 'perception_ready', 'live_camera'))
+            error = error.replace('Restored DDS did not reconnect fresh control and stereo traffic',
+                                  'Restored application did not reach readiness')
+            return (f"{error}; {flags}; received {status['new_stereo_records']} stereo records, "
+                    f"{status['expired_stereo_records']} expired during processing")
+        except (OSError, ValueError, KeyError):
+            pass  # Keep the original failure if diagnostics are unavailable.
+    return error
 
 
 def launch_failure(path):
