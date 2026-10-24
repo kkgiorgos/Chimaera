@@ -23,8 +23,7 @@ public:
     record_(declare_parameter<std::string>("output", ""), "perception", this),
     processingClock_(*this),
     imageClock_(
-      [this] { return now().nanoseconds(); },
-      get_parameter("gem5_clock_library").as_string(),
+      [this] { return now().nanoseconds(); }, get_parameter("gem5_clock_library").as_string(),
       get_parameter("gem5_time_origin_file").as_string())
   {
     const auto cameraHz = declare_parameter("camera_hz", 90.);
@@ -34,6 +33,7 @@ public:
       periods / cameraHz > 3600)
       throw std::invalid_argument("invalid image freshness budget");
     imageAgeNs_ = static_cast<int64_t>(std::ceil(periods / cameraHz * 1e9));
+    admission_ = std::make_unique<ImageAdmission>(imageAgeNs_);
     imageDiagnostics_ = declare_parameter<bool>("image_diagnostics", false);
     cv::setNumThreads(1);
     state_ =
@@ -41,7 +41,7 @@ public:
     geometry_ = create_publisher<geometry_msgs::msg::Vector3Stamped>(
       "/robot/ball_geometry", rclcpp::SensorDataQoS());
     ready_ = create_publisher<std_msgs::msg::Bool>("/robot/perception_ready", 1);
-    timer_ = timer(*this, .1, [this] {
+    timer_ = timer(*this, std::min(.1, periods / cameraHz / 2), [this] {
       std_msgs::msg::Bool msg;
       msg.data = fresh_image(lastCapture_, imageClock_.now(), imageAgeNs_);
       ready_->publish(msg);
@@ -49,15 +49,15 @@ public:
     for (int i = 0; i < 2; ++i) {
       const std::string side = i == 0 ? "left" : "right";
       subscriptions_[i] = create_subscription<sensor_msgs::msg::Image>(
-        "/stereo/" + side + "/image_raw", rclcpp::SensorDataQoS(),
+        "/stereo/" + side + "/image_raw", rclcpp::SensorDataQoS().keep_last(1),
         [this, i](sensor_msgs::msg::Image::ConstSharedPtr msg) { image(msg, i); });
     }
   }
   ~Perception() override
   {
     RCLCPP_INFO(
-      get_logger(), "Image freshness: stale inputs=%lu, expired processing=%lu", staleInputs_,
-      expiredPairs_);
+      get_logger(), "Image freshness: stale inputs=%lu, budget drops=%lu, expired processing=%lu",
+      staleInputs_, budgetDrops_, expiredPairs_);
   }
 
 private:
@@ -88,17 +88,26 @@ private:
       staleInput();
       return;
     }
+    if (!admission_->accepts(key, current)) {
+      if (++budgetDrops_ == 1)
+        RCLCPP_WARN(get_logger(), "Skipping queued stereo pairs without processing headroom");
+      return;
+    }
     lastImages_ = static_cast<double>(*current) * 1e-9;
-    lastCapture_ = key;
     const auto started = processingClock_.now();
-    const auto recordExpired = [&](Field conversion, Field detection = nullptr,
-                                   Field estimation = nullptr) {
-      record_.write({{"capture_time", seconds(msg->header.stamp)},
-        {"receive_time", lastImages_}, {"status", "expired_processing"},
-        {"processing_wall_seconds", processingClock_.elapsed(started)},
-        {"image_conversion_wall_seconds", conversion},
-        {"detection_wall_seconds", detection}, {"estimation_wall_seconds", estimation}});
-    };
+    const auto recordExpired =
+      [&](Field conversion, Field detection = nullptr, Field estimation = nullptr) {
+        record_.write(
+          {{"capture_time", seconds(msg->header.stamp)},
+           {"receive_time", lastImages_},
+           {"status", "expired_processing"},
+           {"processing_wall_seconds", processingClock_.elapsed(started)},
+           {"image_conversion_wall_seconds", conversion},
+           {"detection_wall_seconds", detection},
+           {"estimation_wall_seconds", estimation},
+           {"budget_drops", static_cast<double>(budgetDrops_)},
+           {"stale_inputs", static_cast<double>(staleInputs_)}});
+      };
     std::array<cv::Mat, 2> images;
     for (int i = 0; i < 2; ++i) {
       const auto & frame = *pair[i];
@@ -117,7 +126,9 @@ private:
         images[i] = view;
     }
     const auto conversionSeconds = processingClock_.elapsed(started);
-    if (!fresh_image(key, imageTime("converted", key), imageAgeNs_)) {
+    const auto converted = imageTime("converted", key);
+    if (!fresh_image(key, converted, imageAgeNs_)) {
+      admission_->observe(current, converted);
       expiredPair();
       recordExpired(conversionSeconds);
       return;
@@ -126,18 +137,23 @@ private:
     const double capture = seconds(msg->header.stamp);
     const auto detection = stereo_.detect(images[0], images[1], filter_.predict(capture));
     const auto detectionSeconds = processingClock_.elapsed(detectionStarted);
-    if (!fresh_image(key, imageTime("detected", key), imageAgeNs_)) {
+    const auto detected = imageTime("detected", key);
+    admission_->observe(current, detected);
+    if (!fresh_image(key, detected, imageAgeNs_)) {
       expiredPair();
       recordExpired(conversionSeconds, detectionSeconds);
       return;
     }
     if (!detection) {
+      lastCapture_ = key;
       record_.write(
         {{"capture_time", capture},
          {"receive_time", lastImages_},
          {"processing_wall_seconds", processingClock_.elapsed(started)},
          {"image_conversion_wall_seconds", conversionSeconds},
          {"detection_wall_seconds", detectionSeconds},
+         {"budget_drops", static_cast<double>(budgetDrops_)},
+         {"stale_inputs", static_cast<double>(staleInputs_)},
          {"status", "no_detection"}});
       return;
     }
@@ -147,11 +163,14 @@ private:
       candidate.observe(detection->point, capture, stereo_.observationNoise(detection->point));
     const auto estimationSeconds = processingClock_.elapsed(estimationStarted);
     const auto publicationStarted = processingClock_.now();
-    if (!fresh_image(key, imageTime("estimated", key), imageAgeNs_)) {
+    const auto estimated = imageTime("estimated", key);
+    admission_->observe(current, estimated);
+    if (!fresh_image(key, estimated, imageAgeNs_)) {
       expiredPair();
       recordExpired(conversionSeconds, detectionSeconds, estimationSeconds);
       return;
     }
+    lastCapture_ = key;
     filter_ = std::move(candidate);
     geometry_msgs::msg::Vector3Stamped geometry;
     geometry.header.stamp = msg->header.stamp;
@@ -190,6 +209,8 @@ private:
        {"detection_wall_seconds", detectionSeconds},
        {"estimation_wall_seconds", estimationSeconds},
        {"publication_wall_seconds", publicationSeconds},
+       {"budget_drops", static_cast<double>(budgetDrops_)},
+       {"stale_inputs", static_cast<double>(staleInputs_)},
        {"observation", values(detection->point)},
        {"radius", detection->radius},
        {"state", estimate ? Field(values(*estimate)) : Field(nullptr)}});
@@ -225,7 +246,8 @@ private:
   ProcessingClock processingClock_;
   ImageClock imageClock_;
   int64_t imageAgeNs_{}, lastCapture_{-1};
-  uint64_t staleInputs_{}, expiredPairs_{};
+  uint64_t staleInputs_{}, budgetDrops_{}, expiredPairs_{};
+  std::unique_ptr<ImageAdmission> admission_;
   bool imageDiagnostics_{};
   std::map<std::string, std::pair<uint64_t, int64_t>> imageTrace_;
   int64_t lastPair_{-1};

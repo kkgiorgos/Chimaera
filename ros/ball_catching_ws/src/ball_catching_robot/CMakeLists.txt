@@ -55,6 +55,12 @@ if(BUILD_TESTING)
   ament_target_dependencies(runtime_test rclcpp sensor_msgs std_msgs)
   add_dependencies(runtime_test fake_gem5_clock)
   target_compile_definitions(runtime_test PRIVATE FAKE_GEM5_CLOCK="$<TARGET_FILE:fake_gem5_clock>")
+  ament_add_gtest(perception_runtime_test test/perception_runtime.cpp src/perception.cpp)
+  target_compile_definitions(perception_runtime_test PRIVATE BALL_CATCHING_COMPOSED
+    FAKE_GEM5_CLOCK="$<TARGET_FILE:fake_gem5_clock>")
+  target_link_libraries(perception_runtime_test catching_core PkgConfig::JSONC ${CMAKE_DL_LIBS})
+  ament_target_dependencies(perception_runtime_test rclcpp sensor_msgs nav_msgs geometry_msgs std_msgs)
+  add_dependencies(perception_runtime_test fake_gem5_clock)
   target_compile_definitions(core_test PRIVATE TEST_URDF="${CMAKE_CURRENT_BINARY_DIR}/test_robot.urdf"
     PYTHON_REFERENCE="${CMAKE_CURRENT_SOURCE_DIR}/test/python_reference.json"
     PLANNER_REFERENCE="${CMAKE_CURRENT_SOURCE_DIR}/test/planner_reference.json"

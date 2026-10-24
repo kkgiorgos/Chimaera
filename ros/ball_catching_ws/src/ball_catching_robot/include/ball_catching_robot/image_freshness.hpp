@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <fstream>
 #include <functional>
@@ -69,4 +70,35 @@ inline bool fresh_image(int64_t capture, std::optional<int64_t> now, int64_t bud
 {
   return now && capture >= 0 && *now >= capture && *now - capture <= budget;
 }
+
+// Reject queued work that is fresh on entry but cannot plausibly finish while
+// fresh. The estimate is measured on the same simulation clock as the deadline.
+// A capped, decaying high-water mark recovers after a scheduling outlier.
+// Skipping otherwise fresh pairs also decays it, so a pessimistic estimate
+// cannot permanently block work when transport latency exceeds that window.
+class ImageAdmission
+{
+public:
+  explicit ImageAdmission(int64_t budget) : budget_(budget)
+  {
+    if (budget <= 0) throw std::invalid_argument("image budget must be positive");
+  }
+  bool accepts(int64_t capture, std::optional<int64_t> now)
+  {
+    if (!fresh_image(capture, now, budget_)) return false;
+    if (fresh_image(capture, now, budget_ - estimate_)) return true;
+    estimate_ -= std::max(int64_t{1}, estimate_ / 8);
+    return false;
+  }
+  void observe(std::optional<int64_t> start, std::optional<int64_t> end)
+  {
+    if (!start || !end || *start < 0 || *end < *start) return;
+    const auto duration = std::min(*end - *start, budget_ - std::max(int64_t{1}, budget_ / 10));
+    estimate_ = std::max(duration, estimate_ - std::max(int64_t{1}, estimate_ / 8));
+  }
+  int64_t estimate() const { return estimate_; }
+
+private:
+  int64_t budget_, estimate_{};
+};
 }  // namespace ball_catching

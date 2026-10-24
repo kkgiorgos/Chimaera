@@ -34,6 +34,46 @@ TEST(ImageFreshness, NativeUsesSimulationClock)
   EXPECT_THROW(
     ImageClock([] { return 0; }, "/missing-clock", "/missing-origin"), std::runtime_error);
 }
+TEST(ImageFreshness, AdmissionReservesMeasuredProcessingTime)
+{
+  ImageAdmission admission(66666667);
+  EXPECT_TRUE(admission.accepts(100000000, 149000000));
+  admission.observe(100000000, 138000000);
+  EXPECT_TRUE(fresh_image(100000000, 149000000, 66666667));
+  EXPECT_FALSE(admission.accepts(100000000, 149000000));
+  EXPECT_TRUE(admission.accepts(133000000, 149000000));
+  EXPECT_FALSE(admission.accepts(150000000, 149000000));
+  EXPECT_FALSE(admission.accepts(133000000, std::nullopt));
+}
+TEST(ImageFreshness, AdmissionRecoversFromOutliersAndRejectsInvalidMeasurements)
+{
+  ImageAdmission admission(100);
+  admission.observe(100, 1100);
+  EXPECT_EQ(admission.estimate(), 90);
+  EXPECT_TRUE(admission.accepts(100, 100));
+  admission.observe(std::nullopt, 1100);
+  admission.observe(1100, 100);
+  EXPECT_EQ(admission.estimate(), 90);
+  for (int i = 0; i < 30; ++i) admission.observe(100, 120);
+  EXPECT_EQ(admission.estimate(), 20);
+  EXPECT_TRUE(admission.accepts(100, 180));
+  EXPECT_FALSE(admission.accepts(100, 181));
+  EXPECT_THROW(ImageAdmission(0), std::invalid_argument);
+}
+TEST(ImageFreshness, SkippedFreshPairsCannotPermanentlyBlockAdmissionAfterAnOutlier)
+{
+  ImageAdmission admission(100);
+  admission.observe(100, 1100);
+  EXPECT_FALSE(admission.accepts(100, 201));
+  EXPECT_FALSE(admission.accepts(100, std::nullopt));
+  EXPECT_EQ(admission.estimate(), 90);  // Invalid/stale traffic is not new evidence.
+  EXPECT_FALSE(admission.accepts(100, 120));
+  EXPECT_LT(admission.estimate(), 90);
+  bool accepted = false;
+  for (int i = 0; i < 10 && !accepted; ++i)
+    accepted = admission.accepts(100 + i * 100, 120 + i * 100);
+  EXPECT_TRUE(accepted);  // Recover even though no processing could be observed.
+}
 TEST(ImageFreshness, GuestClockAdvancesDespiteDelayedRosClock)
 {
   const std::string path = "/tmp/chimaera-clock-test-" + std::to_string(getpid());

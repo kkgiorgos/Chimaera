@@ -15,7 +15,8 @@ public:
     arm_(readFile(declare_parameter<std::string>("robot_file", ""))),
     planner_(arm_),
     record_(declare_parameter<std::string>("output", ""), "interception", this),
-    processingClock_(*this), applicationClock_(*this)
+    processingClock_(*this),
+    applicationClock_(*this)
   {
     const auto home =
       jointVector(declare_parameter<std::vector<double>>("initial_pose", values(uprightHome())));
@@ -24,12 +25,12 @@ public:
     commands_ =
       create_publisher<trajectory_msgs::msg::JointTrajectory>("/robot/joint_trajectory", 1);
     joints_ = create_subscription<sensor_msgs::msg::JointState>(
-      "/robot/joint_states", rclcpp::SensorDataQoS(),
+      "/robot/joint_states", rclcpp::SensorDataQoS().keep_last(1),
       [this](sensor_msgs::msg::JointState::ConstSharedPtr msg) {
         feedback_.update(*msg, arm_.names);
       });
     observations_ = create_subscription<nav_msgs::msg::Odometry>(
-      "/robot/ball_state", rclcpp::SensorDataQoS(),
+      "/robot/ball_state", rclcpp::SensorDataQoS().keep_last(1),
       [this](nav_msgs::msg::Odometry::ConstSharedPtr msg) {
         if (msg->header.frame_id != "world") return;
         const auto & p = msg->pose.pose.position;
@@ -38,7 +39,7 @@ public:
         if (ball.position.allFinite() && ball.velocity.allFinite()) ball_ = ball;
       });
     geometry_ = create_subscription<geometry_msgs::msg::Vector3Stamped>(
-      "/robot/ball_geometry", rclcpp::SensorDataQoS(),
+      "/robot/ball_geometry", rclcpp::SensorDataQoS().keep_last(1),
       [this](geometry_msgs::msg::Vector3Stamped::ConstSharedPtr msg) {
         if (msg->vector.x > .005 && msg->vector.x < .15)
           radius_ = radius_ ? .2 * msg->vector.x + .8 * (*radius_) : msg->vector.x;
