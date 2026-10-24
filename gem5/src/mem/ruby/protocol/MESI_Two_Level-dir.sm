@@ -49,8 +49,11 @@ machine(MachineType:Directory, "MESI Two Level directory protocol")
     ID_W, AccessPermission:Busy, desc="Intermediate state for DMA_WRITE when in I";
 
     M, AccessPermission:Maybe_Stale, desc="memory copy may be stale, i.e. other modified copies may exist";
-    IM, AccessPermission:Busy, desc="Intermediate State I>M";
-    MI, AccessPermission:Busy, desc="Intermediate State M>I";
+    // A fetch is outstanding, but memory still owns the current data. Let
+    // functional reads consult it after checking readable caches and messages;
+    // treating every copy as Busy leaves no source while DRAM holds the read.
+    IM, AccessPermission:Maybe_Stale, desc="Intermediate State I>M; memory data remains valid";
+    MI, AccessPermission:Maybe_Stale, desc="Intermediate State M>I; data in memory or its writeback queue";
     M_DRD, AccessPermission:Busy, desc="Intermediate State when there is a dma read";
     M_DRDI, AccessPermission:Busy, desc="Intermediate State when there is a dma read";
     M_DWR, AccessPermission:Busy, desc="Intermediate State when there is a dma write";
