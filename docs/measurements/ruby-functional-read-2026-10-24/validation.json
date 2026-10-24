@@ -1,0 +1,34 @@
+{
+  "regression-final": {
+    "passed": true,
+    "testers": 2,
+    "functional_percent": 25,
+    "memory": "MemCtrl"
+  },
+  "ramulator-stress-final": {
+    "passed": true,
+    "testers": 4,
+    "functional_percent": 25,
+    "memory": "Ramulator2"
+  },
+  "dram-stress-final": {
+    "passed": true,
+    "testers": 4,
+    "functional_percent": 50,
+    "memory": "MemCtrl"
+  },
+  "checkpoint_save_passed": true,
+  "checkpoint_restore_passed": true,
+  "simulator_sha256": "9550925729892f77a477231a0c59bbf57795bbf26a3c8aec7bc5dd067ce5002f",
+  "full_system": {
+    "failed_experiment": "57cfcb8c11ae4d41b794d322b717f2fb",
+    "previous_failure_sim_seconds": 0.116,
+    "observed_sim_seconds": 0.1945,
+    "observed_wall_seconds": 962.023901666,
+    "fatal_or_panic": false,
+    "readiness_complete": false,
+    "stopped_for_replacement": true,
+    "application_image": "sha256:6a70c644c9be714aafea0055d076983af76a29f8e00d592abe0a3319d9a1fd54",
+    "note": "Diagnostic used patched GCC11 simulator; replacement builds its frozen production simulator using GCC12."
+  }
+}
